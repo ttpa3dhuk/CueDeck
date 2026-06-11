@@ -1,8 +1,8 @@
 # CueDeck
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-black?logo=apple&logoColor=white)](https://github.com/ttpa3dhuk/PDF-Presenter/releases/latest)
-[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D6?logo=windows&logoColor=white)](https://github.com/ttpa3dhuk/PDF-Presenter/releases/latest)
+[![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-black?logo=apple&logoColor=white)](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D6?logo=windows&logoColor=white)](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
 [![Built with Electron](https://img.shields.io/badge/Electron-33-9feaf9?logo=electron&logoColor=black)](https://electronjs.org)
 
 **CueDeck — инструмент оператора презентаций на живых мероприятиях.**  
@@ -15,12 +15,12 @@
 
 ### ⬇️ Скачать
 
-Последняя версия: **[GitHub Releases →](https://github.com/ttpa3dhuk/PDF-Presenter/releases/latest)**
+Последняя версия: **[GitHub Releases →](https://github.com/ttpa3dhuk/CueDeck/releases/latest)**
 
 | Платформа | Файл |
 |-----------|------|
-| macOS Apple Silicon (M1/M2/M3) | `CueDeck-<version>-arm64.dmg` |
-| macOS Intel | `CueDeck-<version>.dmg` |
+| macOS Apple Silicon (M1–M4) | `CueDeck-<version>-Silicon-mac.zip` |
+| macOS Intel | `CueDeck-<version>-Intel-mac.zip` |
 | Windows 10/11 (x64) | `CueDeck-<version>-win.zip` |
 
 ---
@@ -29,7 +29,7 @@
 
 #### macOS
 
-1. Открой DMG, перетащи `CueDeck.app` в Applications.
+1. Распакуй ZIP, перетащи `CueDeck.app` в Applications.
 2. **Первый запуск:** правый клик → `Open` → `Open` в диалоге.  
    *(При двойном клике macOS блокирует приложения без code signing — это норма для beta.)*
 3. Дальше открывается двойным кликом как обычно.
@@ -89,7 +89,8 @@ PDF и картинки работают сразу, без зависимост
 |---------|----------|
 | `←` / `→` | Предыдущий / следующий слайд |
 | `Space` | Следующий слайд |
-| `B` | Blackout |
+| `PgUp` / `PgDn` | Предыдущий / следующий слайд (кнопки кликера) |
+| `B` / `.` | Blackout (`.` — blank-кнопка кликера) |
 | `T` | Старт / пауза таймера |
 | `Shift+T` | Сбросить таймер |
 | `Cmd+O` | Открыть PDF / PPTX |
@@ -120,11 +121,11 @@ PDF и картинки работают сразу, без зависимост
 ### 🔧 Сборка из исходников
 
 ```bash
-git clone https://github.com/ttpa3dhuk/PDF-Presenter.git
-cd PDF-Presenter
+git clone https://github.com/ttpa3dhuk/CueDeck.git
+cd CueDeck
 npm install
 npm run dev           # dev-режим с HMR
-npm run package:mac   # сборка .dmg для Mac
+npm run package:mac   # сборка .zip для Mac (Silicon + Intel)
 npm run package:win   # сборка .zip для Windows
 ```
 
@@ -142,12 +143,12 @@ CueDeck fills the gap. Build a speaker playlist in advance, run it — and opera
 
 ### ⬇️ Download
 
-Latest release: **[GitHub Releases →](https://github.com/ttpa3dhuk/PDF-Presenter/releases/latest)**
+Latest release: **[GitHub Releases →](https://github.com/ttpa3dhuk/CueDeck/releases/latest)**
 
 | Platform | File |
 |----------|------|
-| macOS Apple Silicon (M1/M2/M3) | `CueDeck-<version>-arm64.dmg` |
-| macOS Intel | `CueDeck-<version>.dmg` |
+| macOS Apple Silicon (M1–M4) | `CueDeck-<version>-Silicon-mac.zip` |
+| macOS Intel | `CueDeck-<version>-Intel-mac.zip` |
 | Windows 10/11 (x64) | `CueDeck-<version>-win.zip` |
 
 ---
@@ -156,7 +157,7 @@ Latest release: **[GitHub Releases →](https://github.com/ttpa3dhuk/PDF-Present
 
 #### macOS
 
-1. Open the DMG, drag `CueDeck.app` to Applications.
+1. Unzip the archive, drag `CueDeck.app` to Applications.
 2. **First launch:** right-click → `Open` → `Open` in the dialog.  
    *(macOS blocks unsigned apps on double-click — expected for beta.)*
 3. After that, double-click works as normal.
@@ -216,7 +217,8 @@ PDF and image files work immediately without any dependencies.
 |-----|--------|
 | `←` / `→` | Previous / next slide |
 | `Space` | Next slide |
-| `B` | Toggle blackout |
+| `PgUp` / `PgDn` | Previous / next slide (presenter clicker buttons) |
+| `B` / `.` | Toggle blackout (`.` — clicker blank button) |
 | `T` | Start / pause timer |
 | `Shift+T` | Reset timer |
 | `Shift+1` / `Shift+3` / `Shift+5` | Add 1 / 3 / 5 min to timer |
