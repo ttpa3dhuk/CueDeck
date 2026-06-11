@@ -17,6 +17,9 @@ document.body.dataset.role = role
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
 
+// Имя файла из пути — и POSIX, и Windows-разделители
+const baseName = (p: string): string => p.split(/[\\/]/).pop() ?? ''
+
 const slidePlaceholder = $('slide-placeholder')
 const pdfName = $('pdf-name')
 const slideCounter = $('slide-counter')
@@ -368,7 +371,7 @@ function renderPlaylist(state: AppState): void {
 function applyState(state: AppState): void {
   if (state.pdfPath) {
     slidePlaceholder.classList.add('hidden')
-    pdfName.textContent = state.pdfPath.split('/').pop() ?? ''
+    pdfName.textContent = baseName(state.pdfPath)
     slideCounter.textContent = `Слайд ${state.currentSlide} из ${state.totalSlides || '—'}`
     const remaining = Math.max(0, (state.totalSlides || 0) - state.currentSlide)
     slideRemaining.textContent = state.totalSlides > 0 ? `(осталось ${remaining})` : ''
@@ -453,7 +456,7 @@ async function projectNew(): Promise<void> {
 async function projectOpen(): Promise<void> {
   const res = await window.api.project.open()
   if (res.ok && res.path) {
-    showBanner(`Открыт: ${res.path.split('/').pop()}`, 3000)
+    showBanner(`Открыт: ${baseName(res.path)}`, 3000)
   } else if (!res.ok && res.error) {
     showBanner(`Ошибка: ${res.error}`, 6000)
   }
@@ -462,7 +465,7 @@ async function projectOpen(): Promise<void> {
 async function projectSave(saveAs: boolean = false): Promise<void> {
   const res = await window.api.project.save(saveAs)
   if (res.ok && res.path) {
-    showBanner(`Сохранено: ${res.path.split('/').pop()}`, 3000)
+    showBanner(`Сохранено: ${baseName(res.path)}`, 3000)
   } else if (!res.ok && res.error) {
     showBanner(`Ошибка сохранения: ${res.error}`, 6000)
   }
@@ -519,17 +522,21 @@ function setupKeyboard(): void {
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return
     // e.code — физическая позиция клавиши, не зависит от языка раскладки
+    // PageDown/PageUp/Period — их шлют презентационные кликеры (Logitech R400 и т.п.)
     switch (e.code) {
       case 'ArrowRight':
       case 'Space':
+      case 'PageDown':
         e.preventDefault()
         window.api.nav.next()
         break
       case 'ArrowLeft':
+      case 'PageUp':
         e.preventDefault()
         window.api.nav.prev()
         break
       case 'KeyB':
+      case 'Period':
         e.preventDefault()
         window.api.blackout.toggle()
         break

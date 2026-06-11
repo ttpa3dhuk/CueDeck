@@ -1,4 +1,5 @@
 import { readFile, rename, writeFile } from 'node:fs/promises'
+import { basename } from 'node:path'
 import type { PlaylistEntry } from './state.js'
 
 export const PROJECT_SCHEMA_VERSION = 1
@@ -26,7 +27,7 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
     id: String(v.id ?? cryptoRandomId()),
     kind: (v.kind as PlaylistEntry['kind']) ?? 'pdf',
     filePath,
-    fileName: String(v.fileName ?? v.pdfName ?? filePath.split('/').pop() ?? filePath),
+    fileName: String(v.fileName ?? v.pdfName ?? basename(filePath)),
     speakerName: String(v.speakerName ?? ''),
     durationMs: Number(v.durationMs ?? 30 * 60 * 1000),
   }
