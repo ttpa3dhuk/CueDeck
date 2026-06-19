@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, parse } from 'node:path'
 
 const SCHEMA_VERSION = 1
@@ -31,6 +31,18 @@ export async function computePdfSha1(pdfPath: string): Promise<string> {
 /** Compute SHA1 from an already-loaded buffer — avoids a second disk read. */
 export function sha1FromBuffer(buf: Buffer): string {
   return createHash('sha1').update(buf).digest('hex')
+}
+
+/**
+ * Lightweight content-identity hash from path + size + mtime, without reading
+ * the file. Used for video, where files can be multi-GB and hashing the full
+ * contents would be wasteful — we only need a stable id for the media URL.
+ */
+export async function computeStatSha1(filePath: string): Promise<string> {
+  const st = await stat(filePath)
+  return createHash('sha1')
+    .update(`${filePath}:${st.size}:${st.mtimeMs}`)
+    .digest('hex')
 }
 
 export async function loadNotes(pdfPath: string, currentSha1: string): Promise<LoadedNotes> {

@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' blob: cuedeck-media:;" />
     <title>CueDeck</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -13,11 +13,10 @@
           <div class="topbar-left">
             <div class="session-btns op-only">
               <button id="btn-new"  title="Новый проект (Cmd+N)">Новый</button>
-              <button id="btn-open" title="Открыть PDF / PPTX… (Cmd+O)">Открыть</button>
+              <button id="btn-open" title="Открыть PDF / PPTX / видео… (Cmd+O)">Открыть</button>
               <button id="btn-save" title="Сохранить проект (Cmd+S)">Сохранить</button>
               <button id="btn-last" title="Открыть последнюю сессию" disabled>Последний</button>
             </div>
-            <span id="pdf-name" class="pdf-name"></span>
           </div>
           <div class="topbar-center">
             <span id="slide-counter" class="slide-counter">Слайд — из —</span>
@@ -42,6 +41,7 @@
           </div>
         </div>
         <div class="topbar-row timer-controls op-only">
+          <span id="pdf-name" class="pdf-name"></span>
           <div class="group">
             <label class="group-label">Длительность</label>
             <input id="duration-input" class="duration-editable" type="number" min="0" step="1" value="30" title="Введи число минут вручную" placeholder="мин" />
@@ -79,7 +79,7 @@
         <aside class="playlist op-only">
           <div class="playlist-header">
             <span class="label">Спикеры</span>
-            <button id="playlist-add" title="Добавить PDF / PPTX / изображение">+ Добавить</button>
+            <button id="playlist-add" title="Добавить PDF / PPTX / видео / изображение">+ Добавить</button>
           </div>
           <div class="playlist-toggles">
             <label class="toggle" title="Скрыть имя и таймер у каждого спикера">
@@ -117,6 +117,24 @@
         <section id="current-slide" class="current-slide">
           <canvas id="current-canvas" class="hidden"></canvas>
           <img id="current-image" class="slide-image hidden" alt="" />
+          <video id="current-video" class="slide-video hidden" playsinline></video>
+          <div id="video-controls" class="video-controls op-only hidden">
+            <button id="video-play" title="Play / Pause (Space)">▶</button>
+            <button id="video-restart" title="В начало">⏮</button>
+            <input id="video-scrub" class="video-scrub" type="range" min="0" max="100" step="0.1" value="0" />
+            <span id="video-time" class="video-time">00:00 / 00:00</span>
+            <button id="video-mute" title="Звук зала вкл/выкл">🔊</button>
+          </div>
+          <div id="video-error" class="video-error hidden">
+            <div class="ve-icon">🎞️</div>
+            <div class="ve-title">Не удалось воспроизвести видео</div>
+            <div class="ve-body">
+              Формат или кодек не поддерживается — чаще всего это <b>ProRes</b> или <b>HEVC&nbsp;(H.265)</b>.<br/>
+              Перекодируй ролик в <b>MP4 (H.264&nbsp;+&nbsp;AAC)</b> — бесплатной программой <b>HandBrake</b>,
+              пресет «Fast 1080p30».
+            </div>
+            <button id="video-error-link" class="op-only">Открыть handbrake.fr</button>
+          </div>
           <div id="slide-placeholder" class="slide-placeholder">
             <div class="placeholder-title">Нет активного спикера</div>
             <div class="placeholder-hint">Кликни по спикеру в списке слева<br/>или открой файл (Cmd+O)</div>
@@ -204,6 +222,10 @@
             <tr><td><kbd>Shift</kbd> <kbd>T</kbd></td><td>Сбросить таймер</td></tr>
             <tr><td><kbd>Shift</kbd> <kbd>1</kbd> / <kbd>3</kbd> / <kbd>5</kbd></td><td>+1 / +3 / +5 минут</td></tr>
             <tr><td><kbd>Ctrl</kbd> <kbd>1</kbd> / <kbd>3</kbd> / <kbd>5</kbd></td><td>−1 / −3 / −5 минут</td></tr>
+            <tr class="help-section"><td colspan="2">Видео</td></tr>
+            <tr><td><kbd>Space</kbd></td><td>Play / Pause (когда открыто видео)</td></tr>
+            <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Перемотка ±5 сек (когда открыто видео)</td></tr>
+            <tr><td><kbd>M</kbd></td><td>Звук зала вкл / выкл</td></tr>
             <tr class="help-section"><td colspan="2">Экраны</td></tr>
             <tr><td><kbd>B</kbd> <kbd>.</kbd></td><td>Blackout — затемнить проектор (кликер: blank)</td></tr>
             <tr class="help-section"><td colspan="2">Файлы и проект</td></tr>

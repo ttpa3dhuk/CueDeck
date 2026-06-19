@@ -1,8 +1,11 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, shell } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, protocol, screen, shell } from 'electron'
+import { createReadStream } from 'node:fs'
+import { stat } from 'node:fs/promises'
+import { Readable } from 'node:stream'
 import { checkForUpdates } from './updater.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount } from './layout.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
-import { registerIpcHandlers, flushPendingWrites, kindOf } from './ipc.js'
+import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf } from './ipc.js'
 import {
   getSavedMapping,
   saveMapping,
@@ -16,6 +19,73 @@ import {
   getAudienceWindowed,
 } from './display-mapping.js'
 import { store } from './state.js'
+
+export const MEDIA_SCHEME = 'cuedeck-media'
+
+// Must be called before app `ready`. Lets the renderer load the active video
+// over a streaming, Range-capable scheme without pulling the whole file into
+// memory (unlike images/PDF which go through pdf:read).
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: MEDIA_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
+])
+
+/**
+ * Serves the currently-open video file with HTTP Range support so the
+ * <video> element can seek. Only the active video (store.pdfPath) is ever
+ * exposed — the request URL carries no path, so renderers can't read
+ * arbitrary files.
+ */
+async function handleMediaRequest(request: Request): Promise<Response> {
+  const { pdfPath, fileKind } = store.get()
+  if (!pdfPath || fileKind !== 'video') return new Response(null, { status: 404 })
+
+  let size: number
+  try {
+    size = (await stat(pdfPath)).size
+  } catch {
+    return new Response(null, { status: 404 })
+  }
+
+  const type = mimeOf(pdfPath)
+  const rangeHeader = request.headers.get('Range')
+
+  if (rangeHeader) {
+    const m = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
+    let start = m && m[1] ? parseInt(m[1], 10) : 0
+    let end = m && m[2] ? parseInt(m[2], 10) : size - 1
+    if (!Number.isFinite(start) || start < 0) start = 0
+    if (!Number.isFinite(end) || end >= size) end = size - 1
+    if (start > end) {
+      return new Response(null, {
+        status: 416,
+        headers: { 'Content-Range': `bytes */${size}` },
+      })
+    }
+    const stream = Readable.toWeb(createReadStream(pdfPath, { start, end })) as ReadableStream
+    return new Response(stream, {
+      status: 206,
+      headers: {
+        'Content-Type': type,
+        'Content-Length': String(end - start + 1),
+        'Content-Range': `bytes ${start}-${end}/${size}`,
+        'Accept-Ranges': 'bytes',
+      },
+    })
+  }
+
+  const stream = Readable.toWeb(createReadStream(pdfPath)) as ReadableStream
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      'Content-Type': type,
+      'Content-Length': String(size),
+      'Accept-Ranges': 'bytes',
+    },
+  })
+}
 
 function buildMenu(): void {
   const isMac = process.platform === 'darwin'
@@ -67,7 +137,7 @@ function buildMenu(): void {
         },
         { type: 'separator' },
         {
-          label: 'Открыть PDF / PPTX…',
+          label: 'Открыть PDF / PPTX / видео…',
           accelerator: 'CmdOrCtrl+O',
           click: () => sendToOperator('menu:open-pdf'),
         },
@@ -133,6 +203,7 @@ function watchDisplayChanges(): void {
 }
 
 app.whenReady().then(async () => {
+  protocol.handle(MEDIA_SCHEME, handleMediaRequest)
   registerIpcHandlers()
   buildMenu()
 

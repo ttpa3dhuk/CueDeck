@@ -1,6 +1,7 @@
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender, totalPages } from '../shared/pdf-loader'
 import { startTick, timerView, type TimerView } from '../shared/timer'
+import { formatClock, shouldMute, syncVideoElement, videoPosition, videoSrc } from '../shared/video'
 import type {
   AppState,
   DisplayInfo,
@@ -85,6 +86,14 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
 }
 const currentCanvas = $<HTMLCanvasElement>('current-canvas')
 const currentImage = $<HTMLImageElement>('current-image')
+const currentVideo = $<HTMLVideoElement>('current-video')
+const videoControls = role === 'operator' ? $('video-controls') : null
+const videoPlayBtn = role === 'operator' ? $<HTMLButtonElement>('video-play') : null
+const videoRestartBtn = role === 'operator' ? $<HTMLButtonElement>('video-restart') : null
+const videoScrub = role === 'operator' ? $<HTMLInputElement>('video-scrub') : null
+const videoTime = role === 'operator' ? $('video-time') : null
+const videoMuteBtn = role === 'operator' ? $<HTMLButtonElement>('video-mute') : null
+const videoError = $('video-error')
 const nextCanvas = $<HTMLCanvasElement>('next-canvas')
 const nextEmpty = $('next-empty')
 const notesInput = $<HTMLTextAreaElement>('notes-input')
@@ -112,11 +121,40 @@ function disposeCurrentImage(): void {
   }
 }
 
+function unloadCurrentVideo(): void {
+  if (currentVideo.src) {
+    currentVideo.pause()
+    currentVideo.removeAttribute('src')
+    currentVideo.load()
+  }
+  currentVideo.classList.add('hidden')
+}
+
 async function loadCurrentFile(): Promise<void> {
   const state = getState()
   disposeCurrentImage()
   docLoaded = false
   lastRenderedSlide = -1
+  videoError.classList.add('hidden')
+
+  if (state.fileKind === 'video') {
+    slidePlaceholder.classList.add('hidden')
+    currentCanvas.classList.add('hidden')
+    currentImage.classList.add('hidden')
+    currentImage.removeAttribute('src')
+    clearCanvas(nextCanvas)
+    nextCanvas.classList.add('hidden')
+    nextEmpty.classList.remove('hidden')
+    currentVideo.classList.remove('hidden')
+    currentVideo.muted = shouldMute(state, role)
+    currentVideo.src = videoSrc(state.pdfSha1 ?? '')
+    currentVideo.load()
+    await window.api.pdf.reportTotal(1)
+    syncVideoElement(currentVideo, state.video)
+    return
+  }
+
+  unloadCurrentVideo()
 
   const data = await window.api.pdf.read()
   if (!data) return
@@ -169,6 +207,53 @@ async function renderCurrent(): Promise<void> {
   }
 }
 
+// Reflects the shared video clock into the operator transport bar. Scrub/time
+// also refresh on a tick (see bootstrap) so they advance live during playback.
+function updateVideoUI(state: AppState): void {
+  const isVideo = state.fileKind === 'video'
+  if (videoControls) videoControls.classList.toggle('hidden', !isVideo)
+  if (!isVideo || role !== 'operator') return
+
+  const v = state.video
+  if (videoPlayBtn) videoPlayBtn.textContent = v.playing ? '⏸' : '▶'
+  if (videoMuteBtn) {
+    videoMuteBtn.textContent = v.muted ? '🔇' : '🔊'
+    videoControls?.classList.toggle('muted', v.muted)
+  }
+  const pos = videoPosition(v)
+  const dur = v.durationSec || 0
+  if (videoScrub && document.activeElement !== videoScrub) {
+    videoScrub.max = String(dur > 0 ? dur : 100)
+    videoScrub.value = String(dur > 0 ? Math.min(pos, dur) : pos)
+  }
+  if (videoTime) videoTime.textContent = `${formatClock(pos)} / ${formatClock(dur)}`
+}
+
+// Mirrors the slide counter for video: shows elapsed/total in the center of the
+// topbar plus remaining time. Visible to both operator and speaker. Refreshed on
+// the tick so it counts down live; turns orange in the last 30s, red in the last 10s.
+const VIDEO_WARN_SEC = 30
+const VIDEO_DANGER_SEC = 10
+function updateVideoHeader(state: AppState): void {
+  if (state.fileKind !== 'video') return
+  const v = state.video
+  const pos = videoPosition(v)
+  const dur = v.durationSec || 0
+  slideCounter.classList.add('video')
+  slideRemaining.classList.add('big')
+  if (dur > 0) {
+    slideCounter.textContent = `Видео ${formatClock(pos)} / ${formatClock(dur)}`
+    const remaining = Math.max(0, dur - pos)
+    slideRemaining.textContent = formatClock(remaining)
+    slideRemaining.classList.toggle('warn', remaining > VIDEO_DANGER_SEC && remaining <= VIDEO_WARN_SEC)
+    slideRemaining.classList.toggle('ending', remaining <= VIDEO_DANGER_SEC)
+  } else {
+    slideCounter.textContent = 'Видео'
+    slideRemaining.textContent = ''
+    slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
+  }
+}
+
 function applyTimerView(view: TimerView): void {
   let cls = `timer ${view.color}`
   if (view.overtime) cls += ' overtime'
@@ -193,7 +278,14 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
 
   const kindBadge = document.createElement('span')
   kindBadge.className = `kind-badge kind-${entry.kind}`
-  kindBadge.textContent = entry.kind === 'pptx' ? 'PPTX' : entry.kind === 'image' ? 'IMG' : 'PDF'
+  kindBadge.textContent =
+    entry.kind === 'pptx'
+      ? 'PPTX'
+      : entry.kind === 'image'
+        ? 'IMG'
+        : entry.kind === 'video'
+          ? 'VIDEO'
+          : 'PDF'
 
   const name = document.createElement('span')
   name.className = 'pdf-name'
@@ -372,20 +464,30 @@ function applyState(state: AppState): void {
   if (state.pdfPath) {
     slidePlaceholder.classList.add('hidden')
     pdfName.textContent = baseName(state.pdfPath)
-    slideCounter.textContent = `Слайд ${state.currentSlide} из ${state.totalSlides || '—'}`
-    const remaining = Math.max(0, (state.totalSlides || 0) - state.currentSlide)
-    slideRemaining.textContent = state.totalSlides > 0 ? `(осталось ${remaining})` : ''
+    if (state.fileKind === 'video') {
+      updateVideoHeader(state)
+    } else {
+      slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
+      slideCounter.textContent = `Слайд ${state.currentSlide} из ${state.totalSlides || '—'}`
+      const remaining = Math.max(0, (state.totalSlides || 0) - state.currentSlide)
+      slideRemaining.textContent = state.totalSlides > 0 ? `(осталось ${remaining})` : ''
+    }
   } else {
     slidePlaceholder.classList.remove('hidden')
     pdfName.textContent = ''
+    slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
     slideCounter.textContent = 'Слайд — из —'
     slideRemaining.textContent = ''
     currentCanvas.classList.add('hidden')
     currentImage.classList.add('hidden')
     currentImage.removeAttribute('src')
+    currentVideo.classList.add('hidden')
+    videoError.classList.add('hidden')
     nextCanvas.classList.add('hidden')
     nextEmpty.classList.add('hidden')
   }
+
+  updateVideoUI(state)
 
   timerToggle.textContent = state.timer.running ? '⏸' : '▶'
   blackoutToggle.style.background = state.blackout ? 'var(--danger)' : ''
@@ -481,6 +583,9 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
     prevFilePath = state.pdfPath
     lastRenderedSlide = -1
     await loadCurrentFile()
+  } else if (state.fileKind === 'video') {
+    currentVideo.muted = shouldMute(state, role)
+    syncVideoElement(currentVideo, state.video)
   } else if (state.currentSlide !== prevSlide || patch === null) {
     prevSlide = state.currentSlide
     await renderCurrent()
@@ -523,17 +628,30 @@ function setupKeyboard(): void {
     if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return
     // e.code — физическая позиция клавиши, не зависит от языка раскладки
     // PageDown/PageUp/Period — их шлют презентационные кликеры (Logitech R400 и т.п.)
+    const isVideo = getState().fileKind === 'video'
     switch (e.code) {
-      case 'ArrowRight':
       case 'Space':
+        e.preventDefault()
+        if (isVideo) window.api.video.toggle()
+        else window.api.nav.next()
+        break
+      case 'ArrowRight':
       case 'PageDown':
         e.preventDefault()
-        window.api.nav.next()
+        if (isVideo) window.api.video.seekBy(5)
+        else window.api.nav.next()
         break
       case 'ArrowLeft':
       case 'PageUp':
         e.preventDefault()
-        window.api.nav.prev()
+        if (isVideo) window.api.video.seekBy(-5)
+        else window.api.nav.prev()
+        break
+      case 'KeyM':
+        if (isVideo) {
+          e.preventDefault()
+          window.api.video.toggleMuted()
+        }
         break
       case 'KeyB':
       case 'Period':
@@ -669,6 +787,34 @@ function setupOperatorControls(): void {
     const prev = btn.textContent
     btn.textContent = '✓'
     window.setTimeout(() => { btn.textContent = prev }, 1500)
+  })
+
+  // Video transport
+  videoPlayBtn!.addEventListener('click', () => window.api.video.toggle())
+  videoRestartBtn!.addEventListener('click', () => window.api.video.seek(0))
+  videoMuteBtn!.addEventListener('click', () => window.api.video.toggleMuted())
+  // Live label while dragging; commit the seek only on release to avoid
+  // flooding every window with intermediate positions.
+  videoScrub!.addEventListener('input', () => {
+    if (videoTime) {
+      videoTime.textContent = `${formatClock(Number(videoScrub!.value))} / ${formatClock(getState().video.durationSec)}`
+    }
+  })
+  videoScrub!.addEventListener('change', () => {
+    window.api.video.seek(Number(videoScrub!.value))
+  })
+
+  // The operator's <video> is the authority for duration + end-of-clip.
+  currentVideo.addEventListener('loadedmetadata', () => {
+    if (Number.isFinite(currentVideo.duration) && currentVideo.duration > 0) {
+      window.api.video.setDuration(currentVideo.duration)
+    }
+  })
+  currentVideo.addEventListener('ended', () => {
+    window.api.video.ended()
+  })
+  $<HTMLButtonElement>('video-error-link').addEventListener('click', () => {
+    window.api.external.open('https://handbrake.fr/')
   })
 
   // Key visual
@@ -836,6 +982,14 @@ async function bootstrap(): Promise<void> {
     handleStateChange(state, patch).catch((err) => showBanner(`Ошибка: ${err.message}`))
   })
 
+  // Unsupported codec (ProRes / HEVC without OS support) → <video> fires error.
+  // Operator sees the "transcode to H.264" message; other roles just stay black.
+  currentVideo.addEventListener('error', () => {
+    if (getState().fileKind !== 'video' || !currentVideo.getAttribute('src')) return
+    currentVideo.classList.add('hidden')
+    if (role === 'operator') videoError.classList.remove('hidden')
+  })
+
   const initial = getState()
   applyState(initial)
   if (initial.pdfPath) {
@@ -846,11 +1000,19 @@ async function bootstrap(): Promise<void> {
   startTick(250, () => {
     const s = getState()
     applyTimerView(timerView(s.timer, s.timerMode))
+    if (s.fileKind === 'video') {
+      if (!currentVideo.classList.contains('hidden')) {
+        currentVideo.muted = shouldMute(s, role)
+        syncVideoElement(currentVideo, s.video)
+      }
+      updateVideoHeader(s)
+      if (role === 'operator') updateVideoUI(s)
+    }
   })
 
   window.addEventListener('resize', () => {
     const kind = getState().fileKind
-    if (kind === 'image' || kind === null) return
+    if (kind === 'image' || kind === 'video' || kind === null) return
     lastRenderedSlide = -1
     renderCurrent().catch(() => undefined)
   })

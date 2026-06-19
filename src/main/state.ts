@@ -12,7 +12,23 @@ export type TimerMode = 'countdown' | 'stopwatch' | 'clock'
 
 export type TimerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
-export type FileKind = 'pdf' | 'image' | 'pptx'
+export type FileKind = 'pdf' | 'image' | 'pptx' | 'video'
+
+/**
+ * Logical playback clock shared across all windows (like TimerState).
+ * Current position is derived, never stored as a moving value:
+ *   playing && anchorAt → anchorSec + (now - anchorAt) / 1000
+ *   otherwise           → anchorSec
+ * This keeps operator preview and audience output in sync without
+ * streaming currentTime over IPC on every frame.
+ */
+export interface VideoState {
+  playing: boolean
+  anchorSec: number
+  anchorAt: number | null
+  durationSec: number
+  muted: boolean
+}
 
 export interface PlaylistEntry {
   id: string
@@ -30,6 +46,7 @@ export interface AppState {
   totalSlides: number
   currentSlide: number
   blackout: boolean
+  video: VideoState
   timer: TimerState
   timerMode: TimerMode
   timerPosition: TimerPosition
@@ -49,6 +66,10 @@ export interface AppState {
 
 const DEFAULT_DURATION_MS = 30 * 60 * 1000
 
+export function initialVideoState(): VideoState {
+  return { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: false }
+}
+
 export function initialState(): AppState {
   return {
     pdfPath: null,
@@ -57,6 +78,7 @@ export function initialState(): AppState {
     totalSlides: 0,
     currentSlide: 1,
     blackout: false,
+    video: initialVideoState(),
     timer: { durationMs: DEFAULT_DURATION_MS, startedAt: null, elapsedMs: 0, running: false },
     timerMode: 'countdown',
     timerPosition: 'top-right',
@@ -122,6 +144,20 @@ export class StateStore {
 
   patchTimer(timer: Partial<TimerState>): void {
     this.patch({ timer: { ...this.state.timer, ...timer } })
+  }
+
+  patchVideo(video: Partial<VideoState>): void {
+    this.patch({ video: { ...this.state.video, ...video } })
+  }
+
+  /** Position the logical playback clock currently points at, in seconds. */
+  videoPositionSec(): number {
+    const v = this.state.video
+    if (v.playing && v.anchorAt != null) {
+      const pos = v.anchorSec + (Date.now() - v.anchorAt) / 1000
+      return v.durationSec > 0 ? Math.min(pos, v.durationSec) : pos
+    }
+    return v.anchorSec
   }
 
   onChange(listener: Listener): () => void {

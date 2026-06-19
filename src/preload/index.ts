@@ -43,6 +43,17 @@ const api: PresenterApi = {
   blackout: {
     toggle: () => ipcRenderer.invoke('blackout:toggle'),
   },
+  video: {
+    play: () => ipcRenderer.invoke('video:play'),
+    pause: () => ipcRenderer.invoke('video:pause'),
+    toggle: () => ipcRenderer.invoke('video:toggle'),
+    seek: (sec) => ipcRenderer.invoke('video:seek', sec),
+    seekBy: (deltaSec) => ipcRenderer.invoke('video:seek-by', deltaSec),
+    setDuration: (sec) => ipcRenderer.invoke('video:set-duration', sec),
+    ended: () => ipcRenderer.invoke('video:ended'),
+    setMuted: (muted) => ipcRenderer.invoke('video:set-muted', muted),
+    toggleMuted: () => ipcRenderer.invoke('video:toggle-muted'),
+  },
   displays: {
     list: () => ipcRenderer.invoke('displays:list'),
   },

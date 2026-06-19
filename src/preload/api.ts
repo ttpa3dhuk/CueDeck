@@ -13,7 +13,15 @@ export type TimerMode = 'countdown' | 'stopwatch' | 'clock'
 
 export type TimerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
-export type FileKind = 'pdf' | 'image' | 'pptx'
+export type FileKind = 'pdf' | 'image' | 'pptx' | 'video'
+
+export interface VideoState {
+  playing: boolean
+  anchorSec: number
+  anchorAt: number | null
+  durationSec: number
+  muted: boolean
+}
 
 export interface PlaylistEntry {
   id: string
@@ -31,6 +39,7 @@ export interface AppState {
   totalSlides: number
   currentSlide: number
   blackout: boolean
+  video: VideoState
   timer: TimerState
   timerMode: TimerMode
   timerPosition: TimerPosition
@@ -101,6 +110,17 @@ export interface PresenterApi {
   }
   blackout: {
     toggle(): Promise<void>
+  }
+  video: {
+    play(): Promise<void>
+    pause(): Promise<void>
+    toggle(): Promise<void>
+    seek(sec: number): Promise<void>
+    seekBy(deltaSec: number): Promise<void>
+    setDuration(sec: number): Promise<void>
+    ended(): Promise<void>
+    setMuted(muted: boolean): Promise<void>
+    toggleMuted(): Promise<void>
   }
   displays: {
     list(): Promise<DisplayInfo[]>

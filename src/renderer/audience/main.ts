@@ -1,9 +1,11 @@
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender } from '../shared/pdf-loader'
+import { shouldMute, syncVideoElement, videoSrc } from '../shared/video'
 import type { AppState } from '../../preload/api'
 
 const canvas = document.getElementById('slide-canvas') as HTMLCanvasElement
 const slideImage = document.getElementById('slide-image') as HTMLImageElement
+const slideVideo = document.getElementById('slide-video') as HTMLVideoElement
 const blackout = document.getElementById('blackout') as HTMLDivElement
 const kvImage = document.getElementById('keyvisual') as HTMLImageElement
 
@@ -21,14 +23,37 @@ function disposeSlideImage(): void {
   }
 }
 
+function unloadVideo(): void {
+  if (slideVideo.src) {
+    slideVideo.pause()
+    slideVideo.removeAttribute('src')
+    slideVideo.load()
+  }
+  slideVideo.classList.add('hidden')
+}
+
 async function loadFile(): Promise<void> {
   disposeSlideImage()
   docLoaded = false
   lastRenderedSlide = -1
+  const state = getState()
+
+  if (state.fileKind === 'video') {
+    canvas.classList.add('hidden')
+    slideImage.classList.add('hidden')
+    slideImage.removeAttribute('src')
+    slideVideo.classList.remove('hidden')
+    slideVideo.muted = shouldMute(state, 'audience')
+    slideVideo.src = videoSrc(state.pdfSha1 ?? '')
+    slideVideo.load()
+    syncVideoElement(slideVideo, state.video)
+    return
+  }
+
+  unloadVideo()
 
   const data = await window.api.pdf.read()
   if (!data) return
-  const state = getState()
 
   if (state.fileKind === 'image') {
     const blob = new Blob([data.bytes as BlobPart], { type: data.mime })
@@ -98,6 +123,9 @@ async function applyState(state: AppState): Promise<void> {
   if (state.pdfPath && state.pdfPath !== lastFilePath) {
     lastFilePath = state.pdfPath
     await loadFile()
+  } else if (state.fileKind === 'video') {
+    slideVideo.muted = shouldMute(state, 'audience')
+    syncVideoElement(slideVideo, state.video)
   } else if (
     state.fileKind !== 'image' &&
     state.fileKind !== null &&
@@ -109,6 +137,14 @@ async function applyState(state: AppState): Promise<void> {
 
 async function bootstrap(): Promise<void> {
   await initBus()
+
+  // Unsupported codec → keep the projector black instead of showing a broken element.
+  slideVideo.addEventListener('error', () => {
+    if (getState().fileKind === 'video' && slideVideo.getAttribute('src')) {
+      slideVideo.classList.add('hidden')
+    }
+  })
+
   subscribe((state) => {
     applyState(state).catch(() => undefined)
   })
@@ -121,9 +157,19 @@ async function bootstrap(): Promise<void> {
     await loadFile()
   }
 
+  // Periodically nudge the video back onto the shared clock — guards against
+  // buffering/stall drift between this window and the operator's preview.
+  window.setInterval(() => {
+    const s = getState()
+    if (s.fileKind === 'video' && !slideVideo.classList.contains('hidden')) {
+      slideVideo.muted = shouldMute(s, 'audience')
+      syncVideoElement(slideVideo, s.video)
+    }
+  }, 500)
+
   window.addEventListener('resize', () => {
     const kind = getState().fileKind
-    if (kind === 'image' || kind === null) return
+    if (kind === 'image' || kind === 'video' || kind === null) return
     lastRenderedSlide = -1
     renderSlide().catch(() => undefined)
   })

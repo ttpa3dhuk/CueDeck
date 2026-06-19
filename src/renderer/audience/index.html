@@ -2,13 +2,14 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' blob: cuedeck-media:;" />
     <title>Audience</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <canvas id="slide-canvas"></canvas>
     <img id="slide-image" class="slide-image hidden" alt="" />
+    <video id="slide-video" class="slide-video hidden" playsinline></video>
     <div id="blackout" class="blackout hidden"></div>
     <img id="keyvisual" class="keyvisual hidden" alt="" />
     <script type="module" src="./main.ts"></script>

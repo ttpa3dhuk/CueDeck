@@ -10,7 +10,7 @@ import type {
   TimerPosition,
 } from './state.js'
 import { store } from './state.js'
-import { computePdfSha1, loadNotes, notesWriter, sha1FromBuffer, sidecarPathFor } from './notes-store.js'
+import { computePdfSha1, computeStatSha1, loadNotes, notesWriter, sha1FromBuffer, sidecarPathFor } from './notes-store.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
 import {
   saveMapping,
@@ -61,11 +61,24 @@ export interface OpenPdfResult {
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'])
 const PDF_EXTS = new Set(['pdf'])
 const PPTX_EXTS = new Set(['pptx', 'ppt', 'odp', 'key'])
+const VIDEO_EXTS = new Set(['mp4', 'mov', 'm4v', 'webm'])
 
 const ALL_SUPPORTED_EXTS = [
   ...PDF_EXTS,
   ...PPTX_EXTS,
   ...IMAGE_EXTS,
+  ...VIDEO_EXTS,
+]
+
+const VIDEO_EXTS_ARR = [...VIDEO_EXTS]
+const IMAGE_EXTS_ARR = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
+
+const OPEN_DIALOG_FILTERS: Electron.FileFilter[] = [
+  { name: 'Все поддерживаемые', extensions: ALL_SUPPORTED_EXTS },
+  { name: 'PDF', extensions: ['pdf'] },
+  { name: 'PowerPoint / Keynote', extensions: ['pptx', 'ppt', 'odp', 'key'] },
+  { name: 'Видео', extensions: VIDEO_EXTS_ARR },
+  { name: 'Изображения', extensions: IMAGE_EXTS_ARR },
 ]
 
 function extOf(path: string): string {
@@ -77,6 +90,7 @@ export function kindOf(path: string): FileKind | null {
   if (PDF_EXTS.has(ext)) return 'pdf'
   if (IMAGE_EXTS.has(ext)) return 'image'
   if (PPTX_EXTS.has(ext)) return 'pptx'
+  if (VIDEO_EXTS.has(ext)) return 'video'
   return null
 }
 
@@ -90,6 +104,10 @@ export function mimeOf(path: string): string {
     webp: 'image/webp',
     gif: 'image/gif',
     bmp: 'image/bmp',
+    mp4: 'video/mp4',
+    m4v: 'video/mp4',
+    mov: 'video/quicktime',
+    webm: 'video/webm',
   }
   return map[ext] ?? 'application/octet-stream'
 }
@@ -115,6 +133,9 @@ async function openFile(
       const cachedPath = await convertPptxToPdf(filePath, sha1)
       const buf = await readFile(cachedPath)
       totalSlides = countPdfPages(buf)
+    } else if (kind === 'video') {
+      // video: don't read the whole (possibly multi-GB) file — id from stat only
+      sha1 = await computeStatSha1(filePath)
     } else {
       // image: totalSlides stays 1, just need SHA1
       sha1 = await computePdfSha1(filePath)
@@ -138,6 +159,14 @@ async function openFile(
       currentSlide: 1,
       notes: loaded.notes,
       currentPlaylistId: playlistId,
+      // Reset the playback clock for every file load; keep audience-mute preference.
+      video: {
+        playing: false,
+        anchorSec: 0,
+        anchorAt: null,
+        durationSec: 0,
+        muted: store.get().video.muted,
+      },
     })
     store.patchTimer(timerPatch)
 
@@ -174,13 +203,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('pdf:open-dialog', async () => {
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
-      title: 'Открыть PDF, PPTX или изображение',
-      filters: [
-        { name: 'Все поддерживаемые', extensions: ALL_SUPPORTED_EXTS },
-        { name: 'PDF', extensions: ['pdf'] },
-        { name: 'PowerPoint / Keynote', extensions: ['pptx', 'ppt', 'odp', 'key'] },
-        { name: 'Изображения', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
-      ],
+      title: 'Открыть PDF, PPTX, видео или изображение',
+      filters: OPEN_DIALOG_FILTERS,
       properties: ['openFile'],
     })
     if (res.canceled || res.filePaths.length === 0) return { ok: false, cancelled: true }
@@ -303,6 +327,67 @@ export function registerIpcHandlers(): void {
     store.patch({ blackout: !store.get().blackout })
   })
 
+  // ── Video playback clock ─────────────────────────────────────────────────
+  // All windows derive currentTime from this logical clock; only the operator
+  // issues mutations. See StateStore.videoPositionSec / VideoState.
+
+  ipcMain.handle('video:play', () => {
+    const v = store.get().video
+    if (v.playing) return
+    // re-anchor at the frozen position so playback resumes from where it paused
+    store.patchVideo({ playing: true, anchorSec: store.videoPositionSec(), anchorAt: Date.now() })
+  })
+
+  ipcMain.handle('video:pause', () => {
+    const v = store.get().video
+    if (!v.playing) return
+    store.patchVideo({ playing: false, anchorSec: store.videoPositionSec(), anchorAt: null })
+  })
+
+  ipcMain.handle('video:toggle', () => {
+    const v = store.get().video
+    if (v.playing) {
+      store.patchVideo({ playing: false, anchorSec: store.videoPositionSec(), anchorAt: null })
+    } else {
+      store.patchVideo({ playing: true, anchorSec: store.videoPositionSec(), anchorAt: Date.now() })
+    }
+  })
+
+  ipcMain.handle('video:seek', (_e, sec: number) => {
+    const v = store.get().video
+    let pos = Number.isFinite(sec) ? Math.max(0, sec) : 0
+    if (v.durationSec > 0) pos = Math.min(pos, v.durationSec)
+    store.patchVideo({ anchorSec: pos, anchorAt: v.playing ? Date.now() : null })
+  })
+
+  ipcMain.handle('video:seek-by', (_e, deltaSec: number) => {
+    const v = store.get().video
+    const delta = Number.isFinite(deltaSec) ? deltaSec : 0
+    let pos = Math.max(0, store.videoPositionSec() + delta)
+    if (v.durationSec > 0) pos = Math.min(pos, v.durationSec)
+    store.patchVideo({ anchorSec: pos, anchorAt: v.playing ? Date.now() : null })
+  })
+
+  ipcMain.handle('video:set-duration', (_e, sec: number) => {
+    if (!Number.isFinite(sec) || sec <= 0) return
+    if (store.get().video.durationSec === sec) return
+    store.patchVideo({ durationSec: sec })
+  })
+
+  // Fired by the operator window when its <video> reaches the end.
+  ipcMain.handle('video:ended', () => {
+    const v = store.get().video
+    store.patchVideo({ playing: false, anchorSec: v.durationSec || v.anchorSec, anchorAt: null })
+  })
+
+  ipcMain.handle('video:set-muted', (_e, muted: boolean) => {
+    store.patchVideo({ muted: Boolean(muted) })
+  })
+
+  ipcMain.handle('video:toggle-muted', () => {
+    store.patchVideo({ muted: !store.get().video.muted })
+  })
+
   ipcMain.handle('displays:list', (): DisplayInfo[] => {
     const primary = screen.getPrimaryDisplay()
     return screen.getAllDisplays().map((d, i) => ({
@@ -324,12 +409,7 @@ export function registerIpcHandlers(): void {
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
       title: 'Добавить файлы в плейлист',
-      filters: [
-        { name: 'Все поддерживаемые', extensions: ALL_SUPPORTED_EXTS },
-        { name: 'PDF', extensions: ['pdf'] },
-        { name: 'PowerPoint / Keynote', extensions: ['pptx', 'ppt', 'odp', 'key'] },
-        { name: 'Изображения', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
-      ],
+      filters: OPEN_DIALOG_FILTERS,
       properties: ['openFile', 'multiSelections'],
     })
     if (res.canceled || res.filePaths.length === 0) return []

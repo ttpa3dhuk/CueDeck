@@ -6,6 +6,7 @@
   --muted: #8b93a3;
   --accent: #4c8bf5;
   --danger: #e0524a;
+  --warning: #f5a623;
   --border: #2a2f3a;
   --timer-green: #3fce7c;
   --timer-yellow: #f5c14c;
@@ -112,11 +113,18 @@ body[data-role="speaker"] .slide-placeholder { display: none; }
   background: rgba(76, 139, 245, 0.15);
 }
 .topbar-row.timer-controls {
-  grid-template-columns: repeat(4, auto);
-  justify-content: end;
+  grid-template-columns: minmax(0, 1fr) repeat(4, auto);
+  align-items: center;
   gap: 16px;
   padding: 8px 16px;
   border-top: 1px solid var(--border);
+}
+/* Filename lives in the left of the timer row; truncate so it never reflows */
+.topbar-row.timer-controls .pdf-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .topbar-row.timer-controls .group {
   display: flex;
@@ -182,12 +190,18 @@ body[data-role="speaker"] .slide-placeholder { display: none; }
 }
 
 .topbar-left { justify-self: start; }
-.topbar-center { display: flex; align-items: center; gap: 12px; }
+.topbar-center { display: flex; align-items: center; gap: 14px; }
 .topbar-right { justify-self: end; display: flex; align-items: center; gap: 8px; }
 
 .pdf-name { color: var(--muted); font-size: 13px; }
-.slide-counter { font-size: 15px; font-weight: 500; }
-.slide-remaining { color: var(--muted); font-size: 13px; }
+/* tabular digits keep the time-code width fixed so the layout can't jitter;
+   line-height:1 + align-items:center makes counter & countdown share a centre line */
+.slide-counter { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; }
+.slide-remaining { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; line-height: 1; }
+.slide-counter.video { font-size: 20px; }
+.slide-remaining.big { font-size: 30px; font-weight: 700; }
+.slide-remaining.warn { color: var(--warning); font-weight: 700; }
+.slide-remaining.ending { color: var(--danger); font-weight: 700; }
 
 .timer {
   font-variant-numeric: tabular-nums;
@@ -337,6 +351,7 @@ body[data-role="speaker"] .grid {
 .playlist-item .kind-badge.kind-pdf { background: #c0d7ff; }
 .playlist-item .kind-badge.kind-pptx { background: #ffc97a; }
 .playlist-item .kind-badge.kind-image { background: #b9e9b6; }
+.playlist-item .kind-badge.kind-video { background: #e0b3ff; }
 
 .playlist-item .pdf-name {
   flex: 1;
@@ -599,10 +614,81 @@ body[data-role="speaker"] .playlist { display: none !important; }
   position: relative;
 }
 .current-slide canvas,
-.current-slide .slide-image {
+.current-slide .slide-image,
+.current-slide .slide-video {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+.current-slide .slide-video {
+  width: 100%;
+  height: 100%;
+}
+
+/* Unsupported-codec message — covers the slide when <video> fails to decode */
+.video-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+  background: #14161b;
+  z-index: 6;
+}
+.video-error .ve-icon { font-size: 40px; }
+.video-error .ve-title { font-size: 18px; font-weight: 700; color: var(--text); }
+.video-error .ve-body { font-size: 14px; line-height: 1.6; color: var(--muted); max-width: 520px; }
+.video-error .ve-body b { color: var(--text); }
+.video-error #video-error-link {
+  margin-top: 4px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Video transport — overlay bar pinned to the bottom of the current slide */
+.video-controls {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(20, 20, 22, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+  z-index: 5;
+  max-width: calc(100% - 24px);
+}
+.video-controls button {
+  flex: none;
+  min-width: 34px;
+  height: 30px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.video-controls .video-scrub {
+  flex: 1;
+  min-width: 160px;
+  cursor: pointer;
+  accent-color: var(--accent, #4a90d9);
+}
+.video-controls .video-time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #ddd;
+  white-space: nowrap;
+}
+.video-controls.muted #video-mute {
+  opacity: 0.5;
 }
 .next-empty {
   flex: 1;
@@ -818,7 +904,9 @@ body[data-role="speaker"] .app { grid-template-rows: 56px 1fr; }
 body[data-role="speaker"] .topbar-row.main { height: 56px; }
 body[data-role="speaker"] .grid { padding: 16px; }
 body[data-role="speaker"] .slide-counter { font-size: 18px; }
+body[data-role="speaker"] .slide-counter.video { font-size: 24px; }
 body[data-role="speaker"] .slide-remaining { font-size: 14px; }
+body[data-role="speaker"] .slide-remaining.big { font-size: 38px; }
 body[data-role="speaker"] .pdf-name { display: none; }
 
 /* On speaker, timer is an overlay positioned in one of four corners */
