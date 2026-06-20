@@ -63,6 +63,20 @@ PPTX, PPT, ODP и Keynote **конвертируются в PDF** при отк�
 
 PDF и картинки работают сразу, без зависимостей.
 
+#### Видео — поддерживаемые кодеки
+
+Важно: формат файла (**контейнер**) и **кодек** внутри — разные вещи. CueDeck проигрывает видео движком Chromium, поэтому важен именно кодек.
+
+| | Контейнер | Видео-кодек | Аудио-кодек | Где работает |
+|---|---|---|---|---|
+| ✅ **Рекомендуется** | MP4 / M4V | **H.264 (AVC)** | **AAC**, MP3 | macOS и Windows |
+| ✅ Работает | WebM | **VP8 / VP9** | Opus, Vorbis | macOS и Windows |
+| ✅ Работает | MOV | H.264 | AAC | macOS и Windows |
+| ⚠️ Не гарантируется | MP4 / MOV | **HEVC (H.265)** | AAC | macOS — обычно да (аппаратный декодер); Windows — нужно платное «HEVC Video Extensions» из Microsoft Store |
+| ❌ Не поддерживается | MOV | **ProRes**, DNxHD и др. монтажные | — | нигде (Chromium их не декодирует) |
+
+**Короткое правило:** гони видео в **MP4 (H.264 + AAC)** — играет у всех и всегда. Если прилетел ProRes-мастер с монтажа или HEVC — перекодируй бесплатным [HandBrake](https://handbrake.fr/) (пресет «Fast 1080p30»). Если файл не открывается — CueDeck покажет подсказку.
+
 ---
 
 ### ✨ Возможности
@@ -191,6 +205,20 @@ Converting PowerPoint files requires **LibreOffice** (free):
 - **Windows:** installer from [libreoffice.org](https://www.libreoffice.org/download/download-libreoffice/)
 
 PDF and image files work immediately without any dependencies.
+
+#### Video — supported codecs
+
+Note: the file format (**container**) and the **codec** inside it are different things. CueDeck plays video through the Chromium engine, so the codec is what matters.
+
+| | Container | Video codec | Audio codec | Where it works |
+|---|---|---|---|---|
+| ✅ **Recommended** | MP4 / M4V | **H.264 (AVC)** | **AAC**, MP3 | macOS & Windows |
+| ✅ Works | WebM | **VP8 / VP9** | Opus, Vorbis | macOS & Windows |
+| ✅ Works | MOV | H.264 | AAC | macOS & Windows |
+| ⚠️ Not guaranteed | MP4 / MOV | **HEVC (H.265)** | AAC | macOS — usually yes (hardware decoder); Windows — needs the paid "HEVC Video Extensions" from the Microsoft Store |
+| ❌ Not supported | MOV | **ProRes**, DNxHD, other edit codecs | — | nowhere (Chromium can't decode them) |
+
+**Rule of thumb:** export to **MP4 (H.264 + AAC)** — it plays everywhere, every time. If you get a ProRes master or HEVC, transcode it with the free [HandBrake](https://handbrake.fr/) ("Fast 1080p30" preset). If a file won't open, CueDeck shows a hint.
 
 ---
 
