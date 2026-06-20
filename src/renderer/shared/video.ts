@@ -60,6 +60,28 @@ export function syncVideoElement(
   }
 }
 
+/**
+ * Route a media element's sound to a specific output device (sound card,
+ * minijack, HDMI to vMix…). `null`/'' → system default. Falls back to default
+ * if the chosen device is gone. No-op where setSinkId isn't available.
+ */
+export async function applySinkId(
+  el: HTMLMediaElement,
+  deviceId: string | null,
+): Promise<void> {
+  const sinkEl = el as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> }
+  if (typeof sinkEl.setSinkId !== 'function') return
+  try {
+    await sinkEl.setSinkId(deviceId ?? '')
+  } catch {
+    try {
+      await sinkEl.setSinkId('')
+    } catch {
+      /* element not ready or no permission — ignore */
+    }
+  }
+}
+
 export function formatClock(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) sec = 0
   const total = Math.floor(sec)

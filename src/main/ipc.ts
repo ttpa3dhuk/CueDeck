@@ -32,6 +32,7 @@ import {
   setPlaylistCompact,
   setAutoAdvance,
   setAudienceWindowed,
+  setAudioOutputId,
 } from './display-mapping.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
 import {
@@ -386,6 +387,12 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('video:toggle-muted', () => {
     store.patchVideo({ muted: !store.get().video.muted })
+  })
+
+  ipcMain.handle('audio:set-output', (_e, deviceId: string | null) => {
+    const id = deviceId ? String(deviceId) : null
+    store.patch({ audioOutputId: id })
+    setAudioOutputId(id)
   })
 
   ipcMain.handle('displays:list', (): DisplayInfo[] => {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, protocol, screen, shell } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
@@ -17,6 +17,7 @@ import {
   getPlaylistCompact,
   getAutoAdvance,
   getAudienceWindowed,
+  getAudioOutputId,
 } from './display-mapping.js'
 import { store } from './state.js'
 
@@ -204,6 +205,13 @@ function watchDisplayChanges(): void {
 
 app.whenReady().then(async () => {
   protocol.handle(MEDIA_SCHEME, handleMediaRequest)
+
+  // Allow microphone/output-device access so enumerateDevices() returns real
+  // device labels and <video>.setSinkId() works (routing video sound to a
+  // chosen output: sound card / minijack / HDMI to vMix, etc.).
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, cb) => cb(true))
+  session.defaultSession.setPermissionCheckHandler(() => true)
+
   registerIpcHandlers()
   buildMenu()
 
@@ -223,6 +231,7 @@ app.whenReady().then(async () => {
     playlistCompact: getPlaylistCompact(),
     autoAdvance: getAutoAdvance(),
     audienceWindowed: getAudienceWindowed(),
+    audioOutputId: getAudioOutputId(),
   })
 
   bootLayout()

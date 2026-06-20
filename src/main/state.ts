@@ -62,6 +62,8 @@ export interface AppState {
   keyVisualPath: string | null
   projectPath: string | null
   audienceWindowed: boolean
+  /** Output device id for video sound (setSinkId). null = system default. */
+  audioOutputId: string | null
 }
 
 const DEFAULT_DURATION_MS = 30 * 60 * 1000
@@ -94,6 +96,7 @@ export function initialState(): AppState {
     keyVisualPath: null,
     projectPath: null,
     audienceWindowed: false,
+    audioOutputId: null,
   }
 }
 

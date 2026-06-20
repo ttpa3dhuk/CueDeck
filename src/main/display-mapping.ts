@@ -23,6 +23,7 @@ interface PersistedShape {
   keyVisualPath: string | null
   projectPath: string | null
   audienceWindowed: boolean
+  audioOutputId: string | null
 }
 
 const STORE_DEFAULTS: PersistedShape = {
@@ -40,6 +41,7 @@ const STORE_DEFAULTS: PersistedShape = {
   keyVisualPath: null,
   projectPath: null,
   audienceWindowed: false,
+  audioOutputId: null,
 }
 
 let _store: Store<PersistedShape> | null = null
@@ -185,4 +187,12 @@ export function getAudienceWindowed(): boolean {
 
 export function setAudienceWindowed(value: boolean): void {
   store().set('audienceWindowed', value)
+}
+
+export function getAudioOutputId(): string | null {
+  return store().get('audioOutputId')
+}
+
+export function setAudioOutputId(id: string | null): void {
+  store().set('audioOutputId', id)
 }

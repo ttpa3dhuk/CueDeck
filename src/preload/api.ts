@@ -55,6 +55,7 @@ export interface AppState {
   keyVisualPath: string | null
   projectPath: string | null
   audienceWindowed: boolean
+  audioOutputId: string | null
 }
 
 export interface DisplayInfo {
@@ -121,6 +122,9 @@ export interface PresenterApi {
     ended(): Promise<void>
     setMuted(muted: boolean): Promise<void>
     toggleMuted(): Promise<void>
+  }
+  audio: {
+    setOutput(deviceId: string | null): Promise<void>
   }
   displays: {
     list(): Promise<DisplayInfo[]>

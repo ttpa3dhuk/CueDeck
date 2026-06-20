@@ -877,6 +877,30 @@ body[data-role="speaker"] .playlist { display: none !important; }
 }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+/* Audio output picker (🔊 Аудиовыход…) */
+.audio-hint { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 14px; }
+.audio-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+.audio-device-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.audio-device-row:hover { border-color: var(--accent); }
+.audio-device-row input { flex: none; }
+.audio-loading { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+
 .windowed-section {
   margin-top: 4px;
   padding: 10px 12px;

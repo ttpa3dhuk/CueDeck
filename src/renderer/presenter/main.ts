@@ -1,7 +1,7 @@
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender, totalPages } from '../shared/pdf-loader'
 import { startTick, timerView, type TimerView } from '../shared/timer'
-import { formatClock, shouldMute, syncVideoElement, videoPosition, videoSrc } from '../shared/video'
+import { applySinkId, formatClock, shouldMute, syncVideoElement, videoPosition, videoSrc } from '../shared/video'
 import type {
   AppState,
   DisplayInfo,
@@ -104,6 +104,7 @@ const setupModal = $('setup-modal')
 let docLoaded = false
 let lastRenderedSlide = -1
 let currentImageBlobUrl: string | null = null
+let lastSinkId: string | null | undefined = undefined
 
 function clearCanvas(canvas: HTMLCanvasElement): void {
   const ctx = canvas.getContext('2d')
@@ -149,6 +150,8 @@ async function loadCurrentFile(): Promise<void> {
     currentVideo.muted = shouldMute(state, role)
     currentVideo.src = videoSrc(state.pdfSha1 ?? '')
     currentVideo.load()
+    lastSinkId = state.audioOutputId
+    applySinkId(currentVideo, state.audioOutputId)
     await window.api.pdf.reportTotal(1)
     syncVideoElement(currentVideo, state.video)
     return
@@ -345,6 +348,14 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   li.append(row1, speakerInput, durRow)
 
   li.addEventListener('click', async () => {
+    // Guard: don't cut a video that's live on the audience screen by accident.
+    const st = getState()
+    if (st.fileKind === 'video' && st.video.playing && st.currentPlaylistId !== entry.id) {
+      const ok = window.confirm(
+        `Сейчас на экране идёт видео. Прервать его и переключиться на «${entry.fileName}»?`,
+      )
+      if (!ok) return
+    }
     if (entry.kind === 'pptx') {
       const hasLo = await checkSoffice()
       if (!hasLo) {
@@ -585,6 +596,10 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
     await loadCurrentFile()
   } else if (state.fileKind === 'video') {
     currentVideo.muted = shouldMute(state, role)
+    if (state.audioOutputId !== lastSinkId) {
+      lastSinkId = state.audioOutputId
+      applySinkId(currentVideo, state.audioOutputId)
+    }
     syncVideoElement(currentVideo, state.video)
   } else if (state.currentSlide !== prevSlide || patch === null) {
     prevSlide = state.currentSlide
@@ -700,6 +715,8 @@ function setupOperatorControls(): void {
   timerReset.addEventListener('click', () => window.api.timer.reset())
   blackoutToggle.addEventListener('click', () => window.api.blackout.toggle())
   $('display-setup').addEventListener('click', openSetup)
+  $('audio-setup').addEventListener('click', () => { openAudioModal().catch(() => undefined) })
+  $('audio-close').addEventListener('click', () => $('audio-modal').classList.add('hidden'))
 
   // Duration input — debounced
   let durDebounce: number | null = null
@@ -887,6 +904,57 @@ async function openSetup(): Promise<void> {
   const displays = await window.api.displays.list()
   buildSetupModal(displays)
   setupModal.classList.remove('hidden')
+}
+
+async function listAudioOutputs(): Promise<MediaDeviceInfo[]> {
+  let devices = await navigator.mediaDevices.enumerateDevices()
+  let outs = devices.filter((d) => d.kind === 'audiooutput')
+  // Device labels stay empty until the page holds a media stream — grab the mic
+  // for a moment to unlock readable names, then release it immediately.
+  if (outs.length > 0 && outs.every((d) => !d.label)) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach((t) => t.stop())
+      devices = await navigator.mediaDevices.enumerateDevices()
+      outs = devices.filter((d) => d.kind === 'audiooutput')
+    } catch {
+      /* mic denied — show whatever labels we have */
+    }
+  }
+  return outs
+}
+
+async function openAudioModal(): Promise<void> {
+  const modal = $('audio-modal')
+  const list = $('audio-device-list')
+  list.innerHTML = '<div class="audio-loading">Поиск устройств…</div>'
+  modal.classList.remove('hidden')
+
+  const outs = await listAudioOutputs()
+  const current = getState().audioOutputId
+  list.innerHTML = ''
+
+  const makeRow = (value: string | null, label: string): HTMLLabelElement => {
+    const row = document.createElement('label')
+    row.className = 'audio-device-row'
+    const radio = document.createElement('input')
+    radio.type = 'radio'
+    radio.name = 'audio-output'
+    radio.checked = (value ?? null) === (current ?? null)
+    radio.addEventListener('change', () => {
+      if (radio.checked) window.api.audio.setOutput(value)
+    })
+    const span = document.createElement('span')
+    span.textContent = label
+    row.append(radio, span)
+    return row
+  }
+
+  list.appendChild(makeRow(null, 'Системный выход по умолчанию'))
+  for (const d of outs) {
+    if (d.deviceId === 'default') continue // covered by our "default" option
+    list.appendChild(makeRow(d.deviceId, d.label || `Устройство ${d.deviceId.slice(0, 6)}…`))
+  }
 }
 
 function buildSetupModal(displays: DisplayInfo[]): void {

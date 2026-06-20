@@ -54,6 +54,9 @@ const api: PresenterApi = {
     setMuted: (muted) => ipcRenderer.invoke('video:set-muted', muted),
     toggleMuted: () => ipcRenderer.invoke('video:toggle-muted'),
   },
+  audio: {
+    setOutput: (deviceId) => ipcRenderer.invoke('audio:set-output', deviceId),
+  },
   displays: {
     list: () => ipcRenderer.invoke('displays:list'),
   },

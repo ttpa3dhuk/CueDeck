@@ -1,6 +1,6 @@
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender } from '../shared/pdf-loader'
-import { shouldMute, syncVideoElement, videoSrc } from '../shared/video'
+import { applySinkId, shouldMute, syncVideoElement, videoSrc } from '../shared/video'
 import type { AppState } from '../../preload/api'
 
 const canvas = document.getElementById('slide-canvas') as HTMLCanvasElement
@@ -12,6 +12,7 @@ const kvImage = document.getElementById('keyvisual') as HTMLImageElement
 let docLoaded = false
 let lastRenderedSlide = -1
 let lastFilePath: string | null = null
+let lastSinkId: string | null | undefined = undefined
 let slideImageBlobUrl: string | null = null
 let kvBlobUrl: string | null = null
 let kvLoadedForPath: string | null | undefined = undefined
@@ -46,6 +47,8 @@ async function loadFile(): Promise<void> {
     slideVideo.muted = shouldMute(state, 'audience')
     slideVideo.src = videoSrc(state.pdfSha1 ?? '')
     slideVideo.load()
+    lastSinkId = state.audioOutputId
+    applySinkId(slideVideo, state.audioOutputId)
     syncVideoElement(slideVideo, state.video)
     return
   }
@@ -125,6 +128,10 @@ async function applyState(state: AppState): Promise<void> {
     await loadFile()
   } else if (state.fileKind === 'video') {
     slideVideo.muted = shouldMute(state, 'audience')
+    if (state.audioOutputId !== lastSinkId) {
+      lastSinkId = state.audioOutputId
+      applySinkId(slideVideo, state.audioOutputId)
+    }
     syncVideoElement(slideVideo, state.video)
   } else if (
     state.fileKind !== 'image' &&
