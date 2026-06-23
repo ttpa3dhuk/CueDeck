@@ -1,5 +1,5 @@
 import { initBus, getState, subscribe } from '../shared/bus'
-import { loadDocument, renderPageTo, prerender, totalPages } from '../shared/pdf-loader'
+import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
 import { startTick, timerView, type TimerView } from '../shared/timer'
 import { applySinkId, formatClock, shouldMute, syncVideoElement, videoPosition, videoSrc } from '../shared/video'
 import type {
@@ -11,6 +11,7 @@ import type {
   Role,
   TimerMode,
   TimerPosition,
+  VideoTakeMode,
 } from '../../preload/api'
 
 const role: Role = (new URL(location.href).searchParams.get('role') as Role) ?? 'operator'
@@ -106,6 +107,30 @@ let lastRenderedSlide = -1
 let currentImageBlobUrl: string | null = null
 let lastSinkId: string | null | undefined = undefined
 
+// ── Preview deck (operator only) ───────────────────────────────────────────
+const isOperator = role === 'operator'
+const previewCanvas = isOperator ? $<HTMLCanvasElement>('preview-canvas') : null
+const previewImage = isOperator ? $<HTMLImageElement>('preview-image') : null
+const previewVideo = isOperator ? $<HTMLVideoElement>('preview-video') : null
+const previewPlaceholder = isOperator ? $('preview-placeholder') : null
+const previewVideoControls = isOperator ? $('preview-video-controls') : null
+const previewVideoPlay = isOperator ? $<HTMLButtonElement>('preview-video-play') : null
+const previewVideoRestart = isOperator ? $<HTMLButtonElement>('preview-video-restart') : null
+const previewVideoScrub = isOperator ? $<HTMLInputElement>('preview-video-scrub') : null
+const previewVideoTime = isOperator ? $('preview-video-time') : null
+const previewVideoError = isOperator ? $('preview-video-error') : null
+const previewPrevBtn = isOperator ? $<HTMLButtonElement>('preview-prev') : null
+const previewNextBtn = isOperator ? $<HTMLButtonElement>('preview-next') : null
+const previewCounter = isOperator ? $('preview-counter') : null
+const takeBtn = isOperator ? $<HTMLButtonElement>('take-btn') : null
+const videoTakeModeSelect = isOperator ? $<HTMLSelectElement>('video-take-mode') : null
+
+const previewLoader = isOperator ? new PdfLoader() : null
+let previewDocLoaded = false
+let previewLastRenderedSlide = -1
+let previewImageBlobUrl: string | null = null
+let prevPreviewPath: string | null = null
+
 function clearCanvas(canvas: HTMLCanvasElement): void {
   const ctx = canvas.getContext('2d')
   if (ctx) {
@@ -148,7 +173,7 @@ async function loadCurrentFile(): Promise<void> {
     nextEmpty.classList.remove('hidden')
     currentVideo.classList.remove('hidden')
     currentVideo.muted = shouldMute(state, role)
-    currentVideo.src = videoSrc(state.pdfSha1 ?? '')
+    currentVideo.src = videoSrc(state.pdfSha1 ?? '', 'program')
     currentVideo.load()
     lastSinkId = state.audioOutputId
     applySinkId(currentVideo, state.audioOutputId)
@@ -257,6 +282,144 @@ function updateVideoHeader(state: AppState): void {
   }
 }
 
+// ── Preview deck rendering (operator only) ─────────────────────────────────
+// Mirrors the program-pane logic but against state.preview + its own PdfLoader.
+// Preview audio is always muted; the clicker never touches it.
+
+function disposePreviewImage(): void {
+  if (previewImageBlobUrl) {
+    URL.revokeObjectURL(previewImageBlobUrl)
+    previewImageBlobUrl = null
+  }
+}
+
+function unloadPreviewVideo(): void {
+  if (!previewVideo) return
+  if (previewVideo.src) {
+    previewVideo.pause()
+    previewVideo.removeAttribute('src')
+    previewVideo.load()
+  }
+  previewVideo.classList.add('hidden')
+}
+
+async function loadPreviewFile(): Promise<void> {
+  if (!previewLoader || !previewVideo || !previewCanvas || !previewImage || !previewPlaceholder) return
+  const p = getState().preview
+  disposePreviewImage()
+  previewDocLoaded = false
+  previewLastRenderedSlide = -1
+  previewVideoError?.classList.add('hidden')
+
+  if (!p.path) {
+    unloadPreviewVideo()
+    previewCanvas.classList.add('hidden')
+    previewImage.classList.add('hidden')
+    previewImage.removeAttribute('src')
+    previewPlaceholder.classList.remove('hidden')
+    return
+  }
+
+  previewPlaceholder.classList.add('hidden')
+
+  if (p.kind === 'video') {
+    previewCanvas.classList.add('hidden')
+    previewImage.classList.add('hidden')
+    previewImage.removeAttribute('src')
+    previewVideo.classList.remove('hidden')
+    previewVideo.muted = true
+    previewVideo.src = videoSrc(p.sha1 ?? '', 'preview')
+    previewVideo.load()
+    await window.api.preview.reportTotal(1)
+    syncVideoElement(previewVideo, p.video)
+    return
+  }
+
+  unloadPreviewVideo()
+
+  const data = await window.api.preview.read()
+  if (!data) return
+
+  if (p.kind === 'image') {
+    const blob = new Blob([data.bytes as BlobPart], { type: data.mime })
+    previewImageBlobUrl = URL.createObjectURL(blob)
+    previewImage.src = previewImageBlobUrl
+    previewImage.classList.remove('hidden')
+    previewCanvas.classList.add('hidden')
+    await window.api.preview.reportTotal(1)
+    return
+  }
+
+  // PDF / converted PPTX
+  previewImage.classList.add('hidden')
+  previewImage.removeAttribute('src')
+  previewCanvas.classList.remove('hidden')
+  await previewLoader.loadDocument(data.bytes)
+  previewDocLoaded = true
+  await window.api.preview.reportTotal(previewLoader.totalPages())
+  await renderPreview()
+}
+
+async function renderPreview(): Promise<void> {
+  if (!previewLoader || !previewCanvas) return
+  const p = getState().preview
+  if (p.kind === 'image' || p.kind === null || p.kind === 'video') return
+  if (!previewDocLoaded) return
+  if (p.currentSlide === previewLastRenderedSlide) return
+  previewLastRenderedSlide = p.currentSlide
+  const width = previewCanvas.parentElement!.clientWidth
+  await previewLoader.renderPageTo(p.currentSlide, previewCanvas, width)
+  if (p.currentSlide + 1 <= p.totalSlides) {
+    previewLoader.prerender(p.currentSlide + 1, width).catch(() => undefined)
+  }
+}
+
+function updatePreviewUI(state: AppState): void {
+  if (!isOperator) return
+  const p = state.preview
+  if (takeBtn) takeBtn.disabled = !p.path
+  if (previewCounter) {
+    previewCounter.textContent = p.path
+      ? p.kind === 'video'
+        ? 'видео'
+        : `${p.currentSlide} / ${p.totalSlides || '—'}`
+      : '— / —'
+  }
+  const isVideo = p.kind === 'video'
+  previewVideoControls?.classList.toggle('hidden', !isVideo)
+  videoTakeModeSelect?.classList.toggle('hidden', !isVideo)
+  if (videoTakeModeSelect && document.activeElement !== videoTakeModeSelect && videoTakeModeSelect.value !== state.videoTakeMode) {
+    videoTakeModeSelect.value = state.videoTakeMode
+  }
+  if (isVideo) {
+    const v = p.video
+    if (previewVideoPlay) previewVideoPlay.textContent = v.playing ? '⏸' : '▶'
+    const pos = videoPosition(v)
+    const dur = v.durationSec || 0
+    if (previewVideoScrub && document.activeElement !== previewVideoScrub) {
+      previewVideoScrub.max = String(dur > 0 ? dur : 100)
+      previewVideoScrub.value = String(dur > 0 ? Math.min(pos, dur) : pos)
+    }
+    if (previewVideoTime) previewVideoTime.textContent = `${formatClock(pos)} / ${formatClock(dur)}`
+  }
+}
+
+async function handlePreviewChange(state: AppState): Promise<void> {
+  if (!isOperator || !previewVideo) return
+  updatePreviewUI(state)
+  const p = state.preview
+  if (p.path !== prevPreviewPath) {
+    prevPreviewPath = p.path
+    previewLastRenderedSlide = -1
+    await loadPreviewFile()
+  } else if (p.kind === 'video') {
+    previewVideo.muted = true
+    syncVideoElement(previewVideo, p.video)
+  } else if (p.currentSlide !== previewLastRenderedSlide) {
+    await renderPreview()
+  }
+}
+
 function applyTimerView(view: TimerView): void {
   let cls = `timer ${view.color}`
   if (view.overtime) cls += ' overtime'
@@ -265,6 +428,70 @@ function applyTimerView(view: TimerView): void {
 }
 
 const playlistNodes = new Map<string, HTMLLIElement>()
+
+// live=false → load into off-air preview deck; live=true → straight to program.
+async function activateEntry(entry: PlaylistEntry, live: boolean): Promise<void> {
+  if (live) {
+    // Guard: don't cut a video that's live on the audience screen by accident.
+    const st = getState()
+    if (st.fileKind === 'video' && st.video.playing && st.currentPlaylistId !== entry.id) {
+      const ok = window.confirm(
+        `Сейчас на экране идёт видео. Прервать его и выдать в эфир «${entry.fileName}»?`,
+      )
+      if (!ok) return
+    }
+  }
+  if (entry.kind === 'pptx') {
+    const hasLo = await checkSoffice()
+    if (!hasLo) {
+      showLoModal()
+      return
+    }
+    showBanner('Конвертация PPTX через LibreOffice…', 60_000)
+  }
+  const res = live
+    ? await window.api.playlist.activateLive(entry.id)
+    : await window.api.playlist.activate(entry.id)
+  if (entry.kind === 'pptx') banner.classList.add('hidden')
+  if (!res.ok && res.error) showBanner(`Ошибка: ${res.error}`, 8000)
+}
+
+// Inline rename of a playlist entry's display label (the file on disk is untouched).
+function startRename(li: HTMLLIElement, entry: PlaylistEntry): void {
+  const nameEl = li.querySelector<HTMLSpanElement>('.pdf-name')
+  if (!nameEl || li.querySelector('.rename-input')) return
+  const input = document.createElement('input')
+  input.className = 'rename-input'
+  input.type = 'text'
+  input.value = entry.displayName || entry.fileName
+  input.placeholder = entry.fileName
+  const stop = (e: Event): void => e.stopPropagation()
+  input.addEventListener('click', stop)
+  input.addEventListener('mousedown', stop)
+  input.addEventListener('dblclick', stop)
+  let done = false
+  const restore = (): void => {
+    if (input.isConnected) input.replaceWith(nameEl)
+  }
+  const commit = (): void => {
+    if (done) return
+    done = true
+    const val = input.value.trim()
+    // Empty or equal to the real filename → store '' so we fall back to fileName.
+    const displayName = val === '' || val === entry.fileName ? '' : val
+    window.api.playlist.update(entry.id, { displayName })
+    restore()
+  }
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if (e.key === 'Enter') commit()
+    else if (e.key === 'Escape') { done = true; restore() }
+  })
+  input.addEventListener('blur', commit)
+  nameEl.replaceWith(input)
+  input.focus()
+  input.select()
+}
 
 function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   const li = document.createElement('li')
@@ -292,8 +519,17 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
 
   const name = document.createElement('span')
   name.className = 'pdf-name'
-  name.textContent = entry.fileName
+  name.textContent = entry.displayName || entry.fileName
   name.title = entry.filePath
+
+  const renameBtn = document.createElement('button')
+  renameBtn.className = 'rename'
+  renameBtn.textContent = '✎'
+  renameBtn.title = 'Переименовать в списке (имя файла не меняется)'
+  renameBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    startRename(li, entry)
+  })
 
   const removeBtn = document.createElement('button')
   removeBtn.className = 'remove'
@@ -304,7 +540,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
     window.api.playlist.remove(entry.id)
   })
 
-  row1.append(handle, kindBadge, name, removeBtn)
+  row1.append(handle, kindBadge, name, renameBtn, removeBtn)
 
   const speakerInput = document.createElement('input')
   speakerInput.type = 'text'
@@ -347,28 +583,21 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
 
   li.append(row1, speakerInput, durRow)
 
-  li.addEventListener('click', async () => {
-    // Guard: don't cut a video that's live on the audience screen by accident.
-    const st = getState()
-    if (st.fileKind === 'video' && st.video.playing && st.currentPlaylistId !== entry.id) {
-      const ok = window.confirm(
-        `Сейчас на экране идёт видео. Прервать его и переключиться на «${entry.fileName}»?`,
-      )
-      if (!ok) return
+  // Single click → stage into preview (safe). Double click → straight to air.
+  let clickTimer: number | null = null
+  li.addEventListener('click', () => {
+    if (clickTimer) window.clearTimeout(clickTimer)
+    clickTimer = window.setTimeout(() => {
+      clickTimer = null
+      activateEntry(entry, false)
+    }, 220)
+  })
+  li.addEventListener('dblclick', () => {
+    if (clickTimer) {
+      window.clearTimeout(clickTimer)
+      clickTimer = null
     }
-    if (entry.kind === 'pptx') {
-      const hasLo = await checkSoffice()
-      if (!hasLo) {
-        showLoModal()
-        return
-      }
-      showBanner('Конвертация PPTX через LibreOffice…', 60_000)
-    }
-    const res = await window.api.playlist.activate(entry.id)
-    if (entry.kind === 'pptx') {
-      banner.classList.add('hidden')
-    }
-    if (!res.ok && res.error) showBanner(`Ошибка: ${res.error}`, 8000)
+    activateEntry(entry, true)
   })
 
   li.addEventListener('dragstart', (e) => {
@@ -405,8 +634,8 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
 function updatePlaylistItem(node: HTMLLIElement, entry: PlaylistEntry): void {
   const name = node.querySelector<HTMLSpanElement>('.pdf-name')
   if (name) {
-    name.textContent = entry.fileName
-    name.title = entry.filePath
+    name.textContent = entry.displayName || entry.fileName
+    name.title = entry.displayName ? `${entry.fileName}\n${entry.filePath}` : entry.filePath
   }
   const speakerInput = node.querySelector<HTMLInputElement>('.speaker-name')
   if (speakerInput && document.activeElement !== speakerInput) {
@@ -465,7 +694,8 @@ function renderPlaylist(state: AppState): void {
   })
 
   for (const [id, node] of playlistNodes) {
-    node.classList.toggle('active', id === state.currentPlaylistId)
+    node.classList.toggle('on-air', id === state.currentPlaylistId)
+    node.classList.toggle('in-preview', id === state.preview.playlistId)
   }
 
   updateLibreOfficeNotice(state)
@@ -590,6 +820,8 @@ let prevSlide = 0
 async function handleStateChange(state: AppState, patch: Partial<AppState> | null): Promise<void> {
   applyState(state)
 
+  if (isOperator) handlePreviewChange(state).catch(() => undefined)
+
   if (state.pdfPath && state.pdfPath !== prevFilePath) {
     prevFilePath = state.pdfPath
     lastRenderedSlide = -1
@@ -608,9 +840,11 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
 }
 
 async function openPdf(): Promise<void> {
-  const res = await window.api.pdf.openDialog()
+  // Open stages into the off-air preview deck; Take (Enter) promotes it to air.
+  const res = await window.api.preview.openDialog()
   if (!res.ok && !res.cancelled) showBanner(`Не удалось открыть: ${res.error}`)
   if (res.ok && res.sha1Mismatch) showBanner('Заметки в sidecar-файле относятся к другому PDF. Перезаписать их.')
+  if (res.ok) showBanner('Загружено в превью — Enter, чтобы выдать в эфир', 4000)
 }
 
 function showHelpModal(): void {
@@ -637,10 +871,117 @@ function showBanner(text: string, ms: number = 4000): void {
   window.setTimeout(() => banner.classList.add('hidden'), ms)
 }
 
+// ── Custom hotkeys (operator) ──────────────────────────────────────────────
+// Remappable single-key actions, persisted per-window in localStorage. The legacy
+// hardware/clicker keys (PageUp/PageDown/Period) and modifier combos (Shift+T,
+// Shift/Ctrl+digits) stay handled by the switch below and are NOT remappable.
+interface HotkeyAction { id: string; label: string; def: string }
+const HOTKEY_ACTIONS: HotkeyAction[] = [
+  { id: 'take', label: 'TAKE (превью → эфир)', def: 'Tab' },
+  { id: 'programNext', label: 'Эфир: следующий слайд', def: 'ArrowRight' },
+  { id: 'programPrev', label: 'Эфир: предыдущий слайд', def: 'ArrowLeft' },
+  { id: 'previewNext', label: 'Превью: следующий слайд', def: 'BracketRight' },
+  { id: 'previewPrev', label: 'Превью: предыдущий слайд', def: 'BracketLeft' },
+  { id: 'videoPlay', label: 'Видео: play / pause', def: 'Space' },
+  { id: 'mute', label: 'Видео: звук вкл / выкл', def: 'KeyM' },
+  { id: 'timerToggle', label: 'Таймер: старт / пауза', def: 'KeyT' },
+  { id: 'blackout', label: 'Blackout', def: 'KeyB' },
+]
+let hotkeyMap: Record<string, string> = {}
+let codeToAction: Record<string, string> = {}
+
+function readHotkeyOverrides(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem('cuedeck.hotkeys') || '{}') } catch { return {} }
+}
+function loadHotkeys(): void {
+  const overrides = readHotkeyOverrides()
+  hotkeyMap = {}
+  codeToAction = {}
+  for (const a of HOTKEY_ACTIONS) {
+    const code = overrides[a.id] || a.def
+    hotkeyMap[a.id] = code
+    codeToAction[code] = a.id
+  }
+}
+function saveHotkey(actionId: string, code: string): void {
+  const o = readHotkeyOverrides()
+  o[actionId] = code
+  try { localStorage.setItem('cuedeck.hotkeys', JSON.stringify(o)) } catch { /* ignore */ }
+  loadHotkeys()
+}
+function resetHotkeys(): void {
+  try { localStorage.removeItem('cuedeck.hotkeys') } catch { /* ignore */ }
+  loadHotkeys()
+}
+function keyLabel(code: string): string {
+  const map: Record<string, string> = {
+    Space: 'Space', Tab: 'Tab', Enter: 'Enter', Escape: 'Esc',
+    ArrowRight: '→', ArrowLeft: '←', ArrowUp: '↑', ArrowDown: '↓',
+    BracketLeft: '[', BracketRight: ']', Period: '.', Comma: ',', Slash: '/',
+    PageUp: 'PgUp', PageDown: 'PgDn',
+  }
+  if (map[code]) return map[code]
+  return code.replace(/^Key/, '').replace(/^Digit/, '')
+}
+function dispatchHotkey(action: string): void {
+  const isVideo = getState().fileKind === 'video'
+  switch (action) {
+    case 'take': window.api.preview.take(); break
+    case 'programNext': isVideo ? window.api.video.seekBy(5) : window.api.nav.next(); break
+    case 'programPrev': isVideo ? window.api.video.seekBy(-5) : window.api.nav.prev(); break
+    case 'previewNext': window.api.preview.next(); break
+    case 'previewPrev': window.api.preview.prev(); break
+    case 'videoPlay': isVideo ? window.api.video.toggle() : window.api.nav.next(); break
+    case 'mute': if (isVideo) window.api.video.toggleMuted(); break
+    case 'timerToggle': toggleTimer(); break
+    case 'blackout': window.api.blackout.toggle(); break
+  }
+}
+
+let capturingHotkey: { actionId: string; btn: HTMLButtonElement } | null = null
+function openHotkeysModal(): void {
+  const list = $('hotkeys-list')
+  list.innerHTML = ''
+  for (const a of HOTKEY_ACTIONS) {
+    const row = document.createElement('div')
+    row.className = 'hk-row'
+    const lbl = document.createElement('span')
+    lbl.className = 'hk-label'
+    lbl.textContent = a.label
+    const key = document.createElement('button')
+    key.className = 'hk-key'
+    key.textContent = keyLabel(hotkeyMap[a.id])
+    key.addEventListener('click', () => {
+      if (capturingHotkey) capturingHotkey.btn.classList.remove('capturing')
+      capturingHotkey = { actionId: a.id, btn: key }
+      key.textContent = 'Нажми клавишу… (Esc — отмена)'
+      key.classList.add('capturing')
+    })
+    row.append(lbl, key)
+    list.appendChild(row)
+  }
+  $('hotkeys-modal').classList.remove('hidden')
+}
+function closeHotkeysModal(): void {
+  capturingHotkey = null
+  $('hotkeys-modal').classList.add('hidden')
+}
+
 function setupKeyboard(): void {
   if (role !== 'operator') return
+  loadHotkeys()
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return
+    // Remappable actions fire on a bare keypress (no modifiers); modifier combos
+    // below (Shift+T, Shift/Ctrl+digits) and clicker keys fall through to the switch.
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      const action = codeToAction[e.code]
+      if (action) {
+        e.preventDefault()
+        dispatchHotkey(action)
+        return
+      }
+    }
     // e.code — физическая позиция клавиши, не зависит от языка раскладки
     // PageDown/PageUp/Period — их шлют презентационные кликеры (Logitech R400 и т.п.)
     const isVideo = getState().fileKind === 'video'
@@ -672,6 +1013,19 @@ function setupKeyboard(): void {
       case 'Period':
         e.preventDefault()
         window.api.blackout.toggle()
+        break
+      case 'Enter':
+        // Take: promote the staged preview deck onto the audience feed.
+        e.preventDefault()
+        window.api.preview.take()
+        break
+      case 'BracketLeft':
+        e.preventDefault()
+        window.api.preview.prev()
+        break
+      case 'BracketRight':
+        e.preventDefault()
+        window.api.preview.next()
         break
       case 'KeyT':
         e.preventDefault()
@@ -834,6 +1188,36 @@ function setupOperatorControls(): void {
     window.api.external.open('https://handbrake.fr/')
   })
 
+  // ── Preview deck controls ────────────────────────────────────────────────
+  takeBtn!.addEventListener('click', () => window.api.preview.take())
+  videoTakeModeSelect!.addEventListener('change', () => {
+    window.api.preview.setVideoTakeMode(videoTakeModeSelect!.value as VideoTakeMode)
+  })
+  previewPrevBtn!.addEventListener('click', () => window.api.preview.prev())
+  previewNextBtn!.addEventListener('click', () => window.api.preview.next())
+  previewVideoPlay!.addEventListener('click', () => window.api.preview.video.toggle())
+  previewVideoRestart!.addEventListener('click', () => window.api.preview.video.seek(0))
+  previewVideoScrub!.addEventListener('input', () => {
+    if (previewVideoTime) {
+      previewVideoTime.textContent = `${formatClock(Number(previewVideoScrub!.value))} / ${formatClock(getState().preview.video.durationSec)}`
+    }
+  })
+  previewVideoScrub!.addEventListener('change', () => {
+    window.api.preview.video.seek(Number(previewVideoScrub!.value))
+  })
+  // The operator's preview <video> is the authority for preview duration + end.
+  previewVideo!.addEventListener('loadedmetadata', () => {
+    if (Number.isFinite(previewVideo!.duration) && previewVideo!.duration > 0) {
+      window.api.preview.video.setDuration(previewVideo!.duration)
+    }
+  })
+  previewVideo!.addEventListener('ended', () => window.api.preview.video.ended())
+  previewVideo!.addEventListener('error', () => {
+    if (getState().preview.kind !== 'video' || !previewVideo!.getAttribute('src')) return
+    previewVideo!.classList.add('hidden')
+    previewVideoError?.classList.remove('hidden')
+  })
+
   // Key visual
   kvSetBtn!.addEventListener('click', () => {
     window.api.keyvisual.set()
@@ -846,6 +1230,20 @@ function setupOperatorControls(): void {
   $<HTMLButtonElement>('help-btn').addEventListener('click', showHelpModal)
   document.getElementById('help-modal-close')?.addEventListener('click', hideHelpModal)
   window.api.menu.onHelp(() => showHelpModal())
+
+  // Hotkeys editor
+  $<HTMLButtonElement>('hotkeys-btn').addEventListener('click', openHotkeysModal)
+  $<HTMLButtonElement>('hotkeys-close').addEventListener('click', closeHotkeysModal)
+  $<HTMLButtonElement>('hotkeys-reset').addEventListener('click', () => { resetHotkeys(); openHotkeysModal() })
+  // Capture phase: intercept the next key while rebinding so it doesn't trigger an action.
+  window.addEventListener('keydown', (e) => {
+    if (!capturingHotkey) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.code !== 'Escape') saveHotkey(capturingHotkey.actionId, e.code)
+    capturingHotkey = null
+    openHotkeysModal()
+  }, true)
 
   // Project menu (from macOS menubar)
   window.api.menu.onProjectNew(() => projectNew())
@@ -1028,10 +1426,110 @@ function renderRoleMapping(layout: Layout, displays: DisplayInfo[], current: Dis
   }
 }
 
+// OBS-style bottom bar: move notes + timer + big TAKE out of their original spots
+// into #op-bottombar. Operator window only (speaker has its own DOM). Listeners
+// stay attached through the move, so this can run after setupOperatorControls().
+function buildOperatorBottomBar(): void {
+  const bottom = $('op-bottombar')
+  const notes = document.querySelector<HTMLElement>('.notes')
+  const timerControlsRow = document.querySelector<HTMLElement>('.topbar-row.timer-controls')
+  if (!notes || !timerControlsRow || !takeBtn) return
+
+  // Speaker-overlay controls that still live in the top bar — move them down too.
+  const scaleGroup = document.getElementById('timer-scale-down')?.closest('.group') as HTMLElement | null
+  const positionGroup = document.querySelector<HTMLElement>('.position-group')
+
+  const timerBox = document.createElement('div')
+  timerBox.className = 'bottom-timer'
+
+  // Row 1: [ 02:00  Режим▾ ] grouped on the left, transport (play/reset) on the right.
+  const head = document.createElement('div')
+  head.className = 'bottom-timer-head'
+  const modeGroup = document.getElementById('mode-select')?.closest('.group') as HTMLElement | null
+  const leftGrp = document.createElement('div')
+  leftGrp.className = 'bt-head-left'
+  leftGrp.append(timerDisplay)
+  if (modeGroup) leftGrp.append(modeGroup)
+  const transport = document.createElement('div')
+  transport.className = 'bt-transport'
+  transport.append(timerToggle, timerReset)
+  head.append(leftGrp, transport)
+
+  timerBox.append(head, timerControlsRow)
+
+  // Row 3: speaker monitor size + corner (moved from the top bar).
+  if (scaleGroup || positionGroup) {
+    const speakerRow = document.createElement('div')
+    speakerRow.className = 'bt-speaker'
+    const lbl = document.createElement('span')
+    lbl.className = 'bt-speaker-label'
+    lbl.textContent = 'Суфлёр'
+    speakerRow.append(lbl)
+    if (scaleGroup) speakerRow.append(scaleGroup)
+    if (positionGroup) speakerRow.append(positionGroup)
+    timerBox.append(speakerRow)
+  }
+
+  takeBtn.classList.add('take-big')
+  // Order: timer (left), notes (right), TAKE (far right).
+  bottom.append(timerBox, notes, takeBtn)
+}
+
+// Draggable splitter for the bottom bar height (persisted per-window in localStorage).
+function setupBottomBarResize(): void {
+  const bottom = $('op-bottombar')
+  const handle = document.createElement('div')
+  handle.className = 'op-bottombar-handle'
+  bottom.appendChild(handle)
+
+  const setH = (px: number): void =>
+    document.documentElement.style.setProperty('--bottom-h', `${px}px`)
+  try {
+    const saved = Number(localStorage.getItem('cuedeck.bottomH'))
+    if (saved >= 100) setH(saved)
+  } catch { /* localStorage unavailable — ignore */ }
+
+  let startY = 0
+  let startH = 0
+  let dragging = false
+  const onMove = (e: MouseEvent): void => {
+    if (!dragging) return
+    const h = Math.max(100, Math.min(window.innerHeight * 0.6, startH + (startY - e.clientY)))
+    setH(h)
+  }
+  const onUp = (): void => {
+    if (!dragging) return
+    dragging = false
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.userSelect = ''
+    const px = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bottom-h'), 10)
+    try { if (px >= 100) localStorage.setItem('cuedeck.bottomH', String(px)) } catch { /* ignore */ }
+    // Pane heights changed → re-render both decks crisply.
+    lastRenderedSlide = -1
+    renderCurrent().catch(() => undefined)
+    previewLastRenderedSlide = -1
+    renderPreview().catch(() => undefined)
+  }
+  handle.addEventListener('mousedown', (e) => {
+    dragging = true
+    startY = e.clientY
+    startH = bottom.getBoundingClientRect().height
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    e.preventDefault()
+  })
+}
+
 async function bootstrap(): Promise<void> {
   await initBus()
   setupOperatorControls()
   setupKeyboard()
+  if (isOperator) {
+    buildOperatorBottomBar()
+    setupBottomBarResize()
+  }
 
   // Pre-check LibreOffice so the notice shows immediately if needed
   if (role === 'operator') {
@@ -1064,6 +1562,13 @@ async function bootstrap(): Promise<void> {
     prevFilePath = initial.pdfPath
     await loadCurrentFile()
   }
+  if (isOperator) {
+    updatePreviewUI(initial)
+    if (initial.preview.path) {
+      prevPreviewPath = initial.preview.path
+      await loadPreviewFile()
+    }
+  }
 
   startTick(250, () => {
     const s = getState()
@@ -1076,13 +1581,27 @@ async function bootstrap(): Promise<void> {
       updateVideoHeader(s)
       if (role === 'operator') updateVideoUI(s)
     }
+    if (isOperator) {
+      const pv = s.preview
+      if (pv.kind === 'video' && previewVideo && !previewVideo.classList.contains('hidden')) {
+        previewVideo.muted = true
+        syncVideoElement(previewVideo, pv.video)
+      }
+      updatePreviewUI(s)
+    }
   })
 
   window.addEventListener('resize', () => {
     const kind = getState().fileKind
-    if (kind === 'image' || kind === 'video' || kind === null) return
-    lastRenderedSlide = -1
-    renderCurrent().catch(() => undefined)
+    if (kind !== 'image' && kind !== 'video' && kind !== null) {
+      lastRenderedSlide = -1
+      renderCurrent().catch(() => undefined)
+    }
+    const pk = getState().preview.kind
+    if (isOperator && pk !== 'image' && pk !== 'video' && pk !== null) {
+      previewLastRenderedSlide = -1
+      renderPreview().catch(() => undefined)
+    }
   })
 }
 

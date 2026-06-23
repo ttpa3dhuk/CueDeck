@@ -13,6 +13,7 @@ import {
   getTimerMode,
   getTimerPosition,
   getTimerScale,
+  getVideoTakeMode,
   getNotesFontSize,
   getPlaylistCompact,
   getAutoAdvance,
@@ -34,23 +35,26 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 /**
- * Serves the currently-open video file with HTTP Range support so the
- * <video> element can seek. Only the active video (store.pdfPath) is ever
- * exposed — the request URL carries no path, so renderers can't read
- * arbitrary files.
+ * Serves an open video file with HTTP Range support so the <video> element can
+ * seek. The URL path selects which deck (`/program` = audience feed, `/preview`
+ * = operator staging); only those two open videos are ever exposed, so renderers
+ * can't read arbitrary files.
  */
 async function handleMediaRequest(request: Request): Promise<Response> {
-  const { pdfPath, fileKind } = store.get()
-  if (!pdfPath || fileKind !== 'video') return new Response(null, { status: 404 })
+  const state = store.get()
+  const deck = new URL(request.url).pathname.replace(/^\//, '') // 'program' | 'preview'
+  const filePath = deck === 'preview' ? state.preview.path : state.pdfPath
+  const kind = deck === 'preview' ? state.preview.kind : state.fileKind
+  if (!filePath || kind !== 'video') return new Response(null, { status: 404 })
 
   let size: number
   try {
-    size = (await stat(pdfPath)).size
+    size = (await stat(filePath)).size
   } catch {
     return new Response(null, { status: 404 })
   }
 
-  const type = mimeOf(pdfPath)
+  const type = mimeOf(filePath)
   const rangeHeader = request.headers.get('Range')
 
   if (rangeHeader) {
@@ -65,7 +69,7 @@ async function handleMediaRequest(request: Request): Promise<Response> {
         headers: { 'Content-Range': `bytes */${size}` },
       })
     }
-    const stream = Readable.toWeb(createReadStream(pdfPath, { start, end })) as ReadableStream
+    const stream = Readable.toWeb(createReadStream(filePath, { start, end })) as ReadableStream
     return new Response(stream, {
       status: 206,
       headers: {
@@ -77,7 +81,7 @@ async function handleMediaRequest(request: Request): Promise<Response> {
     })
   }
 
-  const stream = Readable.toWeb(createReadStream(pdfPath)) as ReadableStream
+  const stream = Readable.toWeb(createReadStream(filePath)) as ReadableStream
   return new Response(stream, {
     status: 200,
     headers: {
@@ -227,6 +231,7 @@ app.whenReady().then(async () => {
     timerMode: getTimerMode(),
     timerPosition: getTimerPosition(),
     timerScale: getTimerScale(),
+    videoTakeMode: getVideoTakeMode(),
     notesFontSize: getNotesFontSize(),
     playlistCompact: getPlaylistCompact(),
     autoAdvance: getAutoAdvance(),

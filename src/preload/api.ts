@@ -15,6 +15,8 @@ export type TimerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-r
 
 export type FileKind = 'pdf' | 'image' | 'pptx' | 'video'
 
+export type VideoTakeMode = 'play-start' | 'play-resume'
+
 export interface VideoState {
   playing: boolean
   anchorSec: number
@@ -28,8 +30,21 @@ export interface PlaylistEntry {
   kind: FileKind
   filePath: string
   fileName: string
+  /** User-given label shown in the playlist instead of fileName. '' → use fileName. */
+  displayName: string
   speakerName: string
   durationMs: number
+}
+
+export interface DeckState {
+  path: string | null
+  sha1: string | null
+  kind: FileKind | null
+  totalSlides: number
+  currentSlide: number
+  video: VideoState
+  notes: Record<number, string>
+  playlistId: string | null
 }
 
 export interface AppState {
@@ -38,12 +53,15 @@ export interface AppState {
   fileKind: FileKind | null
   totalSlides: number
   currentSlide: number
+  /** Off-air staging deck (operator only). */
+  preview: DeckState
   blackout: boolean
   video: VideoState
   timer: TimerState
   timerMode: TimerMode
   timerPosition: TimerPosition
   timerScale: number
+  videoTakeMode: VideoTakeMode
   notesFontSize: number
   notes: Record<number, string>
   layout: Layout
@@ -95,6 +113,29 @@ export interface PresenterApi {
     next(): Promise<void>
     prev(): Promise<void>
   }
+  /**
+   * Off-air staging deck (operator only). Loading a file or selecting a playlist
+   * entry lands here; `take()` promotes it to the program (audience) feed.
+   */
+  preview: {
+    openDialog(): Promise<OpenPdfResult>
+    openPath(path: string): Promise<OpenPdfResult>
+    read(): Promise<{ bytes: Uint8Array; mime: string } | null>
+    reportTotal(total: number): Promise<void>
+    goto(slide: number): Promise<void>
+    next(): Promise<void>
+    prev(): Promise<void>
+    clear(): Promise<void>
+    take(): Promise<void>
+    setVideoTakeMode(mode: VideoTakeMode): Promise<void>
+    video: {
+      toggle(): Promise<void>
+      seek(sec: number): Promise<void>
+      seekBy(deltaSec: number): Promise<void>
+      setDuration(sec: number): Promise<void>
+      ended(): Promise<void>
+    }
+  }
   note: {
     update(slide: number, text: string): Promise<void>
     setFontSize(px: number): Promise<void>
@@ -136,8 +177,11 @@ export interface PresenterApi {
     add(): Promise<PlaylistEntry[]>
     remove(id: string): Promise<void>
     reorder(ids: string[]): Promise<void>
-    update(id: string, payload: { speakerName?: string; durationMs?: number }): Promise<void>
+    update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number }): Promise<void>
+    /** Load entry into the off-air preview deck (safe; does not touch the audience feed). */
     activate(id: string): Promise<OpenPdfResult>
+    /** Load entry straight to the program/audience feed (double-click / Take-now). */
+    activateLive(id: string): Promise<OpenPdfResult>
     setCompact(value: boolean): Promise<void>
     setAutoAdvance(value: boolean): Promise<void>
   }

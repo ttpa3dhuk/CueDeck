@@ -28,6 +28,7 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
     kind: (v.kind as PlaylistEntry['kind']) ?? 'pdf',
     filePath,
     fileName: String(v.fileName ?? v.pdfName ?? basename(filePath)),
+    displayName: String(v.displayName ?? ''),
     speakerName: String(v.speakerName ?? ''),
     durationMs: Number(v.durationMs ?? 30 * 60 * 1000),
   }

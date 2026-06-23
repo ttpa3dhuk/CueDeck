@@ -38,116 +38,154 @@ class OffscreenCache {
   }
 }
 
-const cache = new OffscreenCache()
-const inflight = new Map<string, Promise<HTMLCanvasElement | null>>()
-const latestRequest = new WeakMap<HTMLCanvasElement, number>()
-
-let doc: PDFDocumentProxy | null = null
-let docToken = 0
-
-export async function loadDocument(bytes: Uint8Array): Promise<PDFDocumentProxy> {
-  const copy = new Uint8Array(bytes)
-  const loadingTask = pdfjs.getDocument({ data: copy })
-  const newDoc = await loadingTask.promise
-  if (doc) {
-    try {
-      await doc.destroy()
-    } catch {
-      /* ignore */
-    }
-  }
-  doc = newDoc
-  docToken++
-  cache.clear()
-  inflight.clear()
-  return newDoc
-}
-
-export function getDocument(): PDFDocumentProxy | null {
-  return doc
-}
-
-export function totalPages(): number {
-  return doc?.numPages ?? 0
-}
-
 function devicePixelScale(): number {
   return Math.min(window.devicePixelRatio || 1, 2)
 }
 
-async function renderToOffscreen(pageNum: number, targetWidth: number): Promise<HTMLCanvasElement | null> {
-  if (!doc) return null
-  if (pageNum < 1 || pageNum > doc.numPages) return null
-  if (targetWidth <= 0) return null
+/**
+ * One independent PDF document with its own page cache. The operator runs two
+ * (program + preview); audience/speaker use the shared default instance via the
+ * free-function exports below.
+ */
+export class PdfLoader {
+  private cache = new OffscreenCache()
+  private inflight = new Map<string, Promise<HTMLCanvasElement | null>>()
+  private latestRequest = new WeakMap<HTMLCanvasElement, number>()
+  private doc: PDFDocumentProxy | null = null
+  private docToken = 0
 
-  const cached = cache.get(pageNum, targetWidth)
-  if (cached) return cached
-
-  const key = `${pageNum}@${targetWidth}`
-  const inProgress = inflight.get(key)
-  if (inProgress) return inProgress
-
-  const tokenAtStart = docToken
-  const promise = (async () => {
-    try {
-      const page = await doc!.getPage(pageNum)
-      if (tokenAtStart !== docToken) return null
-
-      const baseViewport = page.getViewport({ scale: 1 })
-      const dpr = devicePixelScale()
-      const scale = (targetWidth / baseViewport.width) * dpr
-      const viewport = page.getViewport({ scale })
-
-      const off = document.createElement('canvas')
-      off.width = Math.floor(viewport.width)
-      off.height = Math.floor(viewport.height)
-      const ctx = off.getContext('2d')
-      if (!ctx) return null
-
-      let task: RenderTask | null = null
+  async loadDocument(bytes: Uint8Array): Promise<PDFDocumentProxy> {
+    const copy = new Uint8Array(bytes)
+    const loadingTask = pdfjs.getDocument({ data: copy })
+    const newDoc = await loadingTask.promise
+    if (this.doc) {
       try {
-        task = page.render({ canvasContext: ctx, viewport })
-        await task.promise
-      } catch (err) {
-        const name = (err as { name?: string })?.name
-        if (name === 'RenderingCancelledException') return null
-        throw err
+        await this.doc.destroy()
+      } catch {
+        /* ignore */
       }
-      if (tokenAtStart !== docToken) return null
-      cache.set(pageNum, targetWidth, off)
-      return off
-    } finally {
-      inflight.delete(key)
     }
-  })()
+    this.doc = newDoc
+    this.docToken++
+    this.cache.clear()
+    this.inflight.clear()
+    return newDoc
+  }
 
-  inflight.set(key, promise)
-  return promise
+  getDocument(): PDFDocumentProxy | null {
+    return this.doc
+  }
+
+  totalPages(): number {
+    return this.doc?.numPages ?? 0
+  }
+
+  private async renderToOffscreen(
+    pageNum: number,
+    targetWidth: number,
+  ): Promise<HTMLCanvasElement | null> {
+    const doc = this.doc
+    if (!doc) return null
+    if (pageNum < 1 || pageNum > doc.numPages) return null
+    if (targetWidth <= 0) return null
+
+    const cached = this.cache.get(pageNum, targetWidth)
+    if (cached) return cached
+
+    const key = `${pageNum}@${targetWidth}`
+    const inProgress = this.inflight.get(key)
+    if (inProgress) return inProgress
+
+    const tokenAtStart = this.docToken
+    const promise = (async () => {
+      try {
+        const page = await doc.getPage(pageNum)
+        if (tokenAtStart !== this.docToken) return null
+
+        const baseViewport = page.getViewport({ scale: 1 })
+        const dpr = devicePixelScale()
+        const scale = (targetWidth / baseViewport.width) * dpr
+        const viewport = page.getViewport({ scale })
+
+        const off = document.createElement('canvas')
+        off.width = Math.floor(viewport.width)
+        off.height = Math.floor(viewport.height)
+        const ctx = off.getContext('2d')
+        if (!ctx) return null
+
+        let task: RenderTask | null = null
+        try {
+          task = page.render({ canvasContext: ctx, viewport })
+          await task.promise
+        } catch (err) {
+          const name = (err as { name?: string })?.name
+          if (name === 'RenderingCancelledException') return null
+          throw err
+        }
+        if (tokenAtStart !== this.docToken) return null
+        this.cache.set(pageNum, targetWidth, off)
+        return off
+      } finally {
+        this.inflight.delete(key)
+      }
+    })()
+
+    this.inflight.set(key, promise)
+    return promise
+  }
+
+  async renderPageTo(
+    pageNum: number,
+    visibleCanvas: HTMLCanvasElement,
+    targetWidth: number,
+  ): Promise<void> {
+    this.latestRequest.set(visibleCanvas, pageNum)
+    const off = await this.renderToOffscreen(pageNum, targetWidth)
+    if (!off) return
+    if (this.latestRequest.get(visibleCanvas) !== pageNum) return
+
+    const dpr = devicePixelScale()
+    if (visibleCanvas.width !== off.width || visibleCanvas.height !== off.height) {
+      visibleCanvas.width = off.width
+      visibleCanvas.height = off.height
+    }
+    visibleCanvas.style.width = `${Math.floor(off.width / dpr)}px`
+    visibleCanvas.style.height = `${Math.floor(off.height / dpr)}px`
+
+    const ctx = visibleCanvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(off, 0, 0)
+  }
+
+  async prerender(pageNum: number, targetWidth: number): Promise<void> {
+    await this.renderToOffscreen(pageNum, targetWidth).catch(() => null)
+  }
 }
 
-export async function renderPageTo(
+// Default shared instance — backs the free-function API used by audience/speaker
+// (single document) and the operator's program pane.
+const defaultLoader = new PdfLoader()
+
+export function loadDocument(bytes: Uint8Array): Promise<PDFDocumentProxy> {
+  return defaultLoader.loadDocument(bytes)
+}
+
+export function getDocument(): PDFDocumentProxy | null {
+  return defaultLoader.getDocument()
+}
+
+export function totalPages(): number {
+  return defaultLoader.totalPages()
+}
+
+export function renderPageTo(
   pageNum: number,
   visibleCanvas: HTMLCanvasElement,
   targetWidth: number,
 ): Promise<void> {
-  latestRequest.set(visibleCanvas, pageNum)
-  const off = await renderToOffscreen(pageNum, targetWidth)
-  if (!off) return
-  if (latestRequest.get(visibleCanvas) !== pageNum) return
-
-  const dpr = devicePixelScale()
-  if (visibleCanvas.width !== off.width || visibleCanvas.height !== off.height) {
-    visibleCanvas.width = off.width
-    visibleCanvas.height = off.height
-  }
-  visibleCanvas.style.width = `${Math.floor(off.width / dpr)}px`
-  visibleCanvas.style.height = `${Math.floor(off.height / dpr)}px`
-
-  const ctx = visibleCanvas.getContext('2d')
-  if (!ctx) return
-  ctx.drawImage(off, 0, 0)
+  return defaultLoader.renderPageTo(pageNum, visibleCanvas, targetWidth)
 }
 
-export async function prerender(pageNum: number, targetWidth: number): Promise<void> {
-  await renderToOffscreen(pageNum, targetWidth).catch(() => null)
+export function prerender(pageNum: number, targetWidth: number): Promise<void> {
+  return defaultLoader.prerender(pageNum, targetWidth)
 }

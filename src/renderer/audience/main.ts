@@ -45,7 +45,7 @@ async function loadFile(): Promise<void> {
     slideImage.removeAttribute('src')
     slideVideo.classList.remove('hidden')
     slideVideo.muted = shouldMute(state, 'audience')
-    slideVideo.src = videoSrc(state.pdfSha1 ?? '')
+    slideVideo.src = videoSrc(state.pdfSha1 ?? '', 'program')
     slideVideo.load()
     lastSinkId = state.audioOutputId
     applySinkId(slideVideo, state.audioOutputId)

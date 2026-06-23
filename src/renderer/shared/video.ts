@@ -2,13 +2,16 @@ import type { AppState, Layout, Role, VideoState } from '../../preload/api'
 
 export const MEDIA_SCHEME = 'cuedeck-media'
 
+export type MediaDeck = 'program' | 'preview'
+
 /**
  * URL the <video> element points at. The path lives in main (the active file),
- * so the URL only carries a cache-buster keyed by file identity — changing it
- * forces the element to reload when the operator switches videos.
+ * so the URL only carries which deck to stream (program = audience feed, preview
+ * = operator staging) plus a cache-buster keyed by file identity — changing the
+ * latter forces the element to reload when the operator switches videos.
  */
-export function videoSrc(sha1: string): string {
-  return `${MEDIA_SCHEME}://stream/video?v=${encodeURIComponent(sha1)}`
+export function videoSrc(sha1: string, deck: MediaDeck = 'program'): string {
+  return `${MEDIA_SCHEME}://stream/${deck}?v=${encodeURIComponent(sha1)}`
 }
 
 /** Position (seconds) the shared logical clock currently points at. */

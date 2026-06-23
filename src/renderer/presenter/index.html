@@ -115,6 +115,7 @@
           </div>
         </aside>
         <section id="current-slide" class="current-slide">
+          <div class="deck-label program op-only">● ЭФИР</div>
           <canvas id="current-canvas" class="hidden"></canvas>
           <img id="current-image" class="slide-image hidden" alt="" />
           <video id="current-video" class="slide-video hidden" playsinline></video>
@@ -136,12 +137,48 @@
             <button id="video-error-link" class="op-only">Открыть handbrake.fr</button>
           </div>
           <div id="slide-placeholder" class="slide-placeholder">
-            <div class="placeholder-title">Нет активного спикера</div>
-            <div class="placeholder-hint">Кликни по спикеру в списке слева<br/>или открой файл (Cmd+O)</div>
+            <div class="placeholder-title">В эфире пусто</div>
+            <div class="placeholder-hint">Подготовь файл в превью справа,<br/>затем TAKE (Enter), чтобы выдать в зал</div>
           </div>
           <div id="blackout-indicator" class="blackout-banner hidden">
             <span class="bo-badge">BLACKOUT</span>
-            <span class="bo-hint">Зрительский экран затемнён · оператор видит следующий слайд</span>
+            <span class="bo-hint">Зрительский экран затемнён · оператор продолжает готовить превью</span>
+          </div>
+        </section>
+        <section id="preview-slide" class="preview-slide op-only">
+          <div class="deck-label preview">
+            <span>○ ПРЕВЬЮ</span>
+            <select id="video-take-mode" class="video-take-mode hidden" title="Что делать с видео при выдаче в эфир">
+              <option value="play-start">▶ играть с начала</option>
+              <option value="play-resume">▶ играть с этой точки</option>
+            </select>
+            <button id="take-btn" class="take-btn" title="Выдать превью в эфир (Enter)" disabled>TAKE ▶</button>
+          </div>
+          <canvas id="preview-canvas" class="hidden"></canvas>
+          <img id="preview-image" class="slide-image hidden" alt="" />
+          <video id="preview-video" class="slide-video hidden" playsinline muted></video>
+          <div id="preview-video-controls" class="video-controls preview-controls hidden">
+            <button id="preview-video-play" title="Play / Pause превью">▶</button>
+            <button id="preview-video-restart" title="В начало">⏮</button>
+            <input id="preview-video-scrub" class="video-scrub" type="range" min="0" max="100" step="0.1" value="0" />
+            <span id="preview-video-time" class="video-time">00:00 / 00:00</span>
+          </div>
+          <div id="preview-video-error" class="video-error hidden">
+            <div class="ve-icon">🎞️</div>
+            <div class="ve-title">Не удалось воспроизвести видео</div>
+            <div class="ve-body">
+              Формат или кодек не поддерживается — чаще всего <b>ProRes</b> или <b>HEVC&nbsp;(H.265)</b>.<br/>
+              Перекодируй в <b>MP4 (H.264&nbsp;+&nbsp;AAC)</b>.
+            </div>
+          </div>
+          <div id="preview-placeholder" class="slide-placeholder">
+            <div class="placeholder-title">Превью пусто</div>
+            <div class="placeholder-hint">Кликни спикера в списке слева<br/>или открой файл — он появится здесь, не в зале</div>
+          </div>
+          <div class="preview-nav">
+            <button id="preview-prev" title="Превью: предыдущий слайд">◀</button>
+            <span id="preview-counter" class="preview-counter">— / —</span>
+            <button id="preview-next" title="Превью: следующий слайд">▶</button>
           </div>
         </section>
         <aside class="sidebar">
@@ -155,20 +192,23 @@
           <div class="notes">
             <div class="notes-header">
               <span class="label">Заметки</span>
-              <div class="notes-font-controls op-only">
-                <button id="notes-font-down" title="Уменьшить шрифт заметок">A−</button>
+              <div class="notes-font-controls op-only" title="Размер шрифта заметок на суфлёре">
+                <button id="notes-font-down" title="Меньше шрифт на суфлёре">A−</button>
                 <span id="notes-font-value" class="notes-font-value">18</span>
-                <button id="notes-font-up" title="Увеличить шрифт заметок">A+</button>
+                <button id="notes-font-up" title="Больше шрифт на суфлёре">A+</button>
               </div>
             </div>
             <textarea id="notes-input" class="op-only" rows="1" placeholder="Заметка к этому слайду…"></textarea>
             <div id="notes-readonly" class="speaker-only notes-readonly"></div>
           </div>
         </aside>
+        <section id="op-bottombar" class="op-bottombar op-only"></section>
       </main>
 
       <footer class="bottombar op-only">
-        <div></div>
+        <div class="bottombar-left">
+          <button id="hotkeys-btn" title="Настроить горячие клавиши">⌨ Клавиши…</button>
+        </div>
         <div class="bottombar-nav">
           <button id="nav-prev" title="← / PgUp">◀ Prev</button>
           <button id="nav-next" title="→ / Space / PgDn">Next ▶</button>
@@ -195,6 +235,18 @@
         <div id="audio-device-list" class="audio-device-list"></div>
         <div class="modal-actions">
           <button id="audio-close" class="primary">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="hotkeys-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Горячие клавиши</h2>
+        <p class="audio-hint">Нажми на клавишу справа от действия, затем нажми нужную кнопку на клавиатуре. Клавиши кликера (PgUp / PgDn / точка) и комбинации с Shift/Ctrl работают всегда.</p>
+        <div id="hotkeys-list" class="hotkeys-list"></div>
+        <div class="modal-actions">
+          <button id="hotkeys-reset">Сбросить по умолчанию</button>
+          <button id="hotkeys-close" class="primary">Закрыть</button>
         </div>
       </div>
     </div>
@@ -226,9 +278,14 @@
         <h2>Горячие клавиши</h2>
         <table class="help-table">
           <tbody>
-            <tr class="help-section"><td colspan="2">Навигация</td></tr>
-            <tr><td><kbd>→</kbd> <kbd>Space</kbd> <kbd>PgDn</kbd></td><td>Следующий слайд (кликер: вперёд)</td></tr>
-            <tr><td><kbd>←</kbd> <kbd>PgUp</kbd></td><td>Предыдущий слайд (кликер: назад)</td></tr>
+            <tr class="help-section"><td colspan="2">Эфир (program) — кликер спикера</td></tr>
+            <tr><td><kbd>→</kbd> <kbd>Space</kbd> <kbd>PgDn</kbd></td><td>Следующий слайд в эфире (кликер: вперёд)</td></tr>
+            <tr><td><kbd>←</kbd> <kbd>PgUp</kbd></td><td>Предыдущий слайд в эфире (кликер: назад)</td></tr>
+            <tr class="help-section"><td colspan="2">Превью (off-air) и выдача в эфир</td></tr>
+            <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Превью: предыдущий / следующий слайд</td></tr>
+            <tr><td><kbd>Tab</kbd></td><td>TAKE — выдать превью в эфир</td></tr>
+            <tr><td>Клик / двойной клик по спикеру</td><td>Загрузить в превью / сразу в эфир</td></tr>
+            <tr><td colspan="2" style="color:var(--muted);font-size:12px;">Клавиши можно переназначить — кнопка «⌨ Клавиши…» внизу</td></tr>
             <tr class="help-section"><td colspan="2">Таймер</td></tr>
             <tr><td><kbd>T</kbd></td><td>Старт / Пауза таймера</td></tr>
             <tr><td><kbd>Shift</kbd> <kbd>T</kbd></td><td>Сбросить таймер</td></tr>

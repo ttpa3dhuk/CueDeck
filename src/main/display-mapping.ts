@@ -1,7 +1,7 @@
 import Store from 'electron-store'
 import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
-import type { PlaylistEntry, TimerMode, TimerPosition } from './state.js'
+import type { PlaylistEntry, TimerMode, TimerPosition, VideoTakeMode } from './state.js'
 
 interface SavedMapping {
   layout: Layout
@@ -15,6 +15,7 @@ interface PersistedShape {
   timerMode: TimerMode
   timerPosition: TimerPosition
   timerScale: number
+  videoTakeMode: VideoTakeMode
   notesFontSize: number
   playlist: PlaylistEntry[]
   currentPlaylistId: string | null
@@ -33,6 +34,7 @@ const STORE_DEFAULTS: PersistedShape = {
   timerMode: 'countdown',
   timerPosition: 'top-right',
   timerScale: 1,
+  videoTakeMode: 'play-start',
   notesFontSize: 18,
   playlist: [],
   currentPlaylistId: null,
@@ -114,6 +116,14 @@ export function setTimerScale(scale: number): void {
   store().set('timerScale', scale)
 }
 
+export function getVideoTakeMode(): VideoTakeMode {
+  return store().get('videoTakeMode')
+}
+
+export function setVideoTakeMode(mode: VideoTakeMode): void {
+  store().set('videoTakeMode', mode)
+}
+
 export function getNotesFontSize(): number {
   return store().get('notesFontSize')
 }
@@ -131,6 +141,7 @@ export function getPlaylist(): PlaylistEntry[] {
       kind: (v.kind as PlaylistEntry['kind']) ?? 'pdf',
       filePath: String(v.filePath ?? v.pdfPath ?? ''),
       fileName: String(v.fileName ?? v.pdfName ?? ''),
+      displayName: String(v.displayName ?? ''),
       speakerName: String(v.speakerName ?? ''),
       durationMs: Number(v.durationMs ?? 30 * 60 * 1000),
     }

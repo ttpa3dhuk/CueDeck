@@ -15,6 +15,12 @@ export type TimerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-r
 export type FileKind = 'pdf' | 'image' | 'pptx' | 'video'
 
 /**
+ * What happens to a video clip when it is taken from preview to program:
+ * always autoplay, either from 0 or resuming at the preview scrub position.
+ */
+export type VideoTakeMode = 'play-start' | 'play-resume'
+
+/**
  * Logical playback clock shared across all windows (like TimerState).
  * Current position is derived, never stored as a moving value:
  *   playing && anchorAt → anchorSec + (now - anchorAt) / 1000
@@ -35,8 +41,28 @@ export interface PlaylistEntry {
   kind: FileKind
   filePath: string
   fileName: string
+  /** User-given label shown in the playlist instead of fileName. '' → use fileName. */
+  displayName: string
   speakerName: string
   durationMs: number
+}
+
+/**
+ * A single loaded deck (file + position). The top-level AppState fields
+ * (pdfPath/fileKind/currentSlide/video/notes/currentPlaylistId) ARE the PROGRAM
+ * deck — what the audience sees, driven by the clicker. `AppState.preview` is a
+ * second, independent deck the operator stages off-air; `take` copies it into the
+ * program fields. Keeping program top-level avoids touching audience/speaker code.
+ */
+export interface DeckState {
+  path: string | null
+  sha1: string | null
+  kind: FileKind | null
+  totalSlides: number
+  currentSlide: number
+  video: VideoState
+  notes: Record<number, string>
+  playlistId: string | null
 }
 
 export interface AppState {
@@ -45,12 +71,15 @@ export interface AppState {
   fileKind: FileKind | null
   totalSlides: number
   currentSlide: number
+  /** Off-air staging deck (operator only). `take` promotes it to program. */
+  preview: DeckState
   blackout: boolean
   video: VideoState
   timer: TimerState
   timerMode: TimerMode
   timerPosition: TimerPosition
   timerScale: number
+  videoTakeMode: VideoTakeMode
   notesFontSize: number
   notes: Record<number, string>
   layout: Layout
@@ -72,6 +101,19 @@ export function initialVideoState(): VideoState {
   return { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: false }
 }
 
+export function initialDeckState(): DeckState {
+  return {
+    path: null,
+    sha1: null,
+    kind: null,
+    totalSlides: 0,
+    currentSlide: 1,
+    video: initialVideoState(),
+    notes: {},
+    playlistId: null,
+  }
+}
+
 export function initialState(): AppState {
   return {
     pdfPath: null,
@@ -79,12 +121,14 @@ export function initialState(): AppState {
     fileKind: null,
     totalSlides: 0,
     currentSlide: 1,
+    preview: initialDeckState(),
     blackout: false,
     video: initialVideoState(),
     timer: { durationMs: DEFAULT_DURATION_MS, startedAt: null, elapsedMs: 0, running: false },
     timerMode: 'countdown',
     timerPosition: 'top-right',
     timerScale: 1,
+    videoTakeMode: 'play-start',
     notesFontSize: 18,
     notes: {},
     layout: 'solo',
@@ -98,6 +142,15 @@ export function initialState(): AppState {
     audienceWindowed: false,
     audioOutputId: null,
   }
+}
+
+/** Position (seconds) a logical playback clock currently points at. */
+function positionOf(v: VideoState): number {
+  if (v.playing && v.anchorAt != null) {
+    const pos = v.anchorSec + (Date.now() - v.anchorAt) / 1000
+    return v.durationSec > 0 ? Math.min(pos, v.durationSec) : pos
+  }
+  return v.anchorSec
 }
 
 type Listener = (state: AppState, patch: Partial<AppState>) => void
@@ -153,14 +206,22 @@ export class StateStore {
     this.patch({ video: { ...this.state.video, ...video } })
   }
 
+  patchPreview(deck: Partial<DeckState>): void {
+    this.patch({ preview: { ...this.state.preview, ...deck } })
+  }
+
+  patchPreviewVideo(video: Partial<VideoState>): void {
+    this.patchPreview({ video: { ...this.state.preview.video, ...video } })
+  }
+
   /** Position the logical playback clock currently points at, in seconds. */
   videoPositionSec(): number {
-    const v = this.state.video
-    if (v.playing && v.anchorAt != null) {
-      const pos = v.anchorSec + (Date.now() - v.anchorAt) / 1000
-      return v.durationSec > 0 ? Math.min(pos, v.durationSec) : pos
-    }
-    return v.anchorSec
+    return positionOf(this.state.video)
+  }
+
+  /** Same as videoPositionSec but for the off-air preview deck's clock. */
+  previewVideoPositionSec(): number {
+    return positionOf(this.state.preview.video)
   }
 
   onChange(listener: Listener): () => void {

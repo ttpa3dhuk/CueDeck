@@ -234,7 +234,7 @@ body[data-role="speaker"] .slide-placeholder { display: none; }
 
 .grid {
   display: grid;
-  grid-template-columns: 280px 1fr 320px;
+  grid-template-columns: 260px minmax(0, 1fr) minmax(0, 1fr) 300px;
   grid-auto-rows: minmax(0, 1fr);
   gap: 12px;
   padding: 12px;
@@ -244,6 +244,145 @@ body[data-role="speaker"] .slide-placeholder { display: none; }
 body[data-role="speaker"] .grid {
   grid-template-columns: 1.7fr 1fr;
 }
+/* Operator: OBS Studio-Mode layout. Top row = PREVIEW | PROGRAM (эфир справа).
+   Bottom row = notes + timer + big TAKE (built by reparenting in main.ts).
+   Playlist spans both rows on the left. Right .sidebar is unused for operator. */
+body[data-role="operator"] .grid {
+  grid-template-columns: 260px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) var(--bottom-h, 190px);
+  grid-auto-rows: unset;
+  grid-template-areas:
+    "playlist preview program"
+    "playlist bottom  bottom";
+}
+body[data-role="operator"] .playlist { grid-area: playlist; }
+body[data-role="operator"] #preview-slide { grid-area: preview; }
+body[data-role="operator"] #current-slide { grid-area: program; }
+body[data-role="operator"] #op-bottombar { grid-area: bottom; }
+body[data-role="operator"] .sidebar { display: none; }
+body[data-role="operator"] .next-slide { display: none; }
+
+/* Bottom bar: [ notes | timer | big TAKE ] */
+.op-bottombar {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+/* Drag handle to resize the bottom bar vs the preview/program panes (1.12) */
+.op-bottombar-handle {
+  position: absolute;
+  top: -9px;
+  left: 0;
+  right: 0;
+  height: 12px;
+  cursor: row-resize;
+  z-index: 6;
+}
+.op-bottombar-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.op-bottombar-handle:hover::after { background: var(--accent); }
+.op-bottombar .notes { flex: 1 1 280px; min-width: 200px; }
+.op-bottombar .bottom-timer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 10px 14px;
+  /* Shrinks (and its controls wrap/scroll) so notes stay usable and TAKE never clips */
+  flex: 1 1 460px;
+  min-width: 0;
+  overflow: auto;
+}
+.op-bottombar .bottom-timer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.op-bottombar .bt-transport { display: flex; gap: 8px; flex: none; }
+/* Timer digits + mode grouped together on the left */
+.op-bottombar .bt-head-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.op-bottombar .bottom-timer-head .timer { font-size: 46px; line-height: 1; }
+.op-bottombar .bt-head-left .group { display: flex; align-items: center; gap: 6px; }
+.op-bottombar .bt-speaker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.op-bottombar .bt-speaker-label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.op-bottombar .bt-speaker .group { display: flex; align-items: center; gap: 6px; }
+.op-bottombar .topbar-row.timer-controls {
+  border-top: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.op-bottombar .topbar-row.timer-controls .pdf-name { display: none; }
+.op-bottombar .take-big {
+  flex: none;
+  align-self: stretch;
+  min-width: 150px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  border-radius: 8px;
+}
+
+/* Hotkeys editor modal */
+.hotkeys-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.hk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  background: #14161b;
+  border-radius: 6px;
+}
+.hk-label { font-size: 13px; color: var(--text); }
+.hk-key {
+  min-width: 130px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.hk-key.capturing { border-color: var(--accent); color: var(--accent); }
 
 .playlist {
   background: var(--panel);
@@ -298,7 +437,21 @@ body[data-role="speaker"] .grid {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  /* Scrollbar on the LEFT (rtl trick) so it never overlaps the ✕ delete buttons */
+  direction: rtl;
+  padding-left: 4px;
 }
+.playlist-list > .playlist-item {
+  direction: ltr; /* content stays normal; only the scrollbar moved */
+}
+/* Thin, elegant scrollbar (Chromium/Electron) */
+.playlist-list::-webkit-scrollbar { width: 7px; }
+.playlist-list::-webkit-scrollbar-track { background: transparent; }
+.playlist-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+.playlist-list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); }
 .playlist-empty {
   color: var(--muted);
   font-size: 12px;
@@ -319,9 +472,37 @@ body[data-role="speaker"] .grid {
   position: relative;
 }
 .playlist-item:hover { border-color: #3a4252; }
-.playlist-item.active {
-  border-color: var(--accent);
-  background: rgba(76, 139, 245, 0.12);
+/* Staged in the off-air preview deck — green, like the preview frame */
+.playlist-item.in-preview {
+  border-color: #2ea043;
+  background: rgba(46, 160, 67, 0.13);
+}
+.playlist-item.in-preview::before {
+  content: '○ превью';
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #4ac26b;
+}
+/* When an item is both on-air and staged, the red ЭФИР label wins the corner */
+.playlist-item.on-air.in-preview::before { content: none; }
+/* Live on the audience feed (program) — red, takes precedence visually */
+.playlist-item.on-air {
+  border-color: var(--danger, #d64045);
+  background: rgba(214, 64, 69, 0.14);
+}
+.playlist-item.on-air::after {
+  content: '● ЭФИР';
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--danger, #d64045);
 }
 .playlist-item.dragging { opacity: 0.4; }
 .playlist-item.drop-target { border-color: var(--accent); border-style: dashed; }
@@ -362,7 +543,8 @@ body[data-role="speaker"] .grid {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.playlist-item .remove {
+.playlist-item .remove,
+.playlist-item .rename {
   background: transparent;
   border: none;
   color: var(--muted);
@@ -371,6 +553,19 @@ body[data-role="speaker"] .grid {
   cursor: pointer;
 }
 .playlist-item .remove:hover { color: var(--danger); }
+.playlist-item .rename { font-size: 12px; }
+.playlist-item .rename:hover { color: var(--accent); }
+.playlist-item input.rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: #0f1115;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
 .playlist-item input.speaker-name {
   background: transparent;
   border: 1px solid transparent;
@@ -625,6 +820,117 @@ body[data-role="speaker"] .playlist { display: none !important; }
   height: 100%;
 }
 
+/* ── Preview pane (operator off-air staging) ───────────────────────────── */
+.preview-slide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  /* Green frame — standard switcher colour for the off-air bus */
+  border: 3px solid #2ea043;
+}
+/* Red frame on the program pane (operator only) — on air. Speaker keeps it clean. */
+body[data-role="operator"] #current-slide {
+  border: 3px solid var(--danger, #d64045);
+}
+.preview-slide canvas,
+.preview-slide .slide-image,
+.preview-slide .slide-video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.preview-slide .slide-video {
+  width: 100%;
+  height: 100%;
+}
+
+/* Deck badges — pinned top-left of each pane so the operator never confuses
+   what is live vs staged. The program badge is red (on air), preview is muted. */
+.deck-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+.deck-label.program { background: rgba(214, 64, 69, 0.9); color: #fff; }
+.deck-label.preview {
+  background: rgba(20, 50, 30, 0.85);
+  color: #4ac26b;
+  right: 8px;
+  left: auto;
+  pointer-events: auto;
+}
+.video-take-mode {
+  pointer-events: auto;
+  font-size: 11px;
+  padding: 3px 4px;
+  border-radius: 5px;
+  background: #161a20;
+  color: #cdd3da;
+  border: 1px solid #2ea043;
+  cursor: pointer;
+  max-width: 170px;
+}
+.video-take-mode.hidden { display: none; }
+.take-btn {
+  pointer-events: auto;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  padding: 5px 14px;
+  color: #fff;
+  background: var(--danger, #d64045);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.take-btn:hover:not(:disabled) { filter: brightness(1.12); }
+.take-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* Preview slide navigation (mouse only — the clicker is reserved for program) */
+.preview-nav {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  background: rgba(20, 20, 22, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  z-index: 5;
+}
+.preview-nav button {
+  min-width: 30px;
+  height: 26px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.preview-counter {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #ddd;
+  min-width: 56px;
+  text-align: center;
+}
+/* preview transport sits a touch higher so it doesn't overlap preview-nav */
+.preview-slide .video-controls.preview-controls { bottom: 44px; }
+
 /* Unsupported-codec message — covers the slide when <video> fails to decode */
 .video-error {
   position: absolute;
@@ -763,7 +1069,9 @@ body[data-role="speaker"] .playlist { display: none !important; }
   border-radius: 6px;
   padding: 8px;
   font-family: inherit;
-  font-size: var(--notes-font-size, 18px);
+  /* Operator's own notes box stays a fixed, tidy size; the A−/A+ control only
+     drives the speaker monitor (.notes-readonly below). */
+  font-size: 15px;
   line-height: 1.4;
   resize: none;
   min-height: 0;
@@ -789,6 +1097,11 @@ body[data-role="speaker"] .playlist { display: none !important; }
   background: var(--panel);
   border-top: 1px solid var(--border);
 }
+.bottombar-left {
+  justify-self: start;
+  display: flex;
+  gap: 6px;
+}
 .bottombar-nav {
   display: flex;
   gap: 8px;
@@ -796,7 +1109,10 @@ body[data-role="speaker"] .playlist { display: none !important; }
 }
 .bottombar-right {
   justify-self: end;
+  display: flex;
+  gap: 6px;
 }
+.bottombar button { white-space: nowrap; }
 
 .banner {
   position: fixed;

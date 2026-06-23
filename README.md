@@ -81,7 +81,9 @@ PDF и картинки работают сразу, без зависимост
 
 ### ✨ Возможности
 
-- 📋 **Плейлист спикеров** — собираешь всю программу мероприятия заранее, drag-and-drop сортировка,
+- 🎛 **Preview / Program — эфирная модель, как на видеопультах** — два независимых деска: **PROGRAM** (красная рамка) видит зал, **PREVIEW** (зелёная рамка) ты готовишь незаметно. Клик по спикеру грузит файл в превью, а не в зал; кнопка **TAKE** (`Tab`) выдаёт его в эфир. Эфир больше не рвётся, пока ищешь и листаешь следующий файл. На Take дески меняются местами, для видео — выбор «играть с начала / с точки превью»
+- 🎚 **Раскладка в стиле OBS Studio Mode** — превью и эфир рядом, под ними заметки, крупный таймер и большая кнопка TAKE; высоту нижней панели можно тянуть мышью
+- 📋 **Плейлист спикеров** — собираешь всю программу мероприятия заранее, drag-and-drop сортировка, своё наименование для каждой записи (✎), one-click переключение
 - ⏱ **Таймер — три режима:**
   - **Обратный отсчёт** — задаёшь длительность на спикера, готовые пресеты, возможность добавлять и убавлять время в реальном времени
   - **Секундомер** — если необходимо засечь время
@@ -94,6 +96,7 @@ PDF и картинки работают сразу, без зависимост
 - 🔊 **Выбор аудиовыхода** — кнопка «Аудиовыход…» открывает меню, где задаёшь, на какое устройство отдавать звук видео: звуковая карта, миниджек ноута, HDMI на vMix-машину, NDI и т.п. Выбор запоминается
 - 📝 **Заметки оператора → суфлёр** — пишешь текст в окне оператора, он мгновенно появляется на экране суфлёра. Прямой канал связи со спикером без слов
 - ⬛ **Blackout / Key Visual** — нажал `B`: аудитория видит заставку (если загружена) или чёрный фон. Переключаешь слайды — аудитория ничего не видит
+- ⌨️ **Настраиваемые горячие клавиши** — кнопка «Клавиши…» открывает редактор: переназначь любое действие под себя (например, TAKE на `Tab`)
 - 💾 **Проекты** — сохраняй настроенный плейлист как `.pdpres`, открывай перед следующим мероприятием
 - 🔔 **Авто-обновления** — раз в сутки проверяет новую версию на GitHub
 
@@ -101,15 +104,19 @@ PDF и картинки работают сразу, без зависимост
 
 ### ⌨️ Горячие клавиши
 
+> Клавиши действий можно переназначить в редакторе «Клавиши…» (кнопка внизу). Ниже — значения по умолчанию.
+
 | Клавиша | Действие |
 |---------|----------|
-| `←` / `→` | Предыдущий / следующий слайд |
-| `Space` | Следующий слайд |
-| `PgUp` / `PgDn` | Предыдущий / следующий слайд (кнопки кликера) |
+| `Tab` | **TAKE** — выдать превью в эфир |
+| `[` / `]` | Превью: предыдущий / следующий слайд |
+| `←` / `→` | Эфир: предыдущий / следующий слайд |
+| `Space` | Эфир: следующий слайд / play-pause видео |
+| `PgUp` / `PgDn` | Эфир: предыдущий / следующий (кнопки кликера) |
 | `B` / `.` | Blackout (`.` — blank-кнопка кликера) |
 | `T` | Старт / пауза таймера |
 | `Shift+T` | Сбросить таймер |
-| `Cmd+O` | Открыть PDF / PPTX |
+| `Cmd+O` | Открыть файл (в превью) |
 | `Cmd+N` | Новый проект |
 | `Cmd+Shift+O` | Открыть проект |
 | `Cmd+S` | Сохранить проект |
@@ -225,7 +232,9 @@ Note: the file format (**container**) and the **codec** inside it are different 
 
 ### ✨ Features
 
-- 📋 **Speaker playlist** — build the full event program in advance, drag-and-drop reordering, one-click switching
+- 🎛 **Preview / Program — a video-switcher model** — two independent decks: **PROGRAM** (red frame) is what the audience sees, **PREVIEW** (green frame) is staged off-air. Clicking a speaker loads the file into preview, not on air; the **TAKE** button (`Tab`) sends it live. The audience feed no longer breaks while you cue the next file. Take swaps the decks; for video you choose "play from start / from the preview point"
+- 🎚 **OBS Studio-Mode layout** — preview and program side by side, notes + large timer + big TAKE below; the bottom bar height is drag-resizable
+- 📋 **Speaker playlist** — build the full event program in advance, drag-and-drop reordering, custom label per entry (✎), one-click switching
 - ⏱ **Timer — three modes:**
   - **Countdown** — set a duration per speaker, color shifts green → yellow → red
   - **Stopwatch** — counts up from zero
@@ -238,6 +247,7 @@ Note: the file format (**container**) and the **codec** inside it are different 
 - 🔊 **Audio output selection** — the "Audio output…" button opens a menu to pick which device the video sound goes to: sound card, laptop minijack, HDMI to a vMix machine, NDI, etc. The choice is remembered
 - 📝 **Operator notes → confidence monitor** — type in the operator window, text appears instantly on the speaker's screen. Silent communication channel during the presentation
 - ⬛ **Blackout / Key Visual** — press `B`: audience sees your Key Visual image (if loaded) or a black screen. Switch slides freely — the audience sees nothing
+- ⌨️ **Customizable hotkeys** — the "Keys…" button opens an editor: rebind any action to your liking (e.g. TAKE on `Tab`)
 - 💾 **Projects** — save your configured playlist as `.pdpres`, reopen before the next event
 - 🔔 **Auto-update check** — checks GitHub once a day for a new version
 
@@ -245,11 +255,15 @@ Note: the file format (**container**) and the **codec** inside it are different 
 
 ### ⌨️ Keyboard Shortcuts
 
+> Action keys are remappable in the "Keys…" editor (button at the bottom). Defaults below.
+
 | Key | Action |
 |-----|--------|
-| `←` / `→` | Previous / next slide |
-| `Space` | Next slide |
-| `PgUp` / `PgDn` | Previous / next slide (presenter clicker buttons) |
+| `Tab` | **TAKE** — send preview to air |
+| `[` / `]` | Preview: previous / next slide |
+| `←` / `→` | Program: previous / next slide |
+| `Space` | Program: next slide / video play-pause |
+| `PgUp` / `PgDn` | Program: previous / next (clicker buttons) |
 | `B` / `.` | Toggle blackout (`.` — clicker blank button) |
 | `T` | Start / pause timer |
 | `Shift+T` | Reset timer |
