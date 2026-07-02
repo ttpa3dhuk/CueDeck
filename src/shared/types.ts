@@ -18,6 +18,12 @@ export interface TimerState {
   startedAt: number | null
   elapsedMs: number
   running: boolean
+  /**
+   * Completed loop rounds (timerLoop mode). Main increments it when the
+   * countdown wraps and restarts; renderers watch the change to fire the
+   * gong/flash even if they never observed remaining <= 0 between ticks.
+   */
+  cycles: number
 }
 
 export type TimerMode = 'countdown' | 'stopwatch' | 'clock'
@@ -107,8 +113,12 @@ export interface AppState {
   audioOutputId: string | null
   /** Flash message on the speaker monitor; stays (blinking) until cleared. null = none. */
   speakerMessage: string | null
-  /** Countdown sound cues on the operator: ticks in the last 10s + gong at zero. */
-  timerSoundEnabled: boolean
+  /** Sound cue on the operator: ticks in the last 10s of a countdown. */
+  timerTickEnabled: boolean
+  /** Sound cue on the operator: gong when the countdown hits zero / wraps a loop round. */
+  timerGongEnabled: boolean
+  /** Loop mode: countdown restarts automatically on zero (15/30-second rounds etc.). */
+  timerLoop: boolean
 }
 
 export interface DisplayInfo {

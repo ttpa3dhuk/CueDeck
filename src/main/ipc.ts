@@ -36,7 +36,9 @@ import {
   setAutoAdvance,
   setAudienceWindowed,
   setAudioOutputId,
-  setTimerSoundEnabled,
+  setTimerTickEnabled,
+  setTimerGongEnabled,
+  setTimerLoop,
 } from './display-mapping.js'
 import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
@@ -154,6 +156,7 @@ async function openFile(
       startedAt: null,
       elapsedMs: 0,
       running: false,
+      cycles: 0,
     }
     if (typeof opts.durationMs === 'number') timerPatch.durationMs = opts.durationMs
 
@@ -414,6 +417,7 @@ export function registerIpcHandlers(): void {
         startedAt: null,
         elapsedMs: 0,
         running: false,
+        cycles: 0,
       })
       setLastDurationMs(entry.durationMs)
     }
@@ -482,7 +486,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('timer:reset', () => {
-    store.patchTimer({ startedAt: null, elapsedMs: 0, running: false })
+    store.patchTimer({ startedAt: null, elapsedMs: 0, running: false, cycles: 0 })
   })
 
   ipcMain.handle('timer:set-duration', (_e, ms: number) => {
@@ -514,11 +518,37 @@ export function registerIpcHandlers(): void {
     setTimerScale(clamped)
   })
 
-  ipcMain.handle('timer:set-sound', (_e, enabled: boolean) => {
+  ipcMain.handle('timer:set-tick-sound', (_e, enabled: boolean) => {
     const v = Boolean(enabled)
-    store.patch({ timerSoundEnabled: v })
-    setTimerSoundEnabled(v)
+    store.patch({ timerTickEnabled: v })
+    setTimerTickEnabled(v)
   })
+
+  ipcMain.handle('timer:set-gong-sound', (_e, enabled: boolean) => {
+    const v = Boolean(enabled)
+    store.patch({ timerGongEnabled: v })
+    setTimerGongEnabled(v)
+  })
+
+  ipcMain.handle('timer:set-loop', (_e, enabled: boolean) => {
+    const v = Boolean(enabled)
+    store.patch({ timerLoop: v })
+    setTimerLoop(v)
+  })
+
+  // Цикличный таймер: на нуле перезапускаем круг. cycles++ — сигнал рендерерам
+  // (гонг/вспышка), даже если между их тиками ноль «проскочил». Только countdown
+  // и только при ненулевой длительности (иначе бесконечный спин рестартов).
+  setInterval(() => {
+    const s = store.get()
+    const t = s.timer
+    if (!s.timerLoop || s.timerMode !== 'countdown' || !t.running || t.startedAt === null) return
+    if (t.durationMs <= 0) return
+    const elapsed = t.elapsedMs + (Date.now() - t.startedAt)
+    if (elapsed >= t.durationMs) {
+      store.patchTimer({ startedAt: Date.now(), elapsedMs: 0, cycles: t.cycles + 1 })
+    }
+  }, 250)
 
   ipcMain.handle('notes:set-font-size', (_e, px: number) => {
     const clamped = Math.max(10, Math.min(72, Math.round(px)))

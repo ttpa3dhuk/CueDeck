@@ -45,8 +45,10 @@
           <span id="pdf-name" class="pdf-name"></span>
           <div class="group">
             <label class="group-label">Длительность</label>
-            <input id="duration-input" class="duration-editable" type="number" min="0" step="1" value="30" title="Введи число минут вручную" placeholder="мин" />
+            <input id="duration-input" class="duration-editable" type="number" min="0" step="1" value="30" title="Минуты — можно вводить вручную" placeholder="мин" />
             <span class="suffix">мин</span>
+            <input id="duration-sec-input" class="duration-editable" type="number" min="0" max="59" step="1" value="0" title="Секунды (0–59) — для коротких таймеров вроде 15–30 сек" placeholder="сек" />
+            <span class="suffix">сек</span>
             <span class="edit-hint" title="Можно вводить вручную">✎</span>
           </div>
           <div class="group">
@@ -75,9 +77,20 @@
           </div>
           <div class="group">
             <label class="group-label">Звук</label>
-            <label class="toggle" title="Тиканье последние 10 секунд и гонг в конце отсчёта. Звук — у оператора; на суфлёре в конце вспышка (всегда).">
-              <input id="timer-sound-toggle" type="checkbox" />
-              <span>🔔 Тик + гонг</span>
+            <label class="toggle" title="Тиканье последние 10 секунд отсчёта (звук у оператора)">
+              <input id="timer-tick-toggle" type="checkbox" />
+              <span>⏱ Тик 10с</span>
+            </label>
+            <label class="toggle" title="Гонг на нуле и на каждом круге цикла (звук у оператора; на суфлёре в конце всегда вспышка)">
+              <input id="timer-gong-toggle" type="checkbox" />
+              <span>🔔 Гонг</span>
+            </label>
+          </div>
+          <div class="group">
+            <label class="group-label">Цикл</label>
+            <label class="toggle" title="Отсчёт перезапускается сам: 30с → гонг → снова 30с. Для кругов по 15/30 секунд.">
+              <input id="timer-loop-toggle" type="checkbox" />
+              <span>🔁 Повтор</span>
             </label>
           </div>
         </div>

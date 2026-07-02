@@ -84,8 +84,12 @@ export interface PresenterApi {
     setMode(mode: TimerMode): Promise<void>
     setPosition(pos: TimerPosition): Promise<void>
     setScale(scale: number): Promise<void>
-    /** Sound cues on the operator: ticks in the last 10s of a countdown + gong at zero. */
-    setSound(enabled: boolean): Promise<void>
+    /** Sound cue on the operator: ticks in the last 10s of a countdown. */
+    setTickSound(enabled: boolean): Promise<void>
+    /** Sound cue on the operator: gong at zero / on every loop wrap. */
+    setGongSound(enabled: boolean): Promise<void>
+    /** Loop mode: countdown restarts automatically on zero. */
+    setLoop(enabled: boolean): Promise<void>
   }
   blackout: {
     toggle(): Promise<void>

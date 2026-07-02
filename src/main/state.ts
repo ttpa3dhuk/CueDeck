@@ -44,7 +44,7 @@ export function initialState(): AppState {
     preview: initialDeckState(),
     blackout: false,
     video: initialVideoState(),
-    timer: { durationMs: DEFAULT_DURATION_MS, startedAt: null, elapsedMs: 0, running: false },
+    timer: { durationMs: DEFAULT_DURATION_MS, startedAt: null, elapsedMs: 0, running: false, cycles: 0 },
     timerMode: 'countdown',
     timerPosition: 'top-right',
     timerScale: 1,
@@ -62,7 +62,9 @@ export function initialState(): AppState {
     audienceWindowed: false,
     audioOutputId: null,
     speakerMessage: null,
-    timerSoundEnabled: false,
+    timerTickEnabled: false,
+    timerGongEnabled: false,
+    timerLoop: false,
   }
 }
 

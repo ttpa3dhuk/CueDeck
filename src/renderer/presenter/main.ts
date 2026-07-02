@@ -31,6 +31,7 @@ const timerToggle = $<HTMLButtonElement>('timer-toggle')
 const timerReset = $<HTMLButtonElement>('timer-reset')
 const blackoutToggle = $<HTMLButtonElement>('blackout-toggle')
 const durationInput = role === 'operator' ? $<HTMLInputElement>('duration-input') : null
+const durationSecInput = role === 'operator' ? $<HTMLInputElement>('duration-sec-input') : null
 const modeSelect = role === 'operator' ? $<HTMLSelectElement>('mode-select') : null
 const playlistList = role === 'operator' ? $<HTMLOListElement>('playlist-list') : null
 const playlistEmpty = role === 'operator' ? $('playlist-empty') : null
@@ -481,24 +482,45 @@ timerFlash.addEventListener('animationend', () => timerFlash.classList.remove('a
 
 let lastTickSec = -1
 let timerEndFired = false
+let lastCycles: number | null = null
+
+function fireTimerEndCues(state: AppState): void {
+  if (isOperator && state.timerGongEnabled) playGong()
+  if (role === 'speaker') flashTimerEnd()
+}
 
 // Вызывается из общего 250мс-тика: границы секунд ловим сравнением ceil(remaining).
 function updateTimerCues(state: AppState): void {
+  const t = state.timer
+
+  // Рестарт круга в цикле (🔁) детектим по счётчику cycles из main — сам ноль
+  // между 250мс-тиками можно не увидеть. timerEndFired гасит дубль гонга,
+  // если ноль всё-таки успели заметить до прихода патча.
+  if (lastCycles === null) lastCycles = t.cycles
+  if (t.cycles !== lastCycles) {
+    const wrapped = t.cycles > lastCycles
+    lastCycles = t.cycles
+    if (wrapped) {
+      if (!timerEndFired) fireTimerEndCues(state)
+      timerEndFired = false
+      lastTickSec = -1
+    }
+  }
+
   if (state.timerMode !== 'countdown') return
-  const rem = remainingMs(state.timer)
+  const rem = remainingMs(t)
   if (rem > 0) timerEndFired = false
   if (rem > TIMER_TICK_FROM_SEC * 1000 + 500) lastTickSec = -1
-  if (!state.timer.running) return
+  if (!t.running) return
 
   const sec = Math.ceil(rem / 1000)
   if (rem > 0 && sec <= TIMER_TICK_FROM_SEC && sec !== lastTickSec) {
     lastTickSec = sec
-    if (isOperator && state.timerSoundEnabled) playTick()
+    if (isOperator && state.timerTickEnabled) playTick()
   }
   if (rem <= 0 && !timerEndFired) {
     timerEndFired = true
-    if (isOperator && state.timerSoundEnabled) playGong()
-    if (role === 'speaker') flashTimerEnd()
+    fireTimerEndCues(state)
   }
 }
 
@@ -856,18 +878,23 @@ function applyState(state: AppState): void {
   timerToggle.textContent = state.timer.running ? '⏸' : '▶'
   blackoutToggle.style.background = state.blackout ? 'var(--danger)' : ''
 
-  if (durationInput && document.activeElement !== durationInput) {
-    const minutes = Math.round(state.timer.durationMs / 60000)
-    durationInput.value = String(minutes)
+  const editingDuration =
+    document.activeElement === durationInput || document.activeElement === durationSecInput
+  if (durationInput && durationSecInput && !editingDuration) {
+    durationInput.value = String(Math.floor(state.timer.durationMs / 60000))
+    durationSecInput.value = String(Math.floor((state.timer.durationMs % 60000) / 1000))
   }
   if (modeSelect && modeSelect.value !== state.timerMode) {
     modeSelect.value = state.timerMode
   }
   if (role === 'operator') {
-    const soundToggle = document.getElementById('timer-sound-toggle') as HTMLInputElement | null
-    if (soundToggle && soundToggle.checked !== state.timerSoundEnabled) {
-      soundToggle.checked = state.timerSoundEnabled
+    const reflectToggle = (id: string, value: boolean): void => {
+      const el = document.getElementById(id) as HTMLInputElement | null
+      if (el && el.checked !== value) el.checked = value
     }
+    reflectToggle('timer-tick-toggle', state.timerTickEnabled)
+    reflectToggle('timer-gong-toggle', state.timerGongEnabled)
+    reflectToggle('timer-loop-toggle', state.timerLoop)
   }
   document.body.dataset.timerPosition = state.timerPosition
   document.documentElement.style.setProperty(
@@ -1246,15 +1273,18 @@ function setupOperatorControls(): void {
   $('audio-setup').addEventListener('click', () => { openAudioModal().catch(() => undefined) })
   $('audio-close').addEventListener('click', () => $('audio-modal').classList.add('hidden'))
 
-  // Duration input — debounced
+  // Duration inputs (мин + сек) — debounced, коммитим сумму обоих полей
   let durDebounce: number | null = null
-  durationInput!.addEventListener('input', () => {
+  const scheduleDurationCommit = (): void => {
     if (durDebounce) window.clearTimeout(durDebounce)
     durDebounce = window.setTimeout(() => {
       const minutes = Math.max(0, Math.floor(Number(durationInput!.value) || 0))
-      window.api.timer.setDuration(minutes * 60_000)
+      const seconds = Math.max(0, Math.min(59, Math.floor(Number(durationSecInput!.value) || 0)))
+      window.api.timer.setDuration(minutes * 60_000 + seconds * 1000)
     }, 400)
-  })
+  }
+  durationInput!.addEventListener('input', scheduleDurationCommit)
+  durationSecInput!.addEventListener('input', scheduleDurationCommit)
 
   // Presets
   document.querySelectorAll<HTMLButtonElement>('button.preset').forEach((btn) => {
@@ -1277,12 +1307,21 @@ function setupOperatorControls(): void {
     window.api.timer.setMode(modeSelect!.value as TimerMode)
   })
 
-  // Timer sound cues (tick + gong)
-  const timerSoundToggle = $<HTMLInputElement>('timer-sound-toggle')
-  timerSoundToggle.addEventListener('change', () => {
-    window.api.timer.setSound(timerSoundToggle.checked)
-    // Разбудить AudioContext жестом включения — к моменту тика он уже готов.
-    if (timerSoundToggle.checked) audio()
+  // Timer sound cues (tick / gong отдельно) + цикличный режим
+  const tickToggle = $<HTMLInputElement>('timer-tick-toggle')
+  tickToggle.addEventListener('change', () => {
+    window.api.timer.setTickSound(tickToggle.checked)
+    // Разбудить AudioContext жестом включения — к моменту сигнала он уже готов.
+    if (tickToggle.checked) audio()
+  })
+  const gongToggle = $<HTMLInputElement>('timer-gong-toggle')
+  gongToggle.addEventListener('change', () => {
+    window.api.timer.setGongSound(gongToggle.checked)
+    if (gongToggle.checked) audio()
+  })
+  const loopToggle = $<HTMLInputElement>('timer-loop-toggle')
+  loopToggle.addEventListener('change', () => {
+    window.api.timer.setLoop(loopToggle.checked)
   })
 
   // Timer scale (speaker overlay size)

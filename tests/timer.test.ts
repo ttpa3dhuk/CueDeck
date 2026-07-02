@@ -5,7 +5,7 @@ import type { TimerState } from '../src/shared/types'
 const T0 = 1_000_000
 
 function timer(partial: Partial<TimerState> = {}): TimerState {
-  return { durationMs: 10 * 60_000, startedAt: null, elapsedMs: 0, running: false, ...partial }
+  return { durationMs: 10 * 60_000, startedAt: null, elapsedMs: 0, running: false, cycles: 0, ...partial }
 }
 
 describe('elapsedMs', () => {

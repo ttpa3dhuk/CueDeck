@@ -19,7 +19,9 @@ import {
   getAutoAdvance,
   getAudienceWindowed,
   getAudioOutputId,
-  getTimerSoundEnabled,
+  getTimerTickEnabled,
+  getTimerGongEnabled,
+  getTimerLoop,
 } from './display-mapping.js'
 import { store } from './state.js'
 
@@ -233,7 +235,9 @@ app.whenReady().then(async () => {
     autoAdvance: getAutoAdvance(),
     audienceWindowed: getAudienceWindowed(),
     audioOutputId: getAudioOutputId(),
-    timerSoundEnabled: getTimerSoundEnabled(),
+    timerTickEnabled: getTimerTickEnabled(),
+    timerGongEnabled: getTimerGongEnabled(),
+    timerLoop: getTimerLoop(),
   })
 
   bootLayout()

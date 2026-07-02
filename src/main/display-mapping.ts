@@ -25,7 +25,9 @@ interface PersistedShape {
   projectPath: string | null
   audienceWindowed: boolean
   audioOutputId: string | null
-  timerSoundEnabled: boolean
+  timerTickEnabled: boolean
+  timerGongEnabled: boolean
+  timerLoop: boolean
 }
 
 const STORE_DEFAULTS: PersistedShape = {
@@ -45,7 +47,9 @@ const STORE_DEFAULTS: PersistedShape = {
   projectPath: null,
   audienceWindowed: false,
   audioOutputId: null,
-  timerSoundEnabled: false,
+  timerTickEnabled: false,
+  timerGongEnabled: false,
+  timerLoop: false,
 }
 
 let _store: Store<PersistedShape> | null = null
@@ -210,10 +214,26 @@ export function setAudioOutputId(id: string | null): void {
   store().set('audioOutputId', id)
 }
 
-export function getTimerSoundEnabled(): boolean {
-  return Boolean(store().get('timerSoundEnabled'))
+export function getTimerTickEnabled(): boolean {
+  return Boolean(store().get('timerTickEnabled'))
 }
 
-export function setTimerSoundEnabled(value: boolean): void {
-  store().set('timerSoundEnabled', value)
+export function setTimerTickEnabled(value: boolean): void {
+  store().set('timerTickEnabled', value)
+}
+
+export function getTimerGongEnabled(): boolean {
+  return Boolean(store().get('timerGongEnabled'))
+}
+
+export function setTimerGongEnabled(value: boolean): void {
+  store().set('timerGongEnabled', value)
+}
+
+export function getTimerLoop(): boolean {
+  return Boolean(store().get('timerLoop'))
+}
+
+export function setTimerLoop(value: boolean): void {
+  store().set('timerLoop', value)
 }
