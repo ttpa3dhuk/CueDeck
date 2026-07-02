@@ -37,6 +37,7 @@ import {
   setAudienceWindowed,
   setAudioOutputId,
 } from './display-mapping.js'
+import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
 import {
   loadProjectFile,
@@ -223,14 +224,6 @@ async function loadPreview(
 
 function persistPlaylist(): void {
   setPlaylist(store.get().playlist)
-}
-
-function countPdfPages(buf: Buffer): number {
-  // Lightweight scan: count "/Type /Page" objects, excluding /Pages.
-  // This is good enough for the page counter; pdf.js in renderer authoritatively renders.
-  const text = buf.toString('latin1')
-  const matches = text.match(/\/Type\s*\/Page(?!s)/g)
-  return matches ? matches.length : 0
 }
 
 export function registerIpcHandlers(): void {
