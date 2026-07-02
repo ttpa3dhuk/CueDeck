@@ -436,7 +436,7 @@ async function activateEntry(entry: PlaylistEntry, live: boolean): Promise<void>
     const st = getState()
     if (st.fileKind === 'video' && st.video.playing && st.currentPlaylistId !== entry.id) {
       const ok = window.confirm(
-        `Сейчас на экране идёт видео. Прервать его и выдать в эфир «${entry.fileName}»?`,
+        `Сейчас на экране идёт видео. Прервать его и выдать в эфир «${entry.displayName || entry.fileName}»?`,
       )
       if (!ok) return
     }
@@ -494,6 +494,10 @@ function startRename(li: HTMLLIElement, entry: PlaylistEntry): void {
 }
 
 function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
+  // Узел живёт дольше объекта entry (стейт иммутабельный) — обработчики берут
+  // свежую версию записи из стейта, иначе rename/confirm видят устаревшие поля.
+  const fresh = (): PlaylistEntry =>
+    getState().playlist.find((x) => x.id === entry.id) ?? entry
   const li = document.createElement('li')
   li.className = 'playlist-item'
   li.draggable = true
@@ -528,7 +532,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   renameBtn.title = 'Переименовать в списке (имя файла не меняется)'
   renameBtn.addEventListener('click', (e) => {
     e.stopPropagation()
-    startRename(li, entry)
+    startRename(li, fresh())
   })
 
   const removeBtn = document.createElement('button')
@@ -589,7 +593,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
     if (clickTimer) window.clearTimeout(clickTimer)
     clickTimer = window.setTimeout(() => {
       clickTimer = null
-      activateEntry(entry, false)
+      activateEntry(fresh(), false)
     }, 220)
   })
   li.addEventListener('dblclick', () => {
@@ -597,7 +601,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
       window.clearTimeout(clickTimer)
       clickTimer = null
     }
-    activateEntry(entry, true)
+    activateEntry(fresh(), true)
   })
 
   li.addEventListener('dragstart', (e) => {
@@ -905,6 +909,12 @@ function loadHotkeys(): void {
 }
 function saveHotkey(actionId: string, code: string): void {
   const o = readHotkeyOverrides()
+  // Клавиша занята другим действием → отдаём ему нашу прежнюю (swap),
+  // чтобы никогда не было двух действий на одной клавише.
+  const prevCode = hotkeyMap[actionId]
+  for (const a of HOTKEY_ACTIONS) {
+    if (a.id !== actionId && hotkeyMap[a.id] === code) o[a.id] = prevCode
+  }
   o[actionId] = code
   try { localStorage.setItem('cuedeck.hotkeys', JSON.stringify(o)) } catch { /* ignore */ }
   loadHotkeys()
@@ -982,34 +992,24 @@ function setupKeyboard(): void {
         return
       }
     }
-    // e.code — физическая позиция клавиши, не зависит от языка раскладки
-    // PageDown/PageUp/Period — их шлют презентационные кликеры (Logitech R400 и т.п.)
+    // e.code — физическая позиция клавиши, не зависит от языка раскладки.
+    // Одиночные клавиши обрабатывает карта хоткеев выше — в switch только
+    // непереназначаемое: кликерные клавиши (PageDown/PageUp/Period — их шлют
+    // Logitech R400 и т.п.), Enter (легаси-Take) и комбинации с модификаторами.
+    // Дублировать коды дефолтов карты здесь нельзя: иначе переназначенная
+    // клавиша продолжит срабатывать по-старому.
     const isVideo = getState().fileKind === 'video'
     switch (e.code) {
-      case 'Space':
-        e.preventDefault()
-        if (isVideo) window.api.video.toggle()
-        else window.api.nav.next()
-        break
-      case 'ArrowRight':
       case 'PageDown':
         e.preventDefault()
         if (isVideo) window.api.video.seekBy(5)
         else window.api.nav.next()
         break
-      case 'ArrowLeft':
       case 'PageUp':
         e.preventDefault()
         if (isVideo) window.api.video.seekBy(-5)
         else window.api.nav.prev()
         break
-      case 'KeyM':
-        if (isVideo) {
-          e.preventDefault()
-          window.api.video.toggleMuted()
-        }
-        break
-      case 'KeyB':
       case 'Period':
         e.preventDefault()
         window.api.blackout.toggle()
@@ -1019,18 +1019,11 @@ function setupKeyboard(): void {
         e.preventDefault()
         window.api.preview.take()
         break
-      case 'BracketLeft':
-        e.preventDefault()
-        window.api.preview.prev()
-        break
-      case 'BracketRight':
-        e.preventDefault()
-        window.api.preview.next()
-        break
       case 'KeyT':
-        e.preventDefault()
-        if (e.shiftKey) window.api.timer.reset()
-        else toggleTimer()
+        if (e.shiftKey) {
+          e.preventDefault()
+          window.api.timer.reset()
+        }
         break
       case 'Digit1':
       case 'Digit3':

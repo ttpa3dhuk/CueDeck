@@ -1,6 +1,6 @@
 {
   "name": "cue-deck",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Presentation operator tool for live events — speaker playlist, per-speaker timers, confidence monitor, blackout",
   "author": "Azat Khusaenov",
   "main": "out/main/index.js",

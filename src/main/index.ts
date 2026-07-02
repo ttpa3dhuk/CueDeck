@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
@@ -195,11 +195,6 @@ function bootLayout(): void {
   saveMapping(layout, displayMap)
 }
 
-function registerShortcuts(): void {
-  // Most shortcuts handled by renderer via keydown; we only register a few global ones.
-  globalShortcut.register('CommandOrControl+,', () => sendToOperator('menu:open-display-setup'))
-}
-
 function watchDisplayChanges(): void {
   const onChange = () => sendToOperator('display:topology-changed')
   screen.on('display-added', onChange)
@@ -240,7 +235,6 @@ app.whenReady().then(async () => {
   })
 
   bootLayout()
-  registerShortcuts()
   watchDisplayChanges()
 
   // Check for updates a few seconds after boot, then daily
@@ -266,8 +260,4 @@ app.on('before-quit', async (e) => {
   e.preventDefault()
   await flushPendingWrites()
   app.exit(0)
-})
-
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll()
 })

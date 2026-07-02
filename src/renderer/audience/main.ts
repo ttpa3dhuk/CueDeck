@@ -123,7 +123,19 @@ async function applyState(state: AppState): Promise<void> {
   await refreshKeyVisual(state)
   applyOverlay(state)
 
-  if (state.pdfPath && state.pdfPath !== lastFilePath) {
+  if (!state.pdfPath) {
+    // Программный деск очищен (напр. «Новый проект») — гасим то, что осталось на экране.
+    if (lastFilePath !== null) {
+      lastFilePath = null
+      docLoaded = false
+      lastRenderedSlide = -1
+      disposeSlideImage()
+      unloadVideo()
+      slideImage.classList.add('hidden')
+      slideImage.removeAttribute('src')
+      canvas.classList.add('hidden')
+    }
+  } else if (state.pdfPath !== lastFilePath) {
     lastFilePath = state.pdfPath
     await loadFile()
   } else if (state.fileKind === 'video') {

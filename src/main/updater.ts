@@ -1,7 +1,7 @@
 import { app, net } from 'electron'
 
 const RELEASES_API =
-  'https://api.github.com/repos/ttpa3dhuk/PDF-Presenter/releases/latest'
+  'https://api.github.com/repos/ttpa3dhuk/CueDeck/releases/latest'
 
 export interface UpdateInfo {
   newerVersion: string

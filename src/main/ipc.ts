@@ -793,7 +793,11 @@ export function registerIpcHandlers(): void {
       return { ok: true, hadSession: savedPlaylist.length > 0 }
     }
 
-    const result = await openFile(lastPath, { playlistId: savedPlaylistId })
+    const entry = savedPlaylistId ? savedPlaylist.find((e) => e.id === savedPlaylistId) : undefined
+    const result = await openFile(lastPath, {
+      playlistId: savedPlaylistId,
+      durationMs: entry?.durationMs,
+    })
     return { ...result, hadSession: true }
   })
 
