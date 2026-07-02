@@ -58,6 +58,7 @@ const api: PresenterApi = {
     setMode: (mode) => ipcRenderer.invoke('timer:set-mode', mode),
     setPosition: (pos) => ipcRenderer.invoke('timer:set-position', pos),
     setScale: (scale) => ipcRenderer.invoke('timer:set-scale', scale),
+    setSound: (enabled) => ipcRenderer.invoke('timer:set-sound', enabled),
   },
   blackout: {
     toggle: () => ipcRenderer.invoke('blackout:toggle'),

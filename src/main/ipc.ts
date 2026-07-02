@@ -36,6 +36,7 @@ import {
   setAutoAdvance,
   setAudienceWindowed,
   setAudioOutputId,
+  setTimerSoundEnabled,
 } from './display-mapping.js'
 import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
@@ -511,6 +512,12 @@ export function registerIpcHandlers(): void {
     const clamped = Math.max(0.5, Math.min(2.5, Math.round(scale * 100) / 100))
     store.patch({ timerScale: clamped })
     setTimerScale(clamped)
+  })
+
+  ipcMain.handle('timer:set-sound', (_e, enabled: boolean) => {
+    const v = Boolean(enabled)
+    store.patch({ timerSoundEnabled: v })
+    setTimerSoundEnabled(v)
   })
 
   ipcMain.handle('notes:set-font-size', (_e, px: number) => {

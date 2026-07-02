@@ -1,6 +1,6 @@
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
-import { startTick, timerView, type TimerView } from '../shared/timer'
+import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
 import { applySinkId, formatClock, shouldMute, syncVideoElement, videoPosition, videoSrc } from '../shared/video'
 import type {
   AppState,
@@ -425,6 +425,83 @@ async function handlePreviewChange(state: AppState): Promise<void> {
   }
 }
 
+// ── Звук таймера: тик в последние 10 секунд + гонг на нуле ─────────────────
+// Звуки синтезируются Web Audio (нет файлов-ассетов, CSP не расширяется).
+// Играют только у оператора и только при включённой галке «Тик + гонг».
+// Вспышка на суфлёре в конце отсчёта — всегда (визуальный сигнал безопасен).
+const TIMER_TICK_FROM_SEC = 10
+
+let audioCtx: AudioContext | null = null
+function audio(): AudioContext {
+  if (!audioCtx) audioCtx = new AudioContext()
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => undefined)
+  return audioCtx
+}
+
+function playTick(): void {
+  const c = audio()
+  const now = c.currentTime
+  const osc = c.createOscillator()
+  const gain = c.createGain()
+  osc.type = 'square'
+  osc.frequency.value = 1100
+  gain.gain.setValueAtTime(0.1, now)
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06)
+  osc.connect(gain).connect(c.destination)
+  osc.start(now)
+  osc.stop(now + 0.08)
+}
+
+function playGong(): void {
+  const c = audio()
+  const now = c.currentTime
+  // Три затухающих партиала дают гонгоподобный удар без сэмпла.
+  const partials: Array<[number, number]> = [[220, 0.3], [440, 0.35], [660, 0.15]]
+  for (const [freq, vol] of partials) {
+    const osc = c.createOscillator()
+    const gain = c.createGain()
+    osc.type = 'sine'
+    osc.frequency.value = freq
+    gain.gain.setValueAtTime(vol, now)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.6)
+    osc.connect(gain).connect(c.destination)
+    osc.start(now)
+    osc.stop(now + 1.7)
+  }
+}
+
+const timerFlash = $('timer-flash')
+function flashTimerEnd(): void {
+  timerFlash.classList.remove('active')
+  // reflow — перезапуск CSS-анимации, если вспышка уже играла
+  void timerFlash.offsetWidth
+  timerFlash.classList.add('active')
+}
+timerFlash.addEventListener('animationend', () => timerFlash.classList.remove('active'))
+
+let lastTickSec = -1
+let timerEndFired = false
+
+// Вызывается из общего 250мс-тика: границы секунд ловим сравнением ceil(remaining).
+function updateTimerCues(state: AppState): void {
+  if (state.timerMode !== 'countdown') return
+  const rem = remainingMs(state.timer)
+  if (rem > 0) timerEndFired = false
+  if (rem > TIMER_TICK_FROM_SEC * 1000 + 500) lastTickSec = -1
+  if (!state.timer.running) return
+
+  const sec = Math.ceil(rem / 1000)
+  if (rem > 0 && sec <= TIMER_TICK_FROM_SEC && sec !== lastTickSec) {
+    lastTickSec = sec
+    if (isOperator && state.timerSoundEnabled) playTick()
+  }
+  if (rem <= 0 && !timerEndFired) {
+    timerEndFired = true
+    if (isOperator && state.timerSoundEnabled) playGong()
+    if (role === 'speaker') flashTimerEnd()
+  }
+}
+
 // «Далее: <имя>» (1.5) — следующая запись плейлиста после активной в эфире.
 // Виден и оператору, и суфлёру; прячется, когда следующего нет.
 const nextSpeakerEl = $('next-speaker')
@@ -785,6 +862,12 @@ function applyState(state: AppState): void {
   }
   if (modeSelect && modeSelect.value !== state.timerMode) {
     modeSelect.value = state.timerMode
+  }
+  if (role === 'operator') {
+    const soundToggle = document.getElementById('timer-sound-toggle') as HTMLInputElement | null
+    if (soundToggle && soundToggle.checked !== state.timerSoundEnabled) {
+      soundToggle.checked = state.timerSoundEnabled
+    }
   }
   document.body.dataset.timerPosition = state.timerPosition
   document.documentElement.style.setProperty(
@@ -1192,6 +1275,14 @@ function setupOperatorControls(): void {
   // Mode selector (countdown / stopwatch / clock)
   modeSelect!.addEventListener('change', () => {
     window.api.timer.setMode(modeSelect!.value as TimerMode)
+  })
+
+  // Timer sound cues (tick + gong)
+  const timerSoundToggle = $<HTMLInputElement>('timer-sound-toggle')
+  timerSoundToggle.addEventListener('change', () => {
+    window.api.timer.setSound(timerSoundToggle.checked)
+    // Разбудить AudioContext жестом включения — к моменту тика он уже готов.
+    if (timerSoundToggle.checked) audio()
   })
 
   // Timer scale (speaker overlay size)
@@ -1690,6 +1781,7 @@ async function bootstrap(): Promise<void> {
   startTick(250, () => {
     const s = getState()
     applyTimerView(timerView(s.timer, s.timerMode))
+    updateTimerCues(s)
     if (s.fileKind === 'video') {
       if (!currentVideo.classList.contains('hidden')) {
         currentVideo.muted = shouldMute(s, role)

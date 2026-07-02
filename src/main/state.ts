@@ -62,6 +62,7 @@ export function initialState(): AppState {
     audienceWindowed: false,
     audioOutputId: null,
     speakerMessage: null,
+    timerSoundEnabled: false,
   }
 }
 

@@ -1365,3 +1365,22 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   max-width: 320px;
 }
 body[data-role="speaker"] .next-speaker { font-size: 18px; }
+
+/* Вспышка на суфлёре в конце отсчёта (3 импульса ~1.2с) */
+.timer-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background: #fff;
+  opacity: 0;
+  display: none;
+}
+.timer-flash.active {
+  display: block;
+  animation: timer-end-flash 1.2s ease-out;
+}
+@keyframes timer-end-flash {
+  0%, 34%, 68% { opacity: 0.9; }
+  17%, 51%, 100% { opacity: 0; }
+}

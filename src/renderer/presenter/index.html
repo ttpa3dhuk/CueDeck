@@ -73,6 +73,13 @@
               <option value="clock">Часы</option>
             </select>
           </div>
+          <div class="group">
+            <label class="group-label">Звук</label>
+            <label class="toggle" title="Тиканье последние 10 секунд и гонг в конце отсчёта. Звук — у оператора; на суфлёре в конце вспышка (всегда).">
+              <input id="timer-sound-toggle" type="checkbox" />
+              <span>🔔 Тик + гонг</span>
+            </label>
+          </div>
         </div>
       </header>
 
@@ -222,6 +229,7 @@
       </main>
 
       <div id="speaker-message" class="speaker-message speaker-only hidden"></div>
+      <div id="timer-flash" class="timer-flash speaker-only"></div>
 
       <footer class="bottombar op-only">
         <div class="bottombar-left">
