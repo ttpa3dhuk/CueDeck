@@ -202,8 +202,24 @@
             <div id="notes-readonly" class="speaker-only notes-readonly"></div>
           </div>
         </aside>
-        <section id="op-bottombar" class="op-bottombar op-only"></section>
+        <section id="op-bottombar" class="op-bottombar op-only">
+          <!-- Reparented by buildOperatorBottomBar() into position: timer | notes | msg | TAKE -->
+          <div id="speaker-msg-box" class="speaker-msg">
+            <div class="label">Сообщение спикеру</div>
+            <div class="sm-presets">
+              <button class="sm-preset" data-msg="Заканчивай">Заканчивай</button>
+              <button class="sm-preset" data-msg="Ближе к микрофону">Ближе к микрофону</button>
+              <button class="sm-preset" data-msg="Финальный слайд">Финальный слайд</button>
+            </div>
+            <div class="sm-send-row">
+              <input id="sm-input" type="text" placeholder="Свой текст… (Enter)" />
+              <button id="sm-clear" class="sm-clear" title="Убрать сообщение с суфлёра" disabled>Снять</button>
+            </div>
+          </div>
+        </section>
       </main>
+
+      <div id="speaker-message" class="speaker-message speaker-only hidden"></div>
 
       <footer class="bottombar op-only">
         <div class="bottombar-left">

@@ -125,6 +125,11 @@ const previewCounter = isOperator ? $('preview-counter') : null
 const takeBtn = isOperator ? $<HTMLButtonElement>('take-btn') : null
 const videoTakeModeSelect = isOperator ? $<HTMLSelectElement>('video-take-mode') : null
 
+// ── Speaker flash message (1.1) ────────────────────────────────────────────
+const speakerMessageOverlay = $('speaker-message')
+const smInput = isOperator ? $<HTMLInputElement>('sm-input') : null
+const smClear = isOperator ? $<HTMLButtonElement>('sm-clear') : null
+
 const previewLoader = isOperator ? new PdfLoader() : null
 let previewDocLoaded = false
 let previewLastRenderedSlide = -1
@@ -417,6 +422,25 @@ async function handlePreviewChange(state: AppState): Promise<void> {
     syncVideoElement(previewVideo, p.video)
   } else if (p.currentSlide !== previewLastRenderedSlide) {
     await renderPreview()
+  }
+}
+
+// Speaker flash message: overlay on the speaker monitor (blinks via CSS until
+// cleared) + operator-side controls state (active preset highlight, «Снять»).
+function updateSpeakerMessage(state: AppState): void {
+  const msg = state.speakerMessage
+  speakerMessageOverlay.textContent = msg ?? ''
+  speakerMessageOverlay.classList.toggle('hidden', !msg)
+  if (!isOperator) return
+  let presetActive = false
+  document.querySelectorAll<HTMLButtonElement>('button.sm-preset').forEach((btn) => {
+    const active = msg !== null && btn.dataset.msg === msg
+    btn.classList.toggle('active', active)
+    if (active) presetActive = true
+  })
+  if (smClear) smClear.disabled = !msg
+  if (smInput && document.activeElement !== smInput) {
+    smInput.value = msg && !presetActive ? msg : ''
   }
 }
 
@@ -781,6 +805,7 @@ function applyState(state: AppState): void {
   }
 
   renderPlaylist(state)
+  updateSpeakerMessage(state)
   refreshKeyVisualPreview(state).catch(() => undefined)
 }
 
@@ -1211,6 +1236,29 @@ function setupOperatorControls(): void {
     previewVideoError?.classList.remove('hidden')
   })
 
+  // Speaker flash message: preset click = show (repeat click = снять),
+  // free text via Enter, «Снять» clears.
+  document.querySelectorAll<HTMLButtonElement>('button.sm-preset').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const msg = btn.dataset.msg ?? ''
+      const active = getState().speakerMessage === msg
+      window.api.speakerMessage.set(active ? null : msg)
+    })
+  })
+  smInput!.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if (e.key === 'Enter') {
+      window.api.speakerMessage.set(smInput!.value)
+      smInput!.blur()
+    } else if (e.key === 'Escape') {
+      smInput!.blur()
+    }
+  })
+  smClear!.addEventListener('click', () => {
+    window.api.speakerMessage.set(null)
+    if (smInput) smInput.value = ''
+  })
+
   // Key visual
   kvSetBtn!.addEventListener('click', () => {
     window.api.keyvisual.set()
@@ -1464,8 +1512,10 @@ function buildOperatorBottomBar(): void {
   }
 
   takeBtn.classList.add('take-big')
-  // Order: timer (left), notes (right), TAKE (far right).
-  bottom.append(timerBox, notes, takeBtn)
+  // Order: timer (left), notes, speaker message, TAKE (far right).
+  // The message box is already a child of #op-bottombar (declared in HTML);
+  // append() moves it into the right slot.
+  bottom.append(timerBox, notes, $('speaker-msg-box'), takeBtn)
 }
 
 // Draggable splitter for the bottom bar height (persisted per-window in localStorage).

@@ -88,6 +88,10 @@ export interface PresenterApi {
   blackout: {
     toggle(): Promise<void>
   }
+  speakerMessage: {
+    /** Show a blinking message on the speaker monitor; null/'' clears it. */
+    set(text: string | null): Promise<void>
+  }
   video: {
     play(): Promise<void>
     pause(): Promise<void>

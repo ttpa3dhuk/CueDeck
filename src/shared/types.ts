@@ -105,6 +105,8 @@ export interface AppState {
   audienceWindowed: boolean
   /** Output device id for video sound (setSinkId). null = system default. */
   audioOutputId: string | null
+  /** Flash message on the speaker monitor; stays (blinking) until cleared. null = none. */
+  speakerMessage: string | null
 }
 
 export interface DisplayInfo {

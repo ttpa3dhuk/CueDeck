@@ -523,6 +523,13 @@ export function registerIpcHandlers(): void {
     store.patch({ blackout: !store.get().blackout })
   })
 
+  // Flash message on the speaker monitor (confidence monitor classic:
+  // «Заканчивай», «Ближе к микрофону»…). Blinks until cleared with null.
+  ipcMain.handle('speaker-message:set', (_e, text: string | null) => {
+    const msg = typeof text === 'string' ? text.trim() : ''
+    store.patch({ speakerMessage: msg ? msg : null })
+  })
+
   // ── Video playback clock ─────────────────────────────────────────────────
   // All windows derive currentTime from this logical clock; only the operator
   // issues mutations. See StateStore.videoPositionSec / VideoState.
@@ -809,6 +816,7 @@ export function registerIpcHandlers(): void {
       notes: {},
       blackout: false,
       preview: initialDeckState(),
+      speakerMessage: null,
     })
   })
 

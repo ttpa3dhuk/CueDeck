@@ -1268,3 +1268,70 @@ body[data-role="speaker"][data-timer-position="bottom-left"] .timer { bottom: 24
 body[data-role="speaker"][data-timer-position="bottom-right"] .timer { bottom: 24px; right: 24px; }
 
 body[data-role="operator"] .speaker-only { display: none !important; }
+
+/* ── Сообщение спикеру (1.1): пульт оператора в нижнем баре ── */
+.op-bottombar .speaker-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 10px 12px;
+  flex: 0 1 250px;
+  min-width: 180px;
+  overflow: auto;
+}
+.speaker-msg .sm-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.speaker-msg .sm-preset {
+  text-align: left;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.speaker-msg .sm-preset.active {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.speaker-msg .sm-send-row {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+.speaker-msg .sm-send-row input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+.speaker-msg .sm-clear:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+/* Оверлей на суфлёре: крупно, мигает фоном, пока оператор не снимет.
+   Мигание фоном (не opacity) — текст остаётся читаемым в любой фазе. */
+.speaker-message {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 90vw;
+  z-index: 50;
+  padding: 20px 44px;
+  border-radius: 16px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+  animation: sm-blink 1s step-end infinite;
+}
+@keyframes sm-blink {
+  50% { background: #7a2621; }
+}

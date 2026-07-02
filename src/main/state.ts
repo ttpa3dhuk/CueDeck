@@ -61,6 +61,7 @@ export function initialState(): AppState {
     projectPath: null,
     audienceWindowed: false,
     audioOutputId: null,
+    speakerMessage: null,
   }
 }
 

@@ -62,6 +62,9 @@ const api: PresenterApi = {
   blackout: {
     toggle: () => ipcRenderer.invoke('blackout:toggle'),
   },
+  speakerMessage: {
+    set: (text) => ipcRenderer.invoke('speaker-message:set', text),
+  },
   video: {
     play: () => ipcRenderer.invoke('video:play'),
     pause: () => ipcRenderer.invoke('video:pause'),
