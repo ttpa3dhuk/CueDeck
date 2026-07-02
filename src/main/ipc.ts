@@ -350,9 +350,10 @@ export function registerIpcHandlers(): void {
     store.patch({ preview: initialDeckState() })
   })
 
-  // Promote the staged preview deck onto the audience feed. Per Azat's choice the
-  // speaker timer is NOT touched here — operator drives it manually. Video behaviour
-  // on take follows AppState.videoTakeMode (play/pause × from-start/at-preview-point).
+  // Promote the staged preview deck onto the audience feed. Taking a playlist
+  // entry applies its per-speaker timer (duration + reset, NOT started — the
+  // operator starts it manually); taking a loose file leaves the timer alone.
+  // Video behaviour on take follows AppState.videoTakeMode.
   ipcMain.handle('preview:take', () => {
     const state = store.get()
     const p = state.preview
@@ -404,6 +405,17 @@ export function registerIpcHandlers(): void {
     })
     setLastPdfPath(p.path)
     setCurrentPlaylistId(p.playlistId)
+
+    const entry = p.playlistId ? state.playlist.find((e) => e.id === p.playlistId) : undefined
+    if (entry) {
+      store.patchTimer({
+        durationMs: entry.durationMs,
+        startedAt: null,
+        elapsedMs: 0,
+        running: false,
+      })
+      setLastDurationMs(entry.durationMs)
+    }
   })
 
   ipcMain.handle('preview:set-video-take-mode', (_e, mode: VideoTakeMode) => {

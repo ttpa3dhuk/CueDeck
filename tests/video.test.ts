@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { audioRole, formatClock, videoPosition, videoSrc } from '../src/renderer/shared/video'
-import type { VideoState } from '../src/shared/types'
+import { audioRole, formatClock, shouldMute, videoPosition, videoSrc } from '../src/renderer/shared/video'
+import type { AppState, Layout, VideoState } from '../src/shared/types'
 
 function video(partial: Partial<VideoState> = {}): VideoState {
   return { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: false, ...partial }
@@ -50,6 +50,31 @@ describe('audioRole (кто озвучивает)', () => {
   it('с залом → зал', () => {
     expect(audioRole('presenter-audience')).toBe('audience')
     expect(audioRole('operator-speaker-audience')).toBe('audience')
+  })
+})
+
+describe('shouldMute (кто молчит)', () => {
+  function state(layout: Layout, partial: Partial<AppState> = {}): AppState {
+    return { layout, blackout: false, video: video(), ...partial } as AppState
+  }
+
+  it('звучит только audio-роль: зал при наличии, оператор в solo', () => {
+    expect(shouldMute(state('presenter-audience'), 'audience')).toBe(false)
+    expect(shouldMute(state('presenter-audience'), 'operator')).toBe(true)
+    expect(shouldMute(state('solo'), 'operator')).toBe(false)
+  })
+
+  it('суфлёр всегда молчит', () => {
+    expect(shouldMute(state('operator-speaker-audience'), 'speaker')).toBe(true)
+  })
+
+  it('глобальный мьют глушит audio-роль', () => {
+    expect(shouldMute(state('solo', { video: video({ muted: true }) }), 'operator')).toBe(true)
+  })
+
+  it('blackout глушит звук зала (полная заглушка)', () => {
+    expect(shouldMute(state('presenter-audience', { blackout: true }), 'audience')).toBe(true)
+    expect(shouldMute(state('solo', { blackout: true }), 'operator')).toBe(true)
   })
 })
 

@@ -31,9 +31,14 @@ export function audioRole(layout: Layout): Role {
   return layout === 'solo' ? 'operator' : 'audience'
 }
 
-/** A window outputs sound only if it's the audio role and the mix isn't muted. */
+/**
+ * A window outputs sound only if it's the audio role and the mix isn't muted.
+ * Blackout is a full kill: it silences the program feed too, so a blacked-out
+ * hall never keeps blasting the video's audio (playback itself keeps running —
+ * un-blackout brings the sound back at the live position).
+ */
 export function shouldMute(state: AppState, role: Role): boolean {
-  return role !== audioRole(state.layout) || state.video.muted
+  return role !== audioRole(state.layout) || state.video.muted || state.blackout
 }
 
 const DEFAULT_DRIFT_SEC = 0.4
