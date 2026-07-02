@@ -38,6 +38,12 @@
             <span id="timer-display" class="timer font-system green">00:00</span>
             <button id="timer-toggle" class="op-only" title="Start/Pause (T)">▶</button>
             <button id="timer-reset" class="op-only" title="Reset (Shift+T)">⟲</button>
+            <div class="keyvisual-section op-only" title="Заставка для Blackout — что увидит зал вместо чёрного экрана">
+              <span class="kv-label">Заставка</span>
+              <div id="kv-preview" class="kv-preview kv-empty"></div>
+              <button id="kv-set">Выбрать…</button>
+              <button id="kv-clear" disabled>Убрать</button>
+            </div>
             <button id="blackout-toggle" class="op-only" title="Blackout (B)">⬛</button>
           </div>
         </div>
@@ -123,16 +129,6 @@
           <ol id="playlist-list" class="playlist-list"></ol>
           <div id="playlist-empty" class="playlist-empty">
             Список пуст. Жми «+ Добавить», чтобы загрузить PDF спикеров.
-          </div>
-          <div class="keyvisual-section">
-            <div class="kv-header">
-              <span class="label">Заставка (blackout)</span>
-            </div>
-            <div id="kv-preview" class="kv-preview kv-empty">Нет заставки — Blackout покажет чёрный экран</div>
-            <div class="kv-buttons">
-              <button id="kv-set">Выбрать…</button>
-              <button id="kv-clear">Убрать</button>
-            </div>
           </div>
         </aside>
         <section id="current-slide" class="current-slide">

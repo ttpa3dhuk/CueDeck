@@ -249,7 +249,7 @@ body[data-role="speaker"] .grid {
    Playlist spans both rows on the left. Right .sidebar is unused for operator. */
 body[data-role="operator"] .grid {
   grid-template-columns: 260px minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) var(--bottom-h, 190px);
+  grid-template-rows: minmax(0, 1fr) var(--bottom-h, 270px);
   grid-auto-rows: unset;
   grid-template-areas:
     "playlist preview program"
@@ -756,41 +756,35 @@ kbd {
 
 body[data-role="speaker"] .playlist { display: none !important; }
 
+/* Заставка (key visual) — компактный блок в верхнем тулбаре, рядом с Blackout.
+   Высоту тулбара (48px) не увеличивает: мини-превью 57×32. */
 .keyvisual-section {
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
-  margin-top: 4px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 6px;
 }
-.kv-header { display: flex; align-items: center; justify-content: space-between; }
+.kv-label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 .kv-preview {
-  width: 100%;
-  aspect-ratio: 16 / 9;
+  width: 57px;
+  height: 32px;
+  flex: none;
   background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: var(--muted);
-  font-size: 11px;
-  padding: 6px;
-  line-height: 1.3;
 }
-.kv-preview:not(.kv-empty) { background-color: #000; }
-.kv-preview:not(.kv-empty)::before { content: ""; }
-.kv-buttons {
-  display: flex;
-  gap: 6px;
+.kv-preview:not(.kv-empty) {
+  background-color: #000;
+  border-style: solid;
 }
-.kv-buttons button {
-  flex: 1;
+.keyvisual-section button {
   font-size: 12px;
   padding: 4px 8px;
 }

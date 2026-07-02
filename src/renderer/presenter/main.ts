@@ -66,9 +66,11 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
     kvBlobUrl = null
   }
 
+  // Мини-превью в тулбаре: состояние передаём картинкой/рамкой + title,
+  // текст в 57×32 не влезает.
   if (!path) {
     kvPreview.classList.add('kv-empty')
-    kvPreview.textContent = 'Нет заставки — Blackout покажет чёрный экран'
+    kvPreview.title = 'Нет заставки — Blackout покажет чёрный экран'
     kvPreview.style.backgroundImage = ''
     return
   }
@@ -76,14 +78,14 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
   const data = await window.api.keyvisual.read()
   if (!data) {
     kvPreview.classList.add('kv-empty')
-    kvPreview.textContent = 'Не удалось загрузить файл'
+    kvPreview.title = 'Не удалось загрузить файл заставки'
     kvPreview.style.backgroundImage = ''
     return
   }
   const blob = new Blob([data.bytes as BlobPart], { type: data.mime })
   kvBlobUrl = URL.createObjectURL(blob)
   kvPreview.classList.remove('kv-empty')
-  kvPreview.textContent = ''
+  kvPreview.title = `Заставка: ${baseName(path)}`
   kvPreview.style.backgroundImage = `url(${kvBlobUrl})`
 }
 const currentCanvas = $<HTMLCanvasElement>('current-canvas')
@@ -1728,11 +1730,14 @@ function setupBottomBarResize(): void {
   handle.className = 'op-bottombar-handle'
   bottom.appendChild(handle)
 
+  // Минимум 160px: ниже блок таймера (цифры + пресеты + звук/цикл + суфлёр)
+  // гарантированно не влезает и появляется внутренний скролл.
+  const MIN_BOTTOM_H = 160
   const setH = (px: number): void =>
     document.documentElement.style.setProperty('--bottom-h', `${px}px`)
   try {
     const saved = Number(localStorage.getItem('cuedeck.bottomH'))
-    if (saved >= 100) setH(saved)
+    if (saved >= MIN_BOTTOM_H) setH(saved)
   } catch { /* localStorage unavailable — ignore */ }
 
   let startY = 0
@@ -1740,7 +1745,7 @@ function setupBottomBarResize(): void {
   let dragging = false
   const onMove = (e: MouseEvent): void => {
     if (!dragging) return
-    const h = Math.max(100, Math.min(window.innerHeight * 0.6, startH + (startY - e.clientY)))
+    const h = Math.max(MIN_BOTTOM_H, Math.min(window.innerHeight * 0.6, startH + (startY - e.clientY)))
     setH(h)
   }
   const onUp = (): void => {
@@ -1750,7 +1755,7 @@ function setupBottomBarResize(): void {
     document.removeEventListener('mouseup', onUp)
     document.body.style.userSelect = ''
     const px = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bottom-h'), 10)
-    try { if (px >= 100) localStorage.setItem('cuedeck.bottomH', String(px)) } catch { /* ignore */ }
+    try { if (px >= MIN_BOTTOM_H) localStorage.setItem('cuedeck.bottomH', String(px)) } catch { /* ignore */ }
     // Pane heights changed → re-render both decks crisply.
     lastRenderedSlide = -1
     renderCurrent().catch(() => undefined)
