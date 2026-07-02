@@ -1114,10 +1114,29 @@ function toggleTimer(): void {
   else window.api.timer.start()
 }
 
+// Переход к слайду по номеру (1.4): Enter — перейти, Esc — сброс. Main клампит
+// номер к [1, totalSlides], так что мусор безопасен.
+function wireGotoInput(input: HTMLInputElement, goto: (slide: number) => void): void {
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if (e.key === 'Enter') {
+      const n = Math.floor(Number(input.value))
+      if (Number.isFinite(n) && n >= 1) goto(n)
+      input.value = ''
+      input.blur()
+    } else if (e.key === 'Escape') {
+      input.value = ''
+      input.blur()
+    }
+  })
+}
+
 function setupOperatorControls(): void {
   if (role !== 'operator') return
   $('nav-prev').addEventListener('click', () => window.api.nav.prev())
   $('nav-next').addEventListener('click', () => window.api.nav.next())
+  wireGotoInput($<HTMLInputElement>('goto-input'), (n) => window.api.nav.goto(n))
+  wireGotoInput($<HTMLInputElement>('preview-goto-input'), (n) => window.api.preview.goto(n))
   timerToggle.addEventListener('click', toggleTimer)
   timerReset.addEventListener('click', () => window.api.timer.reset())
   blackoutToggle.addEventListener('click', () => window.api.blackout.toggle())

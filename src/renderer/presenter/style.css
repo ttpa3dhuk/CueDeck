@@ -1341,3 +1341,16 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   outline: 2px dashed var(--accent);
   outline-offset: -2px;
 }
+
+/* Поле «перейти к слайду №» в навигации эфира и превью (1.4) */
+.goto-input {
+  width: 52px;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.goto-input::-webkit-outer-spin-button,
+.goto-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
