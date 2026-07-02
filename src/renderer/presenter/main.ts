@@ -425,6 +425,24 @@ async function handlePreviewChange(state: AppState): Promise<void> {
   }
 }
 
+// «Далее: <имя>» (1.5) — следующая запись плейлиста после активной в эфире.
+// Виден и оператору, и суфлёру; прячется, когда следующего нет.
+const nextSpeakerEl = $('next-speaker')
+
+function updateNextSpeaker(state: AppState): void {
+  const idx = state.currentPlaylistId
+    ? state.playlist.findIndex((e) => e.id === state.currentPlaylistId)
+    : -1
+  const next = idx >= 0 && idx < state.playlist.length - 1 ? state.playlist[idx + 1] : undefined
+  if (next) {
+    nextSpeakerEl.textContent = `Далее: ${next.speakerName || next.displayName || next.fileName}`
+    nextSpeakerEl.classList.remove('hidden')
+  } else {
+    nextSpeakerEl.textContent = ''
+    nextSpeakerEl.classList.add('hidden')
+  }
+}
+
 // Speaker flash message: overlay on the speaker monitor (blinks via CSS until
 // cleared) + operator-side controls state (active preset highlight, «Снять»).
 function updateSpeakerMessage(state: AppState): void {
@@ -806,6 +824,7 @@ function applyState(state: AppState): void {
 
   renderPlaylist(state)
   updateSpeakerMessage(state)
+  updateNextSpeaker(state)
   refreshKeyVisualPreview(state).catch(() => undefined)
 }
 

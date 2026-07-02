@@ -1354,3 +1354,14 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   -webkit-appearance: none;
   margin: 0;
 }
+
+/* «Далее: <имя>» — следующий спикер по плейлисту (1.5) */
+.next-speaker {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+body[data-role="speaker"] .next-speaker { font-size: 18px; }
