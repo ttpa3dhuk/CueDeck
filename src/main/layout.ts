@@ -1,8 +1,6 @@
-export type Layout = 'solo' | 'presenter-audience' | 'operator-speaker-audience'
+import type { DisplayMap, Layout, Role } from '../shared/types.js'
 
-export type Role = 'operator' | 'speaker' | 'audience'
-
-export type DisplayMap = Partial<Record<Role, number>>
+export type { DisplayMap, Layout, Role } from '../shared/types.js'
 
 export function rolesForLayout(layout: Layout): Role[] {
   switch (layout) {

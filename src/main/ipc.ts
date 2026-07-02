@@ -44,23 +44,9 @@ import {
   saveProjectFile,
 } from './project.js'
 
-export interface DisplayInfo {
-  id: number
-  label: string
-  internal: boolean
-  bounds: Electron.Rectangle
-}
+import type { DisplayInfo, OpenPdfResult } from '../shared/types.js'
 
-export interface OpenPdfResult {
-  ok: boolean
-  path?: string
-  totalSlides?: number
-  sha1?: string
-  sha1Mismatch?: boolean
-  cancelled?: boolean
-  error?: string
-  kind?: FileKind
-}
+export type { DisplayInfo, OpenPdfResult } from '../shared/types.js'
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'])
 const PDF_EXTS = new Set(['pdf'])

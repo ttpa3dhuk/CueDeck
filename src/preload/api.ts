@@ -1,98 +1,33 @@
-export type Layout = 'solo' | 'presenter-audience' | 'operator-speaker-audience'
-export type Role = 'operator' | 'speaker' | 'audience'
-export type DisplayMap = Partial<Record<Role, number>>
+// Canonical state types live in src/shared/types.ts (shared with the main
+// process). Renderers keep importing them from this module.
+import type {
+  AppState,
+  DisplayInfo,
+  DisplayMap,
+  Layout,
+  OpenPdfResult,
+  PlaylistEntry,
+  TimerMode,
+  TimerPosition,
+  VideoTakeMode,
+} from '../shared/types.js'
 
-export interface TimerState {
-  durationMs: number
-  startedAt: number | null
-  elapsedMs: number
-  running: boolean
-}
-
-export type TimerMode = 'countdown' | 'stopwatch' | 'clock'
-
-export type TimerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
-
-export type FileKind = 'pdf' | 'image' | 'pptx' | 'video'
-
-export type VideoTakeMode = 'play-start' | 'play-resume'
-
-export interface VideoState {
-  playing: boolean
-  anchorSec: number
-  anchorAt: number | null
-  durationSec: number
-  muted: boolean
-}
-
-export interface PlaylistEntry {
-  id: string
-  kind: FileKind
-  filePath: string
-  fileName: string
-  /** User-given label shown in the playlist instead of fileName. '' → use fileName. */
-  displayName: string
-  speakerName: string
-  durationMs: number
-}
-
-export interface DeckState {
-  path: string | null
-  sha1: string | null
-  kind: FileKind | null
-  totalSlides: number
-  currentSlide: number
-  video: VideoState
-  notes: Record<number, string>
-  playlistId: string | null
-}
-
-export interface AppState {
-  pdfPath: string | null
-  pdfSha1: string | null
-  fileKind: FileKind | null
-  totalSlides: number
-  currentSlide: number
-  /** Off-air staging deck (operator only). */
-  preview: DeckState
-  blackout: boolean
-  video: VideoState
-  timer: TimerState
-  timerMode: TimerMode
-  timerPosition: TimerPosition
-  timerScale: number
-  videoTakeMode: VideoTakeMode
-  notesFontSize: number
-  notes: Record<number, string>
-  layout: Layout
-  displayMap: DisplayMap
-  playlist: PlaylistEntry[]
-  currentPlaylistId: string | null
-  playlistCompact: boolean
-  autoAdvance: boolean
-  keyVisualPath: string | null
-  projectPath: string | null
-  audienceWindowed: boolean
-  audioOutputId: string | null
-}
-
-export interface DisplayInfo {
-  id: number
-  label: string
-  internal: boolean
-  bounds: { x: number; y: number; width: number; height: number }
-}
-
-export interface OpenPdfResult {
-  ok: boolean
-  path?: string
-  totalSlides?: number
-  sha1?: string
-  sha1Mismatch?: boolean
-  cancelled?: boolean
-  error?: string
-  kind?: FileKind
-}
+export type {
+  AppState,
+  DeckState,
+  DisplayInfo,
+  DisplayMap,
+  FileKind,
+  Layout,
+  OpenPdfResult,
+  PlaylistEntry,
+  Role,
+  TimerMode,
+  TimerPosition,
+  TimerState,
+  VideoState,
+  VideoTakeMode,
+} from '../shared/types.js'
 
 export type Unsubscribe = () => void
 
