@@ -112,8 +112,14 @@ export interface PresenterApi {
   layout: {
     set(layout: Layout, displayMap: DisplayMap, audienceWindowed?: boolean): Promise<void>
   }
+  files: {
+    /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */
+    pathFor(file: File): string
+  }
   playlist: {
     add(): Promise<PlaylistEntry[]>
+    /** Append files by path (drag & drop); unsupported paths are skipped. */
+    addPaths(paths: string[]): Promise<PlaylistEntry[]>
     remove(id: string): Promise<void>
     reorder(ids: string[]): Promise<void>
     update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number }): Promise<void>

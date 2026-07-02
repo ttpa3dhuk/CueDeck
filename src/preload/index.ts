@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { PresenterApi } from './api'
 
 const api: PresenterApi = {
@@ -85,8 +85,14 @@ const api: PresenterApi = {
   layout: {
     set: (layout, displayMap, audienceWindowed) => ipcRenderer.invoke('layout:set', { layout, displayMap, audienceWindowed: Boolean(audienceWindowed) }),
   },
+  files: {
+    // Sandboxed renderer has no File.path (removed in Electron 32) — this is
+    // the only way to resolve a dropped File to its filesystem path.
+    pathFor: (file) => webUtils.getPathForFile(file),
+  },
   playlist: {
     add: () => ipcRenderer.invoke('playlist:add'),
+    addPaths: (paths) => ipcRenderer.invoke('playlist:add-paths', paths),
     remove: (id) => ipcRenderer.invoke('playlist:remove', id),
     reorder: (ids) => ipcRenderer.invoke('playlist:reorder', ids),
     update: (id, payload) => ipcRenderer.invoke('playlist:update', { id, ...payload }),

@@ -1073,6 +1073,41 @@ function setupKeyboard(): void {
   })
 }
 
+// Drag & drop files from Finder/Explorer into the playlist (1.3). Listens on
+// the whole operator window; internal playlist reorder drags carry no Files
+// type and pass through untouched.
+function setupFileDrop(): void {
+  if (!isOperator) return
+  const playlistEl = document.querySelector<HTMLElement>('.playlist')
+  const isFileDrag = (e: DragEvent): boolean => Boolean(e.dataTransfer?.types.includes('Files'))
+
+  window.addEventListener('dragover', (e) => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    playlistEl?.classList.add('file-drop')
+  })
+  window.addEventListener('dragleave', (e) => {
+    // relatedTarget null → курсор покинул окно
+    if (e.relatedTarget === null) playlistEl?.classList.remove('file-drop')
+  })
+  window.addEventListener('drop', (e) => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    playlistEl?.classList.remove('file-drop')
+    const files = Array.from(e.dataTransfer?.files ?? [])
+    const paths = files.map((f) => window.api.files.pathFor(f)).filter(Boolean)
+    if (paths.length === 0) return
+    window.api.playlist.addPaths(paths).then((added) => {
+      if (added.length > 0) {
+        showBanner(`В плейлист добавлено: ${added.length}`, 3000)
+      } else {
+        showBanner('Формат не поддерживается (PDF / PPTX / видео / изображения)', 5000)
+      }
+    })
+  })
+}
+
 function toggleTimer(): void {
   const t = getState().timer
   if (t.running) window.api.timer.pause()
@@ -1569,6 +1604,7 @@ async function bootstrap(): Promise<void> {
   await initBus()
   setupOperatorControls()
   setupKeyboard()
+  setupFileDrop()
   if (isOperator) {
     buildOperatorBottomBar()
     setupBottomBarResize()

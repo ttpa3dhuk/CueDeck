@@ -614,19 +614,13 @@ export function registerIpcHandlers(): void {
     setAudienceWindowed(windowed)
   })
 
-  ipcMain.handle('playlist:add', async (): Promise<PlaylistEntry[]> => {
-    const op = getOperatorWindow()
-    const res = await dialog.showOpenDialog(op!, {
-      title: 'Добавить файлы в плейлист',
-      filters: OPEN_DIALOG_FILTERS,
-      properties: ['openFile', 'multiSelections'],
-    })
-    if (res.canceled || res.filePaths.length === 0) return []
-
+  /** Append supported files to the playlist; unsupported paths are skipped. */
+  function appendToPlaylist(paths: string[]): PlaylistEntry[] {
     const existing = store.get().playlist
     const defaultDur = store.get().timer.durationMs
     const newEntries: PlaylistEntry[] = []
-    for (const p of res.filePaths) {
+    for (const p of paths) {
+      if (typeof p !== 'string' || !p) continue
       const kind = kindOf(p)
       if (!kind) continue
       newEntries.push({
@@ -639,9 +633,28 @@ export function registerIpcHandlers(): void {
         durationMs: defaultDur,
       })
     }
-    store.patch({ playlist: [...existing, ...newEntries] })
-    persistPlaylist()
+    if (newEntries.length > 0) {
+      store.patch({ playlist: [...existing, ...newEntries] })
+      persistPlaylist()
+    }
     return newEntries
+  }
+
+  ipcMain.handle('playlist:add', async (): Promise<PlaylistEntry[]> => {
+    const op = getOperatorWindow()
+    const res = await dialog.showOpenDialog(op!, {
+      title: 'Добавить файлы в плейлист',
+      filters: OPEN_DIALOG_FILTERS,
+      properties: ['openFile', 'multiSelections'],
+    })
+    if (res.canceled || res.filePaths.length === 0) return []
+    return appendToPlaylist(res.filePaths)
+  })
+
+  // Drag & drop из Finder/Explorer: пути приходят из рендерера (webUtils).
+  ipcMain.handle('playlist:add-paths', (_e, paths: string[]): PlaylistEntry[] => {
+    if (!Array.isArray(paths)) return []
+    return appendToPlaylist(paths)
   })
 
   ipcMain.handle('playlist:remove', (_e, id: string) => {

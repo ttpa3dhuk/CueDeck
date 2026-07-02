@@ -1335,3 +1335,9 @@ body[data-role="operator"] .speaker-only { display: none !important; }
 @keyframes sm-blink {
   50% { background: #7a2621; }
 }
+
+/* Подсветка плейлиста при перетаскивании файлов из Finder (1.3) */
+.playlist.file-drop {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
