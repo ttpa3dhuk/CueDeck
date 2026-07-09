@@ -87,6 +87,8 @@ const api: PresenterApi = {
   },
   layout: {
     set: (layout, displayMap, audienceWindowed) => ipcRenderer.invoke('layout:set', { layout, displayMap, audienceWindowed: Boolean(audienceWindowed) }),
+    getAskOnStartup: () => ipcRenderer.invoke('layout:get-ask-on-startup'),
+    setAskOnStartup: (value) => ipcRenderer.invoke('layout:set-ask-on-startup', Boolean(value)),
   },
   files: {
     // Sandboxed renderer has no File.path (removed in Electron 32) — this is

@@ -1,14 +1,16 @@
-import { app, BrowserWindow, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { checkForUpdates } from './updater.js'
-import { autoAssignDisplays, defaultLayoutForDisplayCount } from './layout.js'
+import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
 import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf } from './ipc.js'
 import {
   getSavedMapping,
   saveMapping,
+  getAskLayoutOnStartup,
+  setAskLayoutOnStartup,
   getLastDurationMs,
   getTimerMode,
   getTimerPosition,
@@ -180,20 +182,48 @@ function sendToOperator(channel: string, ...args: unknown[]): void {
 }
 
 
-function bootLayout(): void {
+const LAYOUT_CHOICES: { layout: Layout; label: string }[] = [
+  { layout: 'solo', label: '1 экран (только я)' },
+  { layout: 'presenter-audience', label: '2 экрана (ноут + проектор)' },
+  { layout: 'operator-speaker-audience', label: '3 экрана (+ суфлёр)' },
+]
+
+async function bootLayout(): Promise<void> {
   const displays = screen.getAllDisplays()
   const primaryId = screen.getPrimaryDisplay().id
   const displayInfo = displays.map((d) => ({ id: d.id, internal: d.id === primaryId }))
   const audienceWindowed = getAudienceWindowed()
 
   const saved = getSavedMapping()
-  if (saved) {
-    applyLayout(saved.layout, saved.displayMap, audienceWindowed)
-    return
+  let layout = saved?.layout ?? defaultLayoutForDisplayCount(displays.length)
+
+  // macOS does not guarantee identical window placement between launches even
+  // for the same display IDs, so a silently restored multi-screen layout can
+  // come up scrambled. Ask which mode we're working in (native dialog — no
+  // windows exist yet, so it cleanly blocks boot). Opt out via the checkbox;
+  // re-enable in Display Setup (Cmd+,).
+  if (getAskLayoutOnStartup()) {
+    const defaultId = Math.max(0, LAYOUT_CHOICES.findIndex((c) => c.layout === layout))
+    const { response, checkboxChecked } = await dialog.showMessageBox({
+      type: 'question',
+      title: 'CueDeck',
+      message: 'В каком режиме работаем?',
+      detail: `Сейчас подключено экранов: ${displays.length}.`,
+      buttons: LAYOUT_CHOICES.map((c) => c.label),
+      defaultId,
+      cancelId: defaultId, // Esc = accept the suggested mode
+      noLink: true,
+      checkboxLabel: 'Больше не спрашивать при запуске',
+      checkboxChecked: false,
+    })
+    layout = LAYOUT_CHOICES[response]?.layout ?? layout
+    if (checkboxChecked) setAskLayoutOnStartup(false)
   }
 
-  const layout = defaultLayoutForDisplayCount(displays.length)
-  const displayMap = autoAssignDisplays(layout, displayInfo)
+  // Keep manual role→display assignments when the chosen mode matches the
+  // one saved for this display topology; otherwise auto-assign.
+  const displayMap =
+    saved && saved.layout === layout ? saved.displayMap : autoAssignDisplays(layout, displayInfo)
   applyLayout(layout, displayMap, audienceWindowed)
   saveMapping(layout, displayMap)
 }
@@ -240,7 +270,7 @@ app.whenReady().then(async () => {
     timerLoop: getTimerLoop(),
   })
 
-  bootLayout()
+  await bootLayout()
   watchDisplayChanges()
 
   // Check for updates a few seconds after boot, then daily
@@ -253,7 +283,7 @@ app.whenReady().then(async () => {
   setInterval(scheduleUpdateCheck, 24 * 60 * 60 * 1000)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) bootLayout()
+    if (BrowserWindow.getAllWindows().length === 0) void bootLayout()
   })
 })
 

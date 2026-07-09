@@ -117,6 +117,8 @@ export interface PresenterApi {
   }
   layout: {
     set(layout: Layout, displayMap: DisplayMap, audienceWindowed?: boolean): Promise<void>
+    getAskOnStartup(): Promise<boolean>
+    setAskOnStartup(value: boolean): Promise<void>
   }
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */

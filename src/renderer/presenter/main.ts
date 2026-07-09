@@ -1606,6 +1606,10 @@ function buildSetupModal(displays: DisplayInfo[]): void {
   const layoutInputs = setupModal.querySelectorAll<HTMLInputElement>('input[name="layout"]')
   const windowedToggle = $<HTMLInputElement>('audience-windowed-toggle')
   windowedToggle.checked = state.audienceWindowed
+  const askLayoutToggle = $<HTMLInputElement>('ask-layout-toggle')
+  window.api.layout.getAskOnStartup().then((v) => {
+    askLayoutToggle.checked = v
+  })
 
   layoutInputs.forEach((input) => {
     input.checked = input.value === state.layout
@@ -1626,6 +1630,7 @@ function buildSetupModal(displays: DisplayInfo[]): void {
       mapping[r] = Number(sel.value)
     })
     setupModal.classList.add('hidden')
+    await window.api.layout.setAskOnStartup(askLayoutToggle.checked)
     await window.api.layout.set(selectedLayout, mapping, windowedToggle.checked)
   }
 }

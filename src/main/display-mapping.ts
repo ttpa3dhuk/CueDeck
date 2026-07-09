@@ -28,6 +28,7 @@ interface PersistedShape {
   timerTickEnabled: boolean
   timerGongEnabled: boolean
   timerLoop: boolean
+  askLayoutOnStartup: boolean
 }
 
 const STORE_DEFAULTS: PersistedShape = {
@@ -50,6 +51,7 @@ const STORE_DEFAULTS: PersistedShape = {
   timerTickEnabled: false,
   timerGongEnabled: false,
   timerLoop: false,
+  askLayoutOnStartup: true,
 }
 
 let _store: Store<PersistedShape> | null = null
@@ -236,4 +238,12 @@ export function getTimerLoop(): boolean {
 
 export function setTimerLoop(value: boolean): void {
   store().set('timerLoop', value)
+}
+
+export function getAskLayoutOnStartup(): boolean {
+  return Boolean(store().get('askLayoutOnStartup'))
+}
+
+export function setAskLayoutOnStartup(value: boolean): void {
+  store().set('askLayoutOnStartup', value)
 }

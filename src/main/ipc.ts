@@ -39,6 +39,8 @@ import {
   setTimerTickEnabled,
   setTimerGongEnabled,
   setTimerLoop,
+  getAskLayoutOnStartup,
+  setAskLayoutOnStartup,
 } from './display-mapping.js'
 import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
@@ -649,6 +651,12 @@ export function registerIpcHandlers(): void {
     applyLayout(payload.layout, payload.displayMap, windowed)
     saveMapping(payload.layout, payload.displayMap)
     setAudienceWindowed(windowed)
+  })
+
+  ipcMain.handle('layout:get-ask-on-startup', () => getAskLayoutOnStartup())
+
+  ipcMain.handle('layout:set-ask-on-startup', (_e, value: boolean) => {
+    setAskLayoutOnStartup(Boolean(value))
   })
 
   /** Append supported files to the playlist; unsupported paths are skipped. */
