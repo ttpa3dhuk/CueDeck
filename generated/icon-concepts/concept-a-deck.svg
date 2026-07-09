@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Концепт A: «Дека слайдов» — стопка слайдов + cue-триггер (play) -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b3140"/>
+      <stop offset="1" stop-color="#171b24"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f5f7fa"/>
+      <stop offset="1" stop-color="#dde3ec"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <!-- задние слайды стопки -->
+  <rect x="292" y="238" width="520" height="380" rx="36" fill="#8892a6" opacity="0.45" transform="rotate(6 552 428)"/>
+  <rect x="272" y="256" width="520" height="380" rx="36" fill="#aab4c8" opacity="0.7" transform="rotate(3 532 446)"/>
+  <!-- передний слайд -->
+  <rect x="252" y="278" width="520" height="380" rx="36" fill="url(#card)"/>
+  <!-- контент слайда: заголовок + строки -->
+  <rect x="308" y="342" width="250" height="42" rx="21" fill="#39415a"/>
+  <rect x="308" y="424" width="408" height="26" rx="13" fill="#9aa5bd"/>
+  <rect x="308" y="474" width="360" height="26" rx="13" fill="#b9c2d4"/>
+  <!-- cue-кнопка -->
+  <circle cx="512" cy="748" r="132" fill="#e8443a"/>
+  <path d="M 472 688 L 472 808 L 584 748 Z" fill="#ffffff"/>
+</svg>

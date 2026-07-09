@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- CueDeck icon, финал по концепту B: Preview (зелёный) за Program (красный).
+       Поля по сетке иконок macOS: подложка 824×824 @ (100,100), rx 185. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#262c3d"/>
+      <stop offset="1" stop-color="#101319"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f9fc"/>
+      <stop offset="1" stop-color="#dfe5ee"/>
+    </linearGradient>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+
+  <!-- preview-кадр (зелёный, сзади) -->
+  <g filter="url(#drop)">
+    <rect x="216" y="238" width="452" height="322" rx="40" fill="#1b2130" stroke="#3ecf6a" stroke-width="28"/>
+  </g>
+  <rect x="282" y="316" width="184" height="40" rx="20" fill="#3d4763"/>
+  <rect x="282" y="396" width="286" height="30" rx="15" fill="#2d3752"/>
+  <rect x="282" y="452" width="240" height="30" rx="15" fill="#2d3752"/>
+
+  <!-- program-кадр (красный, впереди) -->
+  <g filter="url(#drop)">
+    <rect x="356" y="446" width="452" height="322" rx="40" fill="url(#card)" stroke="#e8443a" stroke-width="28"/>
+  </g>
+  <rect x="422" y="524" width="196" height="42" rx="21" fill="#39415a"/>
+  <rect x="422" y="606" width="292" height="30" rx="15" fill="#9aa5bd"/>
+  <rect x="422" y="662" width="248" height="30" rx="15" fill="#b9c2d4"/>
+  <!-- точка «в эфире» -->
+  <circle cx="742" cy="524" r="30" fill="#e8443a"/>
+</svg>

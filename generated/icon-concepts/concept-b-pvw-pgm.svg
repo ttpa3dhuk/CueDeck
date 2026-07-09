@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Концепт B: «Preview / Program» — два кадра, зелёный превью сзади, красный эфир впереди (эфирная модель CueDeck) -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232838"/>
+      <stop offset="1" stop-color="#12151d"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <!-- preview-кадр (зелёная обводка) -->
+  <rect x="200" y="216" width="480" height="336" rx="32" fill="#1c2130" stroke="#3ecf6a" stroke-width="22"/>
+  <rect x="256" y="286" width="200" height="34" rx="17" fill="#3a445e"/>
+  <rect x="256" y="352" width="312" height="22" rx="11" fill="#2c3550"/>
+  <rect x="256" y="396" width="280" height="22" rx="11" fill="#2c3550"/>
+  <!-- program-кадр (красная обводка, впереди) -->
+  <rect x="344" y="440" width="480" height="336" rx="32" fill="#f2f4f8" stroke="#e8443a" stroke-width="22"/>
+  <rect x="404" y="514" width="220" height="36" rx="18" fill="#39415a"/>
+  <rect x="404" y="586" width="336" height="24" rx="12" fill="#9aa5bd"/>
+  <rect x="404" y="634" width="296" height="24" rx="12" fill="#b9c2d4"/>
+  <!-- точка «в эфире» -->
+  <circle cx="780" cy="486" r="26" fill="#e8443a"/>
+</svg>
