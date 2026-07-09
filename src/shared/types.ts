@@ -28,7 +28,9 @@ export interface TimerState {
 
 export type TimerMode = 'countdown' | 'stopwatch' | 'clock'
 
-export type TimerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+// 'hidden' убирает таймер с суфлёра совсем — когда суфлёрский сигнал идёт
+// через vMix и режиссёр накладывает свой таймер поверх.
+export type TimerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'hidden'
 
 export type FileKind = 'pdf' | 'image' | 'pptx' | 'video'
 

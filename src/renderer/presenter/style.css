@@ -1260,6 +1260,8 @@ body[data-role="speaker"][data-timer-position="top-left"] .timer { top: 24px; le
 body[data-role="speaker"][data-timer-position="top-right"] .timer { top: 24px; right: 24px; }
 body[data-role="speaker"][data-timer-position="bottom-left"] .timer { bottom: 24px; left: 24px; }
 body[data-role="speaker"][data-timer-position="bottom-right"] .timer { bottom: 24px; right: 24px; }
+/* Суфлёр через vMix — режиссёр накладывает свой таймер, наш убираем */
+body[data-role="speaker"][data-timer-position="hidden"] .timer { display: none; }
 
 body[data-role="operator"] .speaker-only { display: none !important; }
 

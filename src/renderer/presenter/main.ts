@@ -488,7 +488,8 @@ let lastCycles: number | null = null
 
 function fireTimerEndCues(state: AppState): void {
   if (isOperator && state.timerGongEnabled) playGong()
-  if (role === 'speaker') flashTimerEnd()
+  // Таймер скрыт (суфлёр через vMix, у режиссёра свой) — вспышка тоже лишняя.
+  if (role === 'speaker' && state.timerPosition !== 'hidden') flashTimerEnd()
 }
 
 // Вызывается из общего 250мс-тика: границы секунд ловим сравнением ceil(remaining).
