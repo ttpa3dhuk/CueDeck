@@ -1053,6 +1053,7 @@ const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'videoPlay', label: 'Видео: play / pause', def: 'Space' },
   { id: 'mute', label: 'Видео: звук вкл / выкл', def: 'KeyM' },
   { id: 'timerToggle', label: 'Таймер: старт / пауза', def: 'KeyT' },
+  { id: 'timerReset', label: 'Таймер: сброс', def: 'KeyR' },
   { id: 'blackout', label: 'Blackout', def: 'KeyB' },
 ]
 let hotkeyMap: Record<string, string> = {}
@@ -1108,6 +1109,7 @@ function dispatchHotkey(action: string): void {
     case 'videoPlay': isVideo ? window.api.video.toggle() : window.api.nav.next(); break
     case 'mute': if (isVideo) window.api.video.toggleMuted(); break
     case 'timerToggle': toggleTimer(); break
+    case 'timerReset': window.api.timer.reset(); break
     case 'blackout': window.api.blackout.toggle(); break
   }
 }

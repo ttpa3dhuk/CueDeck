@@ -120,7 +120,7 @@ PDF и картинки работают сразу, без зависимост
 | `PgUp` / `PgDn` | Эфир: предыдущий / следующий (кнопки кликера) |
 | `B` / `.` | Blackout (`.` — blank-кнопка кликера) |
 | `T` | Старт / пауза таймера |
-| `Shift+T` | Сбросить таймер |
+| `R` / `Shift+T` | Сбросить таймер |
 | `Cmd+O` | Открыть файл (в превью) |
 | `Cmd+N` | Новый проект |
 | `Cmd+Shift+O` | Открыть проект |
@@ -276,7 +276,7 @@ Note: the file format (**container**) and the **codec** inside it are different 
 | `PgUp` / `PgDn` | Program: previous / next (clicker buttons) |
 | `B` / `.` | Toggle blackout (`.` — clicker blank button) |
 | `T` | Start / pause timer |
-| `Shift+T` | Reset timer |
+| `R` / `Shift+T` | Reset timer |
 | `Shift+1` / `Shift+3` / `Shift+5` | Add 1 / 3 / 5 min to timer |
 | `Ctrl+1` / `Ctrl+3` / `Ctrl+5` | Subtract 1 / 3 / 5 min from timer |
 | `Shift+/` | Show keyboard shortcuts |
