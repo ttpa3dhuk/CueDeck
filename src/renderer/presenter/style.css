@@ -255,6 +255,17 @@ body[data-role="operator"] .grid {
     "playlist preview program"
     "playlist bottom  bottom";
 }
+/* Узкое окно оператора: место отдаёт плейлист, а не блок таймера */
+@media (max-width: 1500px) {
+  body[data-role="operator"] .grid {
+    grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@media (max-width: 1280px) {
+  body[data-role="operator"] .grid {
+    grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
 body[data-role="operator"] .playlist { grid-area: playlist; }
 body[data-role="operator"] #preview-slide { grid-area: preview; }
 body[data-role="operator"] #current-slide { grid-area: program; }
@@ -293,7 +304,7 @@ body[data-role="operator"] .next-slide { display: none; }
   background: rgba(255, 255, 255, 0.2);
 }
 .op-bottombar-handle:hover::after { background: var(--accent); }
-.op-bottombar .notes { flex: 1 1 280px; min-width: 200px; }
+.op-bottombar .notes { flex: 1 1 280px; min-width: 140px; }
 .op-bottombar .bottom-timer {
   display: flex;
   flex-direction: column;
@@ -302,9 +313,11 @@ body[data-role="operator"] .next-slide { display: none; }
   background: var(--panel);
   border-radius: 8px;
   padding: 10px 14px;
-  /* Shrinks (and its controls wrap/scroll) so notes stay usable and TAKE never clips */
+  /* Таймер — приоритетный блок бара: держит рабочую ширину и не выдавливается.
+     Первыми ужимаются заметки/сообщение, на узком окне — колонка плейлиста
+     (медиазапросы у operator .grid). */
   flex: 1 1 460px;
-  min-width: 0;
+  min-width: 430px;
   overflow: auto;
 }
 .op-bottombar .bottom-timer-head {
@@ -1274,7 +1287,8 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   border-radius: 8px;
   padding: 10px 12px;
   flex: 0 1 250px;
-  min-width: 180px;
+  min-width: 140px;
+  overflow: hidden;
   overflow: auto;
 }
 .speaker-msg .sm-presets {

@@ -899,6 +899,7 @@ function applyState(state: AppState): void {
     reflectToggle('timer-gong-toggle', state.timerGongEnabled)
     reflectToggle('timer-loop-toggle', state.timerLoop)
     reflectToggle('clicker-global-toggle', state.clickerGlobal)
+    reflectToggle('clicker-arrows-toggle', state.clickerGlobalArrows)
   }
   document.body.dataset.timerPosition = state.timerPosition
   document.documentElement.style.setProperty(
@@ -1135,11 +1136,29 @@ function closeHotkeysModal(): void {
   $('hotkeys-modal').classList.add('hidden')
 }
 
+// Клавиши глушим только когда пользователь реально печатает (текст/число),
+// а не когда фокус случайно остался на галке/кнопке после клика мышкой —
+// иначе кликер умирает после любой манипуляции в зоне таймера/плейлиста.
+function isTypingTarget(t: EventTarget | null): boolean {
+  if (t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return true
+  if (t instanceof HTMLInputElement)
+    return ['text', 'number', 'search', 'password', 'email', 'url'].includes(t.type)
+  return false
+}
+
 function setupKeyboard(): void {
   if (role !== 'operator') return
   loadHotkeys()
+
+  // Клик по кнопке/галке/слайдеру не должен оставлять на ней фокус: Space бы
+  // «нажимал» её заново вместо действия кликера. Текстовые поля не трогаем.
+  window.addEventListener('click', () => {
+    const el = document.activeElement
+    if (el instanceof HTMLElement && el !== document.body && !isTypingTarget(el)) el.blur()
+  })
+
   window.addEventListener('keydown', (e) => {
-    if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return
+    if (isTypingTarget(e.target)) return
     // Remappable actions fire on a bare keypress (no modifiers); modifier combos
     // below (Shift+T, Shift/Ctrl+digits) and clicker keys fall through to the switch.
     if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
@@ -1309,6 +1328,7 @@ function setupOperatorControls(): void {
   // Mode selector (countdown / stopwatch / clock)
   modeSelect!.addEventListener('change', () => {
     window.api.timer.setMode(modeSelect!.value as TimerMode)
+    modeSelect!.blur() // вернуть клавиши кликеру (фокус на select их глушит)
   })
 
   // Timer sound cues (tick / gong отдельно) + цикличный режим
@@ -1331,8 +1351,20 @@ function setupOperatorControls(): void {
   // Глобальный кликер: main отвечает, что реально включилось (регистрация
   // PgUp/PgDn может не пройти) — стейт-патч вернёт галку в фактическое положение.
   const clickerGlobalToggle = $<HTMLInputElement>('clicker-global-toggle')
-  clickerGlobalToggle.addEventListener('change', () => {
-    void window.api.clicker.setGlobal(clickerGlobalToggle.checked)
+  clickerGlobalToggle.addEventListener('change', async () => {
+    const wanted = clickerGlobalToggle.checked
+    const actual = await window.api.clicker.setGlobal(wanted)
+    if (wanted && !actual) {
+      showBanner('Глобальный кликер не включился: PgUp/PgDn заняты другим приложением', 8000)
+    }
+  })
+  const clickerArrowsToggle = $<HTMLInputElement>('clicker-arrows-toggle')
+  clickerArrowsToggle.addEventListener('change', async () => {
+    const wanted = clickerArrowsToggle.checked
+    const actual = await window.api.clicker.setGlobalArrows(wanted)
+    if (wanted && !actual && getState().clickerGlobal) {
+      showBanner('Стрелки не захватились: ←/→ заняты другим приложением', 8000)
+    }
   })
 
   // Timer scale (speaker overlay size)

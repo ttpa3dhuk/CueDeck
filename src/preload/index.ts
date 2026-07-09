@@ -28,6 +28,7 @@ const api: PresenterApi = {
   },
   clicker: {
     setGlobal: (value) => ipcRenderer.invoke('clicker:set-global', Boolean(value)),
+    setGlobalArrows: (value) => ipcRenderer.invoke('clicker:set-global-arrows', Boolean(value)),
   },
   preview: {
     openDialog: () => ipcRenderer.invoke('preview:open-dialog'),

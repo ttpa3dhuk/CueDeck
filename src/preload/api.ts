@@ -51,6 +51,8 @@ export interface PresenterApi {
   clicker: {
     /** Global PgUp/PgDn clicker. Resolves to what actually got enabled (registration can fail). */
     setGlobal(value: boolean): Promise<boolean>
+    /** Also grab ←/→ globally (Spotlight-style clickers). Resolves to the applied value. */
+    setGlobalArrows(value: boolean): Promise<boolean>
   }
   /**
    * Off-air staging deck (operator only). Loading a file or selecting a playlist

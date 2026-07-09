@@ -66,6 +66,7 @@ export function initialState(): AppState {
     timerGongEnabled: false,
     timerLoop: false,
     clickerGlobal: false,
+    clickerGlobalArrows: false,
   }
 }
 

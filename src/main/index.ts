@@ -5,7 +5,7 @@ import { Readable } from 'node:stream'
 import { checkForUpdates } from './updater.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
-import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf, applyClickerGlobal } from './ipc.js'
+import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf, applyClickerShortcuts } from './ipc.js'
 import {
   getSavedMapping,
   saveMapping,
@@ -25,6 +25,7 @@ import {
   getTimerGongEnabled,
   getTimerLoop,
   getClickerGlobal,
+  getClickerGlobalArrows,
 } from './display-mapping.js'
 import { store } from './state.js'
 
@@ -270,8 +271,15 @@ app.whenReady().then(async () => {
     timerGongEnabled: getTimerGongEnabled(),
     timerLoop: getTimerLoop(),
     // Re-register the global clicker if it was on; reflect actual success
-    // (registration fails when another app holds PgUp/PgDn).
-    clickerGlobal: getClickerGlobal() ? applyClickerGlobal(true) : false,
+    // (registration fails when another app holds the keys).
+    ...(() => {
+      const res = applyClickerShortcuts(getClickerGlobal(), getClickerGlobalArrows())
+      return {
+        clickerGlobal: res.global,
+        // Keep the stored arrows intent visible even while global mode is off.
+        clickerGlobalArrows: res.global ? res.arrows : getClickerGlobalArrows(),
+      }
+    })(),
   })
 
   await bootLayout()

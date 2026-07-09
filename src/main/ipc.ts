@@ -42,6 +42,8 @@ import {
   getAskLayoutOnStartup,
   setAskLayoutOnStartup,
   setClickerGlobal,
+  getClickerGlobalArrows,
+  setClickerGlobalArrows,
 } from './display-mapping.js'
 import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
@@ -256,34 +258,52 @@ function programSeekBy(deltaSec: number): void {
 }
 
 /**
- * Global clicker (PgUp/PgDn via globalShortcut): the speaker keeps flipping the
- * program deck while the operator works in another app (browser, Finder — e.g.
+ * Global clicker via globalShortcut: the speaker keeps flipping the program
+ * deck while the operator works in another app (browser, Finder — e.g.
  * downloading the next presentation mid-show). Mirrors the renderer's clicker
  * behaviour: video seeks ±5s, everything else changes slides. Blank (.) and
  * Take stay window-local on purpose — grabbing "." system-wide would eat the
  * dot everywhere the operator types.
  *
+ * Two key sets: PgUp/PgDn (R400, DSan и т.п.) always; ←/→ arrows as a separate
+ * opt-in for clickers that send arrows (Logitech Spotlight) — stealing arrows
+ * system-wide hurts much more, so it's the user's explicit call.
+ *
  * Returns what actually got enabled: registration fails if another app holds
- * the key, in which case both keys are released so we never end up half-on.
+ * a key; a failed pair is fully released so we never end up half-on.
  */
-export function applyClickerGlobal(enabled: boolean): boolean {
-  globalShortcut.unregister('PageDown')
-  globalShortcut.unregister('PageUp')
-  if (!enabled) return false
-  const okNext = globalShortcut.register('PageDown', () => {
+export function applyClickerShortcuts(
+  global: boolean,
+  arrows: boolean,
+): { global: boolean; arrows: boolean } {
+  for (const key of ['PageDown', 'PageUp', 'Right', 'Left']) globalShortcut.unregister(key)
+  if (!global) return { global: false, arrows: false }
+
+  const forward = (): void => {
     if (store.get().fileKind === 'video') programSeekBy(5)
     else void programNext()
-  })
-  const okPrev = globalShortcut.register('PageUp', () => {
+  }
+  const back = (): void => {
     if (store.get().fileKind === 'video') programSeekBy(-5)
     else programPrev()
-  })
-  if (!okNext || !okPrev) {
+  }
+
+  const okPages = globalShortcut.register('PageDown', forward) && globalShortcut.register('PageUp', back)
+  if (!okPages) {
     globalShortcut.unregister('PageDown')
     globalShortcut.unregister('PageUp')
-    return false
+    return { global: false, arrows: false }
   }
-  return true
+
+  let okArrows = false
+  if (arrows) {
+    okArrows = globalShortcut.register('Right', forward) && globalShortcut.register('Left', back)
+    if (!okArrows) {
+      globalShortcut.unregister('Right')
+      globalShortcut.unregister('Left')
+    }
+  }
+  return { global: true, arrows: okArrows }
 }
 
 function persistPlaylist(): void {
@@ -342,10 +362,30 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('nav:prev', () => programPrev())
 
   ipcMain.handle('clicker:set-global', (_e, value: boolean) => {
-    const actual = applyClickerGlobal(Boolean(value))
-    store.patch({ clickerGlobal: actual })
-    setClickerGlobal(actual)
-    return actual
+    const wantArrows = getClickerGlobalArrows()
+    const res = applyClickerShortcuts(Boolean(value), wantArrows)
+    store.patch({ clickerGlobal: res.global })
+    setClickerGlobal(res.global)
+    if (res.global && wantArrows && !res.arrows) {
+      store.patch({ clickerGlobalArrows: false })
+      setClickerGlobalArrows(false)
+    }
+    return res.global
+  })
+
+  ipcMain.handle('clicker:set-global-arrows', (_e, value: boolean) => {
+    const v = Boolean(value)
+    // Global mode off — just remember the intent, keys get grabbed when it turns on.
+    if (!store.get().clickerGlobal) {
+      store.patch({ clickerGlobalArrows: v })
+      setClickerGlobalArrows(v)
+      return v
+    }
+    const res = applyClickerShortcuts(true, v)
+    store.patch({ clickerGlobal: res.global, clickerGlobalArrows: res.arrows })
+    setClickerGlobal(res.global)
+    setClickerGlobalArrows(res.arrows)
+    return res.arrows
   })
 
   // ── Preview deck (off-air staging) ───────────────────────────────────────

@@ -127,6 +127,12 @@ export interface AppState {
    * While on, PgUp/PgDn are unavailable to other apps. Blank (.) and Take stay local.
    */
   clickerGlobal: boolean
+  /**
+   * Also grab ←/→ arrows globally — for clickers that send arrows instead of
+   * PgUp/PgDn (Logitech Spotlight without Logi Options). Steals arrows from
+   * every other app while active, so it's a separate opt-in.
+   */
+  clickerGlobalArrows: boolean
 }
 
 export interface DisplayInfo {
