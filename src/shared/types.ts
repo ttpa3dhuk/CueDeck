@@ -121,6 +121,12 @@ export interface AppState {
   timerGongEnabled: boolean
   /** Loop mode: countdown restarts automatically on zero (15/30-second rounds etc.). */
   timerLoop: boolean
+  /**
+   * Global clicker: PgUp/PgDn switch program slides system-wide (globalShortcut),
+   * so the speaker keeps clicking while the operator works in a browser/Finder.
+   * While on, PgUp/PgDn are unavailable to other apps. Blank (.) and Take stay local.
+   */
+  clickerGlobal: boolean
 }
 
 export interface DisplayInfo {

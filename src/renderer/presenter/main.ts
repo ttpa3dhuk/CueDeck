@@ -898,6 +898,7 @@ function applyState(state: AppState): void {
     reflectToggle('timer-tick-toggle', state.timerTickEnabled)
     reflectToggle('timer-gong-toggle', state.timerGongEnabled)
     reflectToggle('timer-loop-toggle', state.timerLoop)
+    reflectToggle('clicker-global-toggle', state.clickerGlobal)
   }
   document.body.dataset.timerPosition = state.timerPosition
   document.documentElement.style.setProperty(
@@ -1325,6 +1326,13 @@ function setupOperatorControls(): void {
   const loopToggle = $<HTMLInputElement>('timer-loop-toggle')
   loopToggle.addEventListener('change', () => {
     window.api.timer.setLoop(loopToggle.checked)
+  })
+
+  // Глобальный кликер: main отвечает, что реально включилось (регистрация
+  // PgUp/PgDn может не пройти) — стейт-патч вернёт галку в фактическое положение.
+  const clickerGlobalToggle = $<HTMLInputElement>('clicker-global-toggle')
+  clickerGlobalToggle.addEventListener('change', () => {
+    void window.api.clicker.setGlobal(clickerGlobalToggle.checked)
   })
 
   // Timer scale (speaker overlay size)

@@ -1,4 +1,4 @@
-import { dialog, ipcMain, screen } from 'electron'
+import { dialog, globalShortcut, ipcMain, screen } from 'electron'
 import { readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
@@ -41,6 +41,7 @@ import {
   setTimerLoop,
   getAskLayoutOnStartup,
   setAskLayoutOnStartup,
+  setClickerGlobal,
 } from './display-mapping.js'
 import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
@@ -228,6 +229,63 @@ async function loadPreview(
   }
 }
 
+async function programNext(): Promise<void> {
+  const { currentSlide, totalSlides, autoAdvance, playlist, currentPlaylistId } = store.get()
+  if (currentSlide < totalSlides) {
+    store.patch({ currentSlide: currentSlide + 1 })
+    return
+  }
+  if (!autoAdvance || !currentPlaylistId || playlist.length === 0) return
+  const idx = playlist.findIndex((e) => e.id === currentPlaylistId)
+  if (idx < 0 || idx >= playlist.length - 1) return
+  const next = playlist[idx + 1]
+  await openFile(next.filePath, { playlistId: next.id, durationMs: next.durationMs })
+}
+
+function programPrev(): void {
+  const { currentSlide } = store.get()
+  if (currentSlide > 1) store.patch({ currentSlide: currentSlide - 1 })
+}
+
+function programSeekBy(deltaSec: number): void {
+  const v = store.get().video
+  const delta = Number.isFinite(deltaSec) ? deltaSec : 0
+  let pos = Math.max(0, store.videoPositionSec() + delta)
+  if (v.durationSec > 0) pos = Math.min(pos, v.durationSec)
+  store.patchVideo({ anchorSec: pos, anchorAt: v.playing ? Date.now() : null })
+}
+
+/**
+ * Global clicker (PgUp/PgDn via globalShortcut): the speaker keeps flipping the
+ * program deck while the operator works in another app (browser, Finder — e.g.
+ * downloading the next presentation mid-show). Mirrors the renderer's clicker
+ * behaviour: video seeks ±5s, everything else changes slides. Blank (.) and
+ * Take stay window-local on purpose — grabbing "." system-wide would eat the
+ * dot everywhere the operator types.
+ *
+ * Returns what actually got enabled: registration fails if another app holds
+ * the key, in which case both keys are released so we never end up half-on.
+ */
+export function applyClickerGlobal(enabled: boolean): boolean {
+  globalShortcut.unregister('PageDown')
+  globalShortcut.unregister('PageUp')
+  if (!enabled) return false
+  const okNext = globalShortcut.register('PageDown', () => {
+    if (store.get().fileKind === 'video') programSeekBy(5)
+    else void programNext()
+  })
+  const okPrev = globalShortcut.register('PageUp', () => {
+    if (store.get().fileKind === 'video') programSeekBy(-5)
+    else programPrev()
+  })
+  if (!okNext || !okPrev) {
+    globalShortcut.unregister('PageDown')
+    globalShortcut.unregister('PageUp')
+    return false
+  }
+  return true
+}
+
 function persistPlaylist(): void {
   setPlaylist(store.get().playlist)
 }
@@ -279,22 +337,15 @@ export function registerIpcHandlers(): void {
     store.patch({ currentSlide: clamped })
   })
 
-  ipcMain.handle('nav:next', async () => {
-    const { currentSlide, totalSlides, autoAdvance, playlist, currentPlaylistId } = store.get()
-    if (currentSlide < totalSlides) {
-      store.patch({ currentSlide: currentSlide + 1 })
-      return
-    }
-    if (!autoAdvance || !currentPlaylistId || playlist.length === 0) return
-    const idx = playlist.findIndex((e) => e.id === currentPlaylistId)
-    if (idx < 0 || idx >= playlist.length - 1) return
-    const next = playlist[idx + 1]
-    await openFile(next.filePath, { playlistId: next.id, durationMs: next.durationMs })
-  })
+  ipcMain.handle('nav:next', () => programNext())
 
-  ipcMain.handle('nav:prev', () => {
-    const { currentSlide } = store.get()
-    if (currentSlide > 1) store.patch({ currentSlide: currentSlide - 1 })
+  ipcMain.handle('nav:prev', () => programPrev())
+
+  ipcMain.handle('clicker:set-global', (_e, value: boolean) => {
+    const actual = applyClickerGlobal(Boolean(value))
+    store.patch({ clickerGlobal: actual })
+    setClickerGlobal(actual)
+    return actual
   })
 
   // ── Preview deck (off-air staging) ───────────────────────────────────────
@@ -602,13 +653,7 @@ export function registerIpcHandlers(): void {
     store.patchVideo({ anchorSec: pos, anchorAt: v.playing ? Date.now() : null })
   })
 
-  ipcMain.handle('video:seek-by', (_e, deltaSec: number) => {
-    const v = store.get().video
-    const delta = Number.isFinite(deltaSec) ? deltaSec : 0
-    let pos = Math.max(0, store.videoPositionSec() + delta)
-    if (v.durationSec > 0) pos = Math.min(pos, v.durationSec)
-    store.patchVideo({ anchorSec: pos, anchorAt: v.playing ? Date.now() : null })
-  })
+  ipcMain.handle('video:seek-by', (_e, deltaSec: number) => programSeekBy(deltaSec))
 
   ipcMain.handle('video:set-duration', (_e, sec: number) => {
     if (!Number.isFinite(sec) || sec <= 0) return

@@ -48,6 +48,10 @@ export interface PresenterApi {
     next(): Promise<void>
     prev(): Promise<void>
   }
+  clicker: {
+    /** Global PgUp/PgDn clicker. Resolves to what actually got enabled (registration can fail). */
+    setGlobal(value: boolean): Promise<boolean>
+  }
   /**
    * Off-air staging deck (operator only). Loading a file or selecting a playlist
    * entry lands here; `take()` promotes it to the program (audience) feed.

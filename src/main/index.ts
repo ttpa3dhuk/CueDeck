@@ -1,11 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { checkForUpdates } from './updater.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
-import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf } from './ipc.js'
+import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf, applyClickerGlobal } from './ipc.js'
 import {
   getSavedMapping,
   saveMapping,
@@ -24,6 +24,7 @@ import {
   getTimerTickEnabled,
   getTimerGongEnabled,
   getTimerLoop,
+  getClickerGlobal,
 } from './display-mapping.js'
 import { store } from './state.js'
 
@@ -268,6 +269,9 @@ app.whenReady().then(async () => {
     timerTickEnabled: getTimerTickEnabled(),
     timerGongEnabled: getTimerGongEnabled(),
     timerLoop: getTimerLoop(),
+    // Re-register the global clicker if it was on; reflect actual success
+    // (registration fails when another app holds PgUp/PgDn).
+    clickerGlobal: getClickerGlobal() ? applyClickerGlobal(true) : false,
   })
 
   await bootLayout()
@@ -294,6 +298,7 @@ app.on('window-all-closed', async () => {
 
 app.on('before-quit', async (e) => {
   e.preventDefault()
+  globalShortcut.unregisterAll()
   await flushPendingWrites()
   app.exit(0)
 })

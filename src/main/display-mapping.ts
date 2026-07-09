@@ -29,6 +29,7 @@ interface PersistedShape {
   timerGongEnabled: boolean
   timerLoop: boolean
   askLayoutOnStartup: boolean
+  clickerGlobal: boolean
 }
 
 const STORE_DEFAULTS: PersistedShape = {
@@ -52,6 +53,7 @@ const STORE_DEFAULTS: PersistedShape = {
   timerGongEnabled: false,
   timerLoop: false,
   askLayoutOnStartup: true,
+  clickerGlobal: false,
 }
 
 let _store: Store<PersistedShape> | null = null
@@ -238,6 +240,14 @@ export function getTimerLoop(): boolean {
 
 export function setTimerLoop(value: boolean): void {
   store().set('timerLoop', value)
+}
+
+export function getClickerGlobal(): boolean {
+  return Boolean(store().get('clickerGlobal'))
+}
+
+export function setClickerGlobal(value: boolean): void {
+  store().set('clickerGlobal', value)
 }
 
 export function getAskLayoutOnStartup(): boolean {

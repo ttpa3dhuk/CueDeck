@@ -26,6 +26,9 @@ const api: PresenterApi = {
     next: () => ipcRenderer.invoke('nav:next'),
     prev: () => ipcRenderer.invoke('nav:prev'),
   },
+  clicker: {
+    setGlobal: (value) => ipcRenderer.invoke('clicker:set-global', Boolean(value)),
+  },
   preview: {
     openDialog: () => ipcRenderer.invoke('preview:open-dialog'),
     openPath: (path) => ipcRenderer.invoke('preview:open-path', path),
