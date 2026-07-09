@@ -83,6 +83,8 @@ PDF и картинки работают сразу, без зависимост
 
 - 🎛 **Preview / Program — эфирная модель, как на видеопультах** — два независимых деска: **PROGRAM** (красная рамка) видит зал, **PREVIEW** (зелёная рамка) ты готовишь незаметно. Клик по спикеру грузит файл в превью, а не в зал; кнопка **TAKE** (`Tab`) выдаёт его в эфир. Эфир больше не рвётся, пока ищешь и листаешь следующий файл. На Take дески меняются местами, для видео — выбор «играть с начала / с точки превью»
 - 🎚 **Раскладка в стиле OBS Studio Mode** — превью и эфир рядом, под ними заметки, крупный таймер и большая кнопка TAKE; высоту нижней панели можно тянуть мышью
+- 🖱 **Глобальный кликер** — галка «🌐 Глобально»: PgUp/PgDn листают эфир, даже когда CueDeck не в фокусе — спикер продолжает кликать, пока ты качаешь следующую презентацию в браузере. Для кликеров, шлющих стрелки (Logitech Spotlight), — дополнительная галка «⬅➡ Стрелки»
+- 🪟 **Выбор режима при запуске** — диалог «В каком режиме работаем?» (1/2/3 экрана) при каждом старте, чтобы раскладка не восстанавливалась вслепую; отключается чекбоксом, возвращается в «Настройке экранов»
 - 🔢 **Быстрая навигация** — впиши номер слайда + Enter — сразу там (отдельно в эфире и в превью); «Далее: `<имя>`» в шапке подсказывает оператору и суфлёру, кто следующий по плейлисту
 - 📋 **Плейлист спикеров** — собираешь всю программу мероприятия заранее: drag-and-drop сортировка или просто перетащи файлы из Finder прямо в окно, своё наименование для каждой записи (✎), one-click переключение
 - ⏱ **Таймер — три режима:**
@@ -91,13 +93,13 @@ PDF и картинки работают сразу, без зависимост
   - **Текущее время** — часы в реальном времени
 - 🔢 **Пресеты и коррекция на ходу** — быстрый выбор длительности из пресетов; прямо во время выступления можно добавить или убрать время без остановки
 - 🔔 **Звуковые сигналы таймера** — тиканье последние 10 секунд и/или гонг на нуле (галки независимые, по умолчанию выключены), режим **🔁 Повтор** — отсчёт перезапускается сам по кругу (15/30-секундные раунды и т.п.); на суфлёре в конце всегда вспышка экрана
-- 📍 **Позиция и масштаб таймера** — выбираешь угол экрана суфлёра (четыре варианта), регулируешь размер
+- 📍 **Позиция и масштаб таймера** — выбираешь угол экрана суфлёра (четыре варианта), регулируешь размер — или выключаешь таймер на суфлёре совсем (кнопка «✕»), если суфлёрский сигнал идёт через vMix и режиссёр накладывает свой таймер
 - 🖥 **Три независимых окна** — оператор (твой ноут), суфлёр клиента (Экран на сцену), аудитория (Экран зрителей)
 - 📄 **Форматы** — PDF, PPTX, PPT, ODP, Keynote, PNG/JPG/WebP/GIF/BMP, видео MP4/MOV/M4V/WebM
 - 🎬 **Видео** — ролики между выступлениями прямо в плейлисте. Play/pause, перемотка и звук синхронизированы между окном оператора и залом; звук идёт только на основной выход. В шапке — таймкод и крупный обратный отсчёт до конца ролика (оранжевый за 30с, красный за 10с). Управление: `Space` — play/pause, `←/→` — ±5с, `M` — звук
 - 🔊 **Выбор аудиовыхода** — кнопка «Аудиовыход…» открывает меню, где задаёшь, на какое устройство отдавать звук видео: звуковая карта, миниджек ноута, HDMI на vMix-машину, NDI и т.п. Выбор запоминается
 - 📝 **Заметки оператора → суфлёр** — пишешь текст в окне оператора, он мгновенно появляется на экране суфлёра. Прямой канал связи со спикером без слов
-- 💬 **Сообщение спикеру** — флэш-сообщение на суфлёр: готовые пресеты («Заканчивай», «Ближе к микрофону», «Финальный слайд») или свой текст, крупно и мигает, пока не снимешь
+- 💬 **Сообщение спикеру** — флэш-сообщение на суфлёр: готовые пресеты («Заканчивайте», «Ближе к микрофону», «Финальный слайд») или свой текст, крупно и мигает, пока не снимешь. Тексты пресетов меняются под себя правым кликом
 - ⬛ **Blackout / Key Visual** — нажал `B`: аудитория видит заставку (если загружена) или чёрный фон, звук видео тоже глушится. Переключаешь слайды — аудитория ничего не видит
 - ⌨️ **Настраиваемые горячие клавиши** — кнопка «Клавиши…» открывает редактор: переназначь любое действие под себя (например, TAKE на `Tab`)
 - 💾 **Проекты** — сохраняй настроенный плейлист как `.pdpres`, открывай перед следующим мероприятием
@@ -237,6 +239,8 @@ Note: the file format (**container**) and the **codec** inside it are different 
 
 - 🎛 **Preview / Program — a video-switcher model** — two independent decks: **PROGRAM** (red frame) is what the audience sees, **PREVIEW** (green frame) is staged off-air. Clicking a speaker loads the file into preview, not on air; the **TAKE** button (`Tab`) sends it live. The audience feed no longer breaks while you cue the next file. Take swaps the decks; for video you choose "play from start / from the preview point"
 - 🎚 **OBS Studio-Mode layout** — preview and program side by side, notes + large timer + big TAKE below; the bottom bar height is drag-resizable
+- 🖱 **Global clicker** — the "🌐 Global" toggle makes PgUp/PgDn flip the program deck even when CueDeck is not focused — the speaker keeps clicking while you download the next deck in a browser. For clickers that send arrow keys (Logitech Spotlight) there is an extra "⬅➡ Arrows" toggle
+- 🪟 **Layout prompt on launch** — a "Which mode are we in?" dialog (1/2/3 screens) on every start, so a multi-screen layout is never restored blindly; opt out via the checkbox, re-enable in Display Setup
 - 🔢 **Quick navigation** — type a slide number + Enter to jump straight there (separately for program and preview); a "Next: `<name>`" indicator in the header tells the operator and speaker who's up next in the playlist
 - 📋 **Speaker playlist** — build the full event program in advance: drag-and-drop reordering, or just drop files from Finder straight into the window; custom label per entry (✎), one-click switching
 - ⏱ **Timer — three modes:**
@@ -245,13 +249,13 @@ Note: the file format (**container**) and the **codec** inside it are different 
   - **Clock** — live current time display
 - 🔢 **Presets & on-the-fly adjustment** — pick duration from presets; add or subtract time mid-presentation without stopping the timer
 - 🔔 **Timer sound cues** — ticking in the last 10 seconds and/or a gong at zero (independent toggles, off by default), plus a **🔁 Loop** mode that restarts the countdown automatically (15/30-second rounds etc.); the speaker screen always flashes at the end
-- 📍 **Timer position & scale** — choose which corner of the confidence monitor to display the timer (four options), adjust size
+- 📍 **Timer position & scale** — choose which corner of the confidence monitor to display the timer (four options), adjust size — or hide the timer on the confidence monitor entirely ("✕") when the feed goes through vMix and the show caller overlays their own timer
 - 🖥 **Three independent windows** — operator (your laptop), confidence monitor (external display), audience (projector)
 - 📄 **File formats** — PDF, PPTX, PPT, ODP, Keynote, PNG/JPG/WebP/GIF/BMP, video MP4/MOV/M4V/WebM
 - 🎬 **Video** — play clips between talks straight from the playlist. Play/pause, seek and audio stay in sync between the operator and the audience; sound goes to the main output only. The header shows the time-code and a large countdown to the end of the clip (orange at 30s, red at 10s). Controls: `Space` play/pause, `←/→` ±5s, `M` mute
 - 🔊 **Audio output selection** — the "Audio output…" button opens a menu to pick which device the video sound goes to: sound card, laptop minijack, HDMI to a vMix machine, NDI, etc. The choice is remembered
 - 📝 **Operator notes → confidence monitor** — type in the operator window, text appears instantly on the speaker's screen. Silent communication channel during the presentation
-- 💬 **Speaker message** — flash a message on the confidence monitor: ready presets ("Wrap up", "Closer to the mic", "Final slide") or your own text, shown large and blinking until you clear it
+- 💬 **Speaker message** — flash a message on the confidence monitor: ready presets ("Wrap up", "Closer to the mic", "Final slide") or your own text, shown large and blinking until you clear it. Right-click a preset to edit its text
 - ⬛ **Blackout / Key Visual** — press `B`: audience sees your Key Visual image (if loaded) or a black screen, video sound is muted too. Switch slides freely — the audience sees nothing
 - ⌨️ **Customizable hotkeys** — the "Keys…" button opens an editor: rebind any action to your liking (e.g. TAKE on `Tab`)
 - 💾 **Projects** — save your configured playlist as `.pdpres`, reopen before the next event
