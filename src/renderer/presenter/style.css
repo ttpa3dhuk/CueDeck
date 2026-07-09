@@ -667,6 +667,12 @@ kbd {
   color: var(--muted);
   text-align: center;
 }
+#donate-note { font-size: 12px; }
+#donate-note a {
+  color: var(--accent);
+  text-decoration: none;
+}
+#donate-note a:hover { text-decoration: underline; }
 
 /* LibreOffice notice in playlist */
 .lo-notice {

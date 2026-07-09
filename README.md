@@ -4,6 +4,7 @@
 [![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-black?logo=apple&logoColor=white)](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D6?logo=windows&logoColor=white)](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
 [![Built with Electron](https://img.shields.io/badge/Electron-33-9feaf9?logo=electron&logoColor=black)](https://electronjs.org)
+[![Donate](https://img.shields.io/badge/%E2%98%95_%D0%9F%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C-CloudTips-ff8c00)](https://pay.cloudtips.ru/p/b79fa042)
 
 **CueDeck — инструмент оператора презентаций на живых мероприятиях.**  
 
@@ -159,6 +160,14 @@ npm run package:win   # сборка .zip для Windows
 
 ---
 
+### ☕ Поддержать проект
+
+CueDeck бесплатен и делается в свободное время. Если он выручил тебя на шоу — можно закинуть на кофе:
+
+**[☕ Поддержать через CloudTips →](https://pay.cloudtips.ru/p/b79fa042)**
+
+---
+
 ## 🇬🇧 English
 
 ### 💡 Why
@@ -303,6 +312,14 @@ Layout is detected automatically based on connected displays. Override via `Cmd+
 - **Operator** — full interface: playlist, slides, timer controls, notes editor
 - **Confidence monitor (speaker)** — current slide + large timer in the chosen corner + operator notes (instant)
 - **Audience** — slide only, no operator UI. During blackout: Key Visual image or black screen
+
+---
+
+### ☕ Support the project
+
+CueDeck is free and built in spare time. If it saved your show, you can buy me a coffee:
+
+**[☕ Donate via CloudTips →](https://pay.cloudtips.ru/p/b79fa042)**
 
 ---
 

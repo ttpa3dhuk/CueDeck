@@ -2,6 +2,7 @@ import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
 import { applySinkId, formatClock, shouldMute, syncVideoElement, videoPosition, videoSrc } from '../shared/video'
+import { DONATE_URL } from '../../preload/api'
 import type {
   AppState,
   DisplayInfo,
@@ -1561,6 +1562,13 @@ function setupOperatorControls(): void {
   $<HTMLButtonElement>('help-btn').addEventListener('click', showHelpModal)
   document.getElementById('help-modal-close')?.addEventListener('click', hideHelpModal)
   window.api.menu.onHelp(() => showHelpModal())
+  if (DONATE_URL) {
+    document.getElementById('donate-note')?.classList.remove('hidden')
+    document.getElementById('donate-link')?.addEventListener('click', (e) => {
+      e.preventDefault()
+      window.api.external.open(DONATE_URL)
+    })
+  }
 
   // Hotkeys editor
   $<HTMLButtonElement>('hotkeys-btn').addEventListener('click', openHotkeysModal)

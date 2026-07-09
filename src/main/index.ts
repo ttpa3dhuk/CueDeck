@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, protocol, sc
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
+import { DONATE_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
@@ -173,6 +174,15 @@ function buildMenu(): void {
           accelerator: 'Shift+/',
           click: () => sendToOperator('menu:help'),
         },
+        ...(DONATE_URL
+          ? ([
+              { type: 'separator' },
+              {
+                label: '☕ Поддержать проект…',
+                click: () => shell.openExternal(DONATE_URL).catch(() => undefined),
+              },
+            ] as Electron.MenuItemConstructorOptions[])
+          : []),
       ],
     },
   ]

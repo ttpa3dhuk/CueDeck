@@ -12,6 +12,8 @@ import type {
   VideoTakeMode,
 } from '../shared/types.js'
 
+export { DONATE_URL } from '../shared/types.js'
+
 export type {
   AppState,
   DeckState,

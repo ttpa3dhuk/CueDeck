@@ -139,6 +139,12 @@ export interface AppState {
 
 export const DEFAULT_SPEAKER_MSG_PRESETS = ['Заканчивайте', 'Ближе к микрофону', 'Финальный слайд']
 
+/**
+ * Donation page URL. Empty string hides every donate entry point
+ * (Help menu item + link in the hotkeys modal).
+ */
+export const DONATE_URL = 'https://pay.cloudtips.ru/p/b79fa042'
+
 export interface DisplayInfo {
   id: number
   label: string
