@@ -71,6 +71,7 @@ const api: PresenterApi = {
   },
   speakerMessage: {
     set: (text) => ipcRenderer.invoke('speaker-message:set', text),
+    setPresets: (presets) => ipcRenderer.invoke('speaker-message:set-presets', presets),
   },
   video: {
     play: () => ipcRenderer.invoke('video:play'),

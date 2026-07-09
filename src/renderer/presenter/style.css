@@ -1306,6 +1306,17 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   border-color: var(--danger);
   color: #fff;
 }
+/* ПКМ-редактирование текста пресета: инпут на месте кнопки */
+.speaker-msg .sm-preset-edit {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  min-width: 0;
+}
 .speaker-msg .sm-send-row {
   display: flex;
   gap: 6px;

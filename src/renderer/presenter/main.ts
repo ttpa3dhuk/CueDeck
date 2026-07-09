@@ -553,7 +553,12 @@ function updateSpeakerMessage(state: AppState): void {
   speakerMessageOverlay.classList.toggle('hidden', !msg)
   if (!isOperator) return
   let presetActive = false
-  document.querySelectorAll<HTMLButtonElement>('button.sm-preset').forEach((btn) => {
+  document.querySelectorAll<HTMLButtonElement>('button.sm-preset').forEach((btn, i) => {
+    const label = state.speakerMsgPresets[i] ?? btn.dataset.msg ?? ''
+    if (btn.dataset.msg !== label) {
+      btn.dataset.msg = label
+      btn.textContent = label
+    }
     const active = msg !== null && btn.dataset.msg === msg
     btn.classList.toggle('active', active)
     if (active) presetActive = true
@@ -1483,12 +1488,16 @@ function setupOperatorControls(): void {
   })
 
   // Speaker flash message: preset click = show (repeat click = снять),
-  // free text via Enter, «Снять» clears.
-  document.querySelectorAll<HTMLButtonElement>('button.sm-preset').forEach((btn) => {
+  // free text via Enter, «Снять» clears. ПКМ по кнопке — изменить её текст.
+  document.querySelectorAll<HTMLButtonElement>('button.sm-preset').forEach((btn, idx) => {
     btn.addEventListener('click', () => {
       const msg = btn.dataset.msg ?? ''
       const active = getState().speakerMessage === msg
       window.api.speakerMessage.set(active ? null : msg)
+    })
+    btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      startPresetEdit(btn, idx)
     })
   })
   smInput!.addEventListener('keydown', (e) => {
@@ -1500,6 +1509,39 @@ function setupOperatorControls(): void {
       smInput!.blur()
     }
   })
+
+  // ПКМ по пресету: кнопка на время превращается в поле ввода.
+  // Enter/клик мимо — сохранить, Esc — отмена; пустой текст не сохраняем.
+  function startPresetEdit(btn: HTMLButtonElement, idx: number): void {
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.className = 'sm-preset-edit'
+    input.value = btn.dataset.msg ?? ''
+    input.maxLength = 60
+    btn.style.display = 'none'
+    btn.after(input)
+    input.focus()
+    input.select()
+    let finished = false
+    const done = (commit: boolean): void => {
+      if (finished) return
+      finished = true
+      const val = input.value.trim()
+      input.remove()
+      btn.style.display = ''
+      if (commit && val && val !== btn.dataset.msg) {
+        const presets = [...getState().speakerMsgPresets]
+        presets[idx] = val
+        void window.api.speakerMessage.setPresets(presets)
+      }
+    }
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') done(true)
+      else if (e.key === 'Escape') done(false)
+    })
+    input.addEventListener('blur', () => done(true))
+  }
   smClear!.addEventListener('click', () => {
     window.api.speakerMessage.set(null)
     if (smInput) smInput.value = ''

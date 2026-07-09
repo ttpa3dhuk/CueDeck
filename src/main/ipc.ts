@@ -11,7 +11,7 @@ import type {
   TimerPosition,
   VideoTakeMode,
 } from './state.js'
-import { store, initialDeckState } from './state.js'
+import { store, initialDeckState, DEFAULT_SPEAKER_MSG_PRESETS } from './state.js'
 import { computePdfSha1, computeStatSha1, loadNotes, notesWriter, sha1FromBuffer, sidecarPathFor } from './notes-store.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
 import {
@@ -44,6 +44,7 @@ import {
   setClickerGlobal,
   getClickerGlobalArrows,
   setClickerGlobalArrows,
+  setSpeakerMsgPresets,
 } from './display-mapping.js'
 import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
@@ -658,6 +659,18 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('speaker-message:set', (_e, text: string | null) => {
     const msg = typeof text === 'string' ? text.trim() : ''
     store.patch({ speakerMessage: msg ? msg : null })
+  })
+
+  // Texts of the three preset buttons are user-editable (ПКМ по кнопке);
+  // holes/empties fall back to the defaults slot by slot.
+  ipcMain.handle('speaker-message:set-presets', (_e, presets: string[]) => {
+    const arr = Array.isArray(presets) ? presets : []
+    const clean = DEFAULT_SPEAKER_MSG_PRESETS.map((def, i) => {
+      const v = typeof arr[i] === 'string' ? arr[i].trim().slice(0, 60) : ''
+      return v || def
+    })
+    store.patch({ speakerMsgPresets: clean })
+    setSpeakerMsgPresets(clean)
   })
 
   // ── Video playback clock ─────────────────────────────────────────────────

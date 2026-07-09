@@ -115,6 +115,8 @@ export interface AppState {
   audioOutputId: string | null
   /** Flash message on the speaker monitor; stays (blinking) until cleared. null = none. */
   speakerMessage: string | null
+  /** User-editable texts of the three speaker-message preset buttons (ПКМ по кнопке). */
+  speakerMsgPresets: string[]
   /** Sound cue on the operator: ticks in the last 10s of a countdown. */
   timerTickEnabled: boolean
   /** Sound cue on the operator: gong when the countdown hits zero / wraps a loop round. */
@@ -134,6 +136,8 @@ export interface AppState {
    */
   clickerGlobalArrows: boolean
 }
+
+export const DEFAULT_SPEAKER_MSG_PRESETS = ['Заканчивайте', 'Ближе к микрофону', 'Финальный слайд']
 
 export interface DisplayInfo {
   id: number

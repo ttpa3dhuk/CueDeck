@@ -2,6 +2,7 @@ import Store from 'electron-store'
 import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
 import type { PlaylistEntry, TimerMode, TimerPosition, VideoTakeMode } from './state.js'
+import { DEFAULT_SPEAKER_MSG_PRESETS } from './state.js'
 
 interface SavedMapping {
   layout: Layout
@@ -31,6 +32,7 @@ interface PersistedShape {
   askLayoutOnStartup: boolean
   clickerGlobal: boolean
   clickerGlobalArrows: boolean
+  speakerMsgPresets: string[]
 }
 
 const STORE_DEFAULTS: PersistedShape = {
@@ -56,6 +58,7 @@ const STORE_DEFAULTS: PersistedShape = {
   askLayoutOnStartup: true,
   clickerGlobal: false,
   clickerGlobalArrows: false,
+  speakerMsgPresets: [...DEFAULT_SPEAKER_MSG_PRESETS],
 }
 
 let _store: Store<PersistedShape> | null = null
@@ -258,6 +261,20 @@ export function getClickerGlobalArrows(): boolean {
 
 export function setClickerGlobalArrows(value: boolean): void {
   store().set('clickerGlobalArrows', value)
+}
+
+/** Always exactly 3 non-empty texts: holes are backfilled with the defaults. */
+export function getSpeakerMsgPresets(): string[] {
+  const raw = store().get('speakerMsgPresets')
+  const arr = Array.isArray(raw) ? raw : []
+  return DEFAULT_SPEAKER_MSG_PRESETS.map((def, i) => {
+    const v = typeof arr[i] === 'string' ? String(arr[i]).trim() : ''
+    return v || def
+  })
+}
+
+export function setSpeakerMsgPresets(presets: string[]): void {
+  store().set('speakerMsgPresets', presets)
 }
 
 export function getAskLayoutOnStartup(): boolean {

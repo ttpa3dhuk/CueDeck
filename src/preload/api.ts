@@ -103,6 +103,8 @@ export interface PresenterApi {
   speakerMessage: {
     /** Show a blinking message on the speaker monitor; null/'' clears it. */
     set(text: string | null): Promise<void>
+    /** Replace the texts of the three preset buttons (user-editable, persisted). */
+    setPresets(presets: string[]): Promise<void>
   }
   video: {
     play(): Promise<void>

@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron'
+import { DEFAULT_SPEAKER_MSG_PRESETS } from '../shared/types.js'
 import type { AppState, DeckState, Role, TimerState, VideoState } from '../shared/types.js'
 
 // Canonical definitions live in src/shared/types.ts (shared with preload/renderer).
@@ -14,6 +15,7 @@ export type {
   VideoState,
   VideoTakeMode,
 } from '../shared/types.js'
+export { DEFAULT_SPEAKER_MSG_PRESETS } from '../shared/types.js'
 
 const DEFAULT_DURATION_MS = 30 * 60 * 1000
 
@@ -62,6 +64,7 @@ export function initialState(): AppState {
     audienceWindowed: false,
     audioOutputId: null,
     speakerMessage: null,
+    speakerMsgPresets: [...DEFAULT_SPEAKER_MSG_PRESETS],
     timerTickEnabled: false,
     timerGongEnabled: false,
     timerLoop: false,

@@ -26,6 +26,7 @@ import {
   getTimerLoop,
   getClickerGlobal,
   getClickerGlobalArrows,
+  getSpeakerMsgPresets,
 } from './display-mapping.js'
 import { store } from './state.js'
 
@@ -270,6 +271,7 @@ app.whenReady().then(async () => {
     timerTickEnabled: getTimerTickEnabled(),
     timerGongEnabled: getTimerGongEnabled(),
     timerLoop: getTimerLoop(),
+    speakerMsgPresets: getSpeakerMsgPresets(),
     // Re-register the global clicker if it was on; reflect actual success
     // (registration fails when another app holds the keys).
     ...(() => {
