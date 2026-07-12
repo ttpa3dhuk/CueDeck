@@ -1,7 +1,17 @@
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
-import { applySinkId, formatClock, shouldMute, syncVideoElement, videoPosition, videoSrc } from '../shared/video'
+import {
+  applySinkId,
+  formatClock,
+  placeSlideOverlay,
+  shouldMute,
+  slideMediaAt,
+  slideVideoSrc,
+  syncVideoElement,
+  videoPosition,
+  videoSrc,
+} from '../shared/video'
 import { DONATE_URL } from '../../preload/api'
 import type {
   AppState,
@@ -92,6 +102,7 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
 const currentCanvas = $<HTMLCanvasElement>('current-canvas')
 const currentImage = $<HTMLImageElement>('current-image')
 const currentVideo = $<HTMLVideoElement>('current-video')
+const mediaOverlay = $<HTMLVideoElement>('media-overlay')
 const videoControls = role === 'operator' ? $('video-controls') : null
 const videoPlayBtn = role === 'operator' ? $<HTMLButtonElement>('video-play') : null
 const videoRestartBtn = role === 'operator' ? $<HTMLButtonElement>('video-restart') : null
@@ -163,6 +174,60 @@ function unloadCurrentVideo(): void {
     currentVideo.load()
   }
   currentVideo.classList.add('hidden')
+}
+
+// ── Слайд-видео из PPTX (2.10) ───────────────────────────────────────────────
+// Ролик извлечён в pptx-cache при импорте; накладываем <video> поверх канваса
+// программы по прямоугольнику плейсхолдера. Управление — общий клок
+// state.video (оператор — авторитет), как у «файл целиком — видео».
+
+let overlaySrc: string | null = null
+let overlaySinkId: string | null | undefined = undefined
+// src, на котором <video> упал (кодек) — не перезаряжать его на каждом тике.
+let overlayFailedSrc: string | null = null
+
+function unloadMediaOverlay(): void {
+  if (mediaOverlay.src) {
+    mediaOverlay.pause()
+    mediaOverlay.removeAttribute('src')
+    mediaOverlay.load()
+  }
+  mediaOverlay.classList.add('hidden')
+  overlaySrc = null
+}
+
+function updateMediaOverlay(state: AppState): void {
+  const m = slideMediaAt(state.fileKind, state.slideMedia, state.currentSlide)
+  if (!m || !state.pdfSha1 || currentCanvas.classList.contains('hidden')) {
+    unloadMediaOverlay()
+    return
+  }
+  const src = slideVideoSrc('program', m.file, state.pdfSha1)
+  if (src === overlayFailedSrc) {
+    unloadMediaOverlay()
+    return
+  }
+  if (overlaySrc !== src) {
+    overlaySrc = src
+    mediaOverlay.src = src
+    mediaOverlay.load()
+  }
+  mediaOverlay.muted = shouldMute(state, role)
+  if (state.audioOutputId !== overlaySinkId) {
+    overlaySinkId = state.audioOutputId
+    applySinkId(mediaOverlay, state.audioOutputId)
+  }
+  placeSlideOverlay(mediaOverlay, currentCanvas, m.rect)
+  mediaOverlay.classList.remove('hidden')
+  syncVideoElement(mediaOverlay, state.video)
+}
+
+/** Есть ли в эфире видео, которым рулит транспорт: файл-видео или слайд-видео. */
+function programHasVideo(state: AppState): boolean {
+  return (
+    state.fileKind === 'video' ||
+    Boolean(slideMediaAt(state.fileKind, state.slideMedia, state.currentSlide))
+  )
 }
 
 async function loadCurrentFile(): Promise<void> {
@@ -247,7 +312,9 @@ async function renderCurrent(): Promise<void> {
 // Reflects the shared video clock into the operator transport bar. Scrub/time
 // also refresh on a tick (see bootstrap) so they advance live during playback.
 function updateVideoUI(state: AppState): void {
-  const isVideo = state.fileKind === 'video'
+  // Транспорт-бар работает и для файла-видео, и для слайд-видео из PPTX —
+  // оба ведёт один клок state.video.
+  const isVideo = programHasVideo(state)
   if (videoControls) videoControls.classList.toggle('hidden', !isVideo)
   if (!isVideo || role !== 'operator') return
 
@@ -1006,6 +1073,8 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
     prevSlide = state.currentSlide
     await renderCurrent()
   }
+
+  updateMediaOverlay(getState())
 }
 
 async function openPdf(): Promise<void> {
@@ -1100,15 +1169,19 @@ function keyLabel(code: string): string {
   return code.replace(/^Key/, '').replace(/^Digit/, '')
 }
 function dispatchHotkey(action: string): void {
-  const isVideo = getState().fileKind === 'video'
+  const state = getState()
+  const isVideo = state.fileKind === 'video'
+  // Слайд-видео из PPTX: Space/M рулят роликом, но стрелки остаются листанием —
+  // спикер кликером идёт дальше, даже если ролик на слайде ещё крутится.
+  const hasVideo = programHasVideo(state)
   switch (action) {
     case 'take': window.api.preview.take(); break
     case 'programNext': isVideo ? window.api.video.seekBy(5) : window.api.nav.next(); break
     case 'programPrev': isVideo ? window.api.video.seekBy(-5) : window.api.nav.prev(); break
     case 'previewNext': window.api.preview.next(); break
     case 'previewPrev': window.api.preview.prev(); break
-    case 'videoPlay': isVideo ? window.api.video.toggle() : window.api.nav.next(); break
-    case 'mute': if (isVideo) window.api.video.toggleMuted(); break
+    case 'videoPlay': hasVideo ? window.api.video.toggle() : window.api.nav.next(); break
+    case 'mute': if (hasVideo) window.api.video.toggleMuted(); break
     case 'timerToggle': toggleTimer(); break
     case 'timerReset': window.api.timer.reset(); break
     case 'blackout': window.api.blackout.toggle(); break
@@ -1454,6 +1527,15 @@ function setupOperatorControls(): void {
     }
   })
   currentVideo.addEventListener('ended', () => {
+    window.api.video.ended()
+  })
+  // То же для слайд-видео из PPTX — клок общий, авторитет тот же.
+  mediaOverlay.addEventListener('loadedmetadata', () => {
+    if (Number.isFinite(mediaOverlay.duration) && mediaOverlay.duration > 0) {
+      window.api.video.setDuration(mediaOverlay.duration)
+    }
+  })
+  mediaOverlay.addEventListener('ended', () => {
     window.api.video.ended()
   })
   $<HTMLButtonElement>('video-error-link').addEventListener('click', () => {
@@ -1906,11 +1988,21 @@ async function bootstrap(): Promise<void> {
     if (role === 'operator') videoError.classList.remove('hidden')
   })
 
+  // Слайд-видео не воспроизвелось (кодек) → прячем оверлей, остаётся постер
+  // из PDF; оператору показываем ту же подсказку про перекодирование.
+  mediaOverlay.addEventListener('error', () => {
+    if (!mediaOverlay.getAttribute('src')) return
+    overlayFailedSrc = overlaySrc
+    unloadMediaOverlay()
+    if (role === 'operator') videoError.classList.remove('hidden')
+  })
+
   const initial = getState()
   applyState(initial)
   if (initial.pdfPath) {
     prevFilePath = initial.pdfPath
     await loadCurrentFile()
+    updateMediaOverlay(getState())
   }
   if (isOperator) {
     updatePreviewUI(initial)
@@ -1931,6 +2023,9 @@ async function bootstrap(): Promise<void> {
       }
       updateVideoHeader(s)
       if (role === 'operator') updateVideoUI(s)
+    } else if (s.fileKind === 'pptx') {
+      updateMediaOverlay(s)
+      if (role === 'operator' && !mediaOverlay.classList.contains('hidden')) updateVideoUI(s)
     }
     if (isOperator) {
       const pv = s.preview
@@ -1946,7 +2041,9 @@ async function bootstrap(): Promise<void> {
     const kind = getState().fileKind
     if (kind !== 'image' && kind !== 'video' && kind !== null) {
       lastRenderedSlide = -1
-      renderCurrent().catch(() => undefined)
+      renderCurrent()
+        .then(() => updateMediaOverlay(getState()))
+        .catch(() => undefined)
     }
     const pk = getState().preview.kind
     if (isOperator && pk !== 'image' && pk !== 'video' && pk !== null) {

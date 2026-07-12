@@ -44,3 +44,14 @@ canvas, .slide-image, .slide-video {
   z-index: 11;
 }
 .hidden { display: none; }
+
+/* Слайд-видео из PPTX (2.10): накладывается поверх канваса по прямоугольнику
+   плейсхолдера; под blackout/keyvisual, чтобы гашение экрана перекрывало ролик. */
+.media-overlay {
+  position: absolute;
+  object-fit: contain;
+  background: #000;
+  z-index: 5;
+  max-width: none;
+  max-height: none;
+}

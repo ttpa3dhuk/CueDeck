@@ -50,9 +50,14 @@ xattr -cr "/Applications/CueDeck.app"
 
 PPTX, PPT, ODP и Keynote **конвертируются в PDF** при открытии через LibreOffice. Это одноразовая операция — результат кешируется, повторно конвертировать не нужно.
 
-> ⚠️ **Важно понимать:**
+**Что при этом живёт (v0.4+):**
+
+- 🎞 **Видео, вшитое в слайд, воспроизводится** — ролик накладывается поверх слайда точно на своём месте, синхронно во всех окнах. Запуск как привыкли спикеры: первый клик «далее» стартует видео, следующий — листает дальше. Кодеки — те же правила, что и для обычных видео (таблица ниже)
+- ✨ **Анимации «по клику» работают** — слайд с построчным появлением текста разворачивается в шаги: каждый клик показывает следующую порцию, «назад» прячет обратно — как в оригинальном PowerPoint. Эффекты появления (вылет, выцветание) упрощаются до мгновенного появления
+
+> ⚠️ **Ограничения:**
 > - Файл конвертируется в PDF — **редактирование слайдов недоступно**
-> - **Анимации и переходы не воспроизводятся** — каждый анимированный шаг фиксируется как отдельный статичный слайд (если LibreOffice его развернул) или теряется
+> - Эффекты исчезновения/выделения, движение по траектории, триггеры и звуки анимаций не воспроизводятся; переходы между слайдами — тоже
 > - Внешний вид слайдов может незначительно отличаться от оригинала — особенно нестандартные шрифты и сложные эффекты
 >
 > CueDeck — инструмент для **показа готовых материалов**, не для редактирования презентаций.
@@ -97,6 +102,8 @@ PDF и картинки работают сразу, без зависимост
 - 📍 **Позиция и масштаб таймера** — выбираешь угол экрана суфлёра (четыре варианта), регулируешь размер — или выключаешь таймер на суфлёре совсем (кнопка «✕»), если суфлёрский сигнал идёт через vMix и режиссёр накладывает свой таймер
 - 🖥 **Три независимых окна** — оператор (твой ноут), суфлёр клиента (Экран на сцену), аудитория (Экран зрителей)
 - 📄 **Форматы** — PDF, PPTX, PPT, ODP, Keynote, PNG/JPG/WebP/GIF/BMP, видео MP4/MOV/M4V/WebM
+- 🎞 **Видео внутри PPTX-слайдов** — вшитый в слайд ролик играет прямо на слайде, на своём месте, синхронно у оператора, суфлёра и зала. Первый клик «далее» запускает видео (спикер стартует ролик сам, как привык), следующий — листает дальше; транспорт и звук — как у обычного видео
+- ✨ **Анимации PowerPoint «по клику»** — построчные появления текста разворачиваются в шаги-страницы: кликер листает их как в оригинальном PowerPoint, «назад» прячет строки обратно
 - 🎬 **Видео** — ролики между выступлениями прямо в плейлисте. Play/pause, перемотка и звук синхронизированы между окном оператора и залом; звук идёт только на основной выход. В шапке — таймкод и крупный обратный отсчёт до конца ролика (оранжевый за 30с, красный за 10с). Управление: `Space` — play/pause, `←/→` — ±5с, `M` — звук
 - 🔊 **Выбор аудиовыхода** — кнопка «Аудиовыход…» открывает меню, где задаёшь, на какое устройство отдавать звук видео: звуковая карта, миниджек ноута, HDMI на vMix-машину, NDI и т.п. Выбор запоминается
 - 📝 **Заметки оператора → суфлёр** — пишешь текст в окне оператора, он мгновенно появляется на экране суфлёра. Прямой канал связи со спикером без слов
@@ -214,9 +221,14 @@ xattr -cr "/Applications/CueDeck.app"
 
 PPTX, PPT, ODP and Keynote files are **converted to PDF** on open via LibreOffice. This is a one-time operation — the result is cached, no re-conversion on subsequent opens.
 
-> ⚠️ **Important limitations:**
+**What survives the conversion (v0.4+):**
+
+- 🎞 **Videos embedded in slides play** — the clip is overlaid on the slide exactly where it belongs, in sync across all windows. Speaker-friendly start: the first "next" click starts the video, the following click moves on. Codec rules are the same as for regular video files (table below)
+- ✨ **On-click animations work** — a slide with line-by-line text builds expands into steps: each click reveals the next portion, "back" hides it again — just like in PowerPoint. Entrance effects (fly-in, fade) are simplified to instant appearance
+
+> ⚠️ **Limitations:**
 > - The file is converted to PDF — **slide editing is not available**
-> - **Animations and transitions are not played** — each animated step is either rendered as a separate static slide (if LibreOffice expanded it) or lost entirely
+> - Exit/emphasis effects, motion paths, triggers and animation sounds are not played; slide transitions aren't either
 > - Slide appearance may differ slightly from the original — especially custom fonts and complex effects
 >
 > CueDeck is a tool for **presenting finished materials**, not editing presentations.
@@ -261,6 +273,8 @@ Note: the file format (**container**) and the **codec** inside it are different 
 - 📍 **Timer position & scale** — choose which corner of the confidence monitor to display the timer (four options), adjust size — or hide the timer on the confidence monitor entirely ("✕") when the feed goes through vMix and the show caller overlays their own timer
 - 🖥 **Three independent windows** — operator (your laptop), confidence monitor (external display), audience (projector)
 - 📄 **File formats** — PDF, PPTX, PPT, ODP, Keynote, PNG/JPG/WebP/GIF/BMP, video MP4/MOV/M4V/WebM
+- 🎞 **Videos inside PPTX slides** — a clip embedded in a slide plays right on the slide, in its exact position, in sync across operator, speaker and audience windows. The first "next" click starts the video (speakers launch clips themselves, as they're used to), the following click moves on; transport and audio work like regular video
+- ✨ **PowerPoint on-click animations** — line-by-line text builds expand into step pages: the clicker walks through them like in the original PowerPoint, "back" hides lines again
 - 🎬 **Video** — play clips between talks straight from the playlist. Play/pause, seek and audio stay in sync between the operator and the audience; sound goes to the main output only. The header shows the time-code and a large countdown to the end of the clip (orange at 30s, red at 10s). Controls: `Space` play/pause, `←/→` ±5s, `M` mute
 - 🔊 **Audio output selection** — the "Audio output…" button opens a menu to pick which device the video sound goes to: sound card, laptop minijack, HDMI to a vMix machine, NDI, etc. The choice is remembered
 - 📝 **Operator notes → confidence monitor** — type in the operator window, text appears instantly on the speaker's screen. Silent communication channel during the presentation

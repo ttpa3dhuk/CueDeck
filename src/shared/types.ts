@@ -56,6 +56,28 @@ export interface VideoState {
   muted: boolean
 }
 
+/** Прямоугольник видео-плейсхолдера на слайде, в долях слайда (0..1). */
+export interface SlideMediaRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/**
+ * Видео, вшитое в слайд PPTX (2.10). При импорте main извлекает ролик в
+ * pptx-cache и описывает его здесь; рендереры накладывают <video> поверх
+ * отрендеренной страницы по rect. Плеером управляет общий клок VideoState —
+ * тот же, что и для «файл целиком — видео».
+ */
+export interface SlideMedia {
+  /** Номер страницы (1-based, совпадает с currentSlide). */
+  slide: number
+  rect: SlideMediaRect
+  /** Имя файла в pptx-cache/<sha1>.media/ (раздаётся через cuedeck-media://). */
+  file: string
+}
+
 export interface PlaylistEntry {
   id: string
   kind: FileKind
@@ -83,6 +105,8 @@ export interface DeckState {
   video: VideoState
   notes: Record<number, string>
   playlistId: string | null
+  /** Видео, вшитые в слайды (только PPTX; пусто для остальных форматов). */
+  slideMedia: SlideMedia[]
 }
 
 export interface AppState {
@@ -95,6 +119,8 @@ export interface AppState {
   preview: DeckState
   blackout: boolean
   video: VideoState
+  /** Видео, вшитые в слайды программного PPTX (см. SlideMedia). */
+  slideMedia: SlideMedia[]
   timer: TimerState
   timerMode: TimerMode
   timerPosition: TimerPosition

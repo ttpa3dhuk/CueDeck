@@ -24,6 +24,8 @@ export type {
   OpenPdfResult,
   PlaylistEntry,
   Role,
+  SlideMedia,
+  SlideMediaRect,
   TimerMode,
   TimerPosition,
   TimerState,

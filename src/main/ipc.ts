@@ -1,5 +1,5 @@
 import { dialog, globalShortcut, ipcMain, screen } from 'electron'
-import { readFile } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { DisplayMap, Layout } from './layout.js'
@@ -7,6 +7,7 @@ import type {
   DeckState,
   FileKind,
   PlaylistEntry,
+  SlideMedia,
   TimerMode,
   TimerPosition,
   VideoTakeMode,
@@ -48,6 +49,7 @@ import {
 } from './display-mapping.js'
 import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
+import { preparePptxMedia } from './pptx-media.js'
 import {
   loadProjectFile,
   PROJECT_EXTENSION,
@@ -118,6 +120,7 @@ interface InspectedFile {
   totalSlides: number
   notes: Record<number, string>
   sha1Mismatch: boolean
+  slideMedia: SlideMedia[]
 }
 
 /** Read a file's identity + page count + sidecar notes. Shared by both decks. */
@@ -127,6 +130,7 @@ async function inspectFile(filePath: string): Promise<InspectedFile> {
 
   let sha1: string
   let totalSlides = 1
+  let slideMedia: SlideMedia[] = []
 
   if (kind === 'pdf') {
     // Single read: compute SHA1 and count pages from the same buffer.
@@ -135,9 +139,17 @@ async function inspectFile(filePath: string): Promise<InspectedFile> {
     totalSlides = countPdfPages(buf)
   } else if (kind === 'pptx') {
     sha1 = await computePdfSha1(filePath)
-    const cachedPath = await convertPptxToPdf(filePath, sha1)
-    const buf = await readFile(cachedPath)
-    totalSlides = countPdfPages(buf)
+    // Вшитые видео (2.10): извлечь ролики + manifest, LibreOffice получает
+    // копию без видеофайлов — иначе он зашивает mp4 внутрь PDF целиком.
+    const prepared = await preparePptxMedia(filePath, sha1)
+    slideMedia = prepared.slideMedia
+    try {
+      const cachedPath = await convertPptxToPdf(prepared.convertSource, sha1)
+      const buf = await readFile(cachedPath)
+      totalSlides = countPdfPages(buf)
+    } finally {
+      if (prepared.temporary) rm(prepared.convertSource, { force: true }).catch(() => undefined)
+    }
   } else if (kind === 'video') {
     // video: don't read the whole (possibly multi-GB) file — id from stat only
     sha1 = await computeStatSha1(filePath)
@@ -147,7 +159,7 @@ async function inspectFile(filePath: string): Promise<InspectedFile> {
   }
 
   const loaded = await loadNotes(filePath, sha1)
-  return { kind, sha1, totalSlides, notes: loaded.notes, sha1Mismatch: loaded.sha1Mismatch }
+  return { kind, sha1, totalSlides, notes: loaded.notes, sha1Mismatch: loaded.sha1Mismatch, slideMedia }
 }
 
 /** Load a file straight to the PROGRAM (audience) feed. */
@@ -173,6 +185,7 @@ async function openFile(
       totalSlides: info.totalSlides,
       currentSlide: 1,
       notes: info.notes,
+      slideMedia: info.slideMedia,
       currentPlaylistId: playlistId,
       // Reset the playback clock for every file load; keep audience-mute preference.
       video: {
@@ -217,6 +230,7 @@ async function loadPreview(
       currentSlide: 1,
       notes: info.notes,
       playlistId: opts.playlistId ?? null,
+      slideMedia: info.slideMedia,
       video: { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: true },
     })
     return {
@@ -232,10 +246,44 @@ async function loadPreview(
   }
 }
 
+/**
+ * Слайд-видео (2.10): уход со слайда/приход на слайд всегда начинает с
+ * остановленного ролика на нулевой позиции. durationSec обнуляем — авторитет
+ * по длительности нового ролика — loadedmetadata у оператора.
+ */
+function resetProgramVideoOnSlideChange(): void {
+  const s = store.get()
+  if (s.fileKind === 'pptx' && s.slideMedia.length > 0) {
+    store.patchVideo({ playing: false, anchorSec: 0, anchorAt: null, durationSec: 0 })
+  }
+}
+
+function resetPreviewVideoOnSlideChange(): void {
+  const p = store.get().preview
+  if (p.kind === 'pptx' && p.slideMedia.length > 0) {
+    store.patchPreviewVideo({ playing: false, anchorSec: 0, anchorAt: null, durationSec: 0 })
+  }
+}
+
 async function programNext(): Promise<void> {
-  const { currentSlide, totalSlides, autoAdvance, playlist, currentPlaylistId } = store.get()
+  const state = store.get()
+  const { currentSlide, totalSlides, autoAdvance, playlist, currentPlaylistId } = state
+
+  // Механика живых шоу (спикер с кликером, DSan MicroCue и т.п.): на слайде
+  // с видео первый «далее» запускает ролик — спикер договорил подводку и сам
+  // стартует видео тем же кликером. Следующий «далее» листает дальше. Ролик,
+  // который уже играл (позиция > 0 или доигран), клик не перезапускает.
+  if (state.fileKind === 'pptx' && !state.video.playing && state.video.anchorSec === 0) {
+    const m = state.slideMedia.find((mm) => mm.slide === currentSlide)
+    if (m) {
+      store.patchVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
+      return
+    }
+  }
+
   if (currentSlide < totalSlides) {
     store.patch({ currentSlide: currentSlide + 1 })
+    resetProgramVideoOnSlideChange()
     return
   }
   if (!autoAdvance || !currentPlaylistId || playlist.length === 0) return
@@ -247,7 +295,10 @@ async function programNext(): Promise<void> {
 
 function programPrev(): void {
   const { currentSlide } = store.get()
-  if (currentSlide > 1) store.patch({ currentSlide: currentSlide - 1 })
+  if (currentSlide > 1) {
+    store.patch({ currentSlide: currentSlide - 1 })
+    resetProgramVideoOnSlideChange()
+  }
 }
 
 function programSeekBy(deltaSec: number): void {
@@ -352,10 +403,12 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('nav:goto', (_e, slide: number) => {
-    const { totalSlides } = store.get()
+    const { totalSlides, currentSlide } = store.get()
     if (totalSlides === 0) return
     const clamped = Math.max(1, Math.min(totalSlides, slide))
+    if (clamped === currentSlide) return
     store.patch({ currentSlide: clamped })
+    resetProgramVideoOnSlideChange()
   })
 
   ipcMain.handle('nav:next', () => programNext())
@@ -429,19 +482,28 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('preview:goto', (_e, slide: number) => {
-    const { totalSlides } = store.get().preview
+    const { totalSlides, currentSlide } = store.get().preview
     if (totalSlides === 0) return
-    store.patchPreview({ currentSlide: Math.max(1, Math.min(totalSlides, slide)) })
+    const clamped = Math.max(1, Math.min(totalSlides, slide))
+    if (clamped === currentSlide) return
+    store.patchPreview({ currentSlide: clamped })
+    resetPreviewVideoOnSlideChange()
   })
 
   ipcMain.handle('preview:next', () => {
     const { currentSlide, totalSlides } = store.get().preview
-    if (currentSlide < totalSlides) store.patchPreview({ currentSlide: currentSlide + 1 })
+    if (currentSlide < totalSlides) {
+      store.patchPreview({ currentSlide: currentSlide + 1 })
+      resetPreviewVideoOnSlideChange()
+    }
   })
 
   ipcMain.handle('preview:prev', () => {
     const { currentSlide } = store.get().preview
-    if (currentSlide > 1) store.patchPreview({ currentSlide: currentSlide - 1 })
+    if (currentSlide > 1) {
+      store.patchPreview({ currentSlide: currentSlide - 1 })
+      resetPreviewVideoOnSlideChange()
+    }
   })
 
   ipcMain.handle('preview:clear', () => {
@@ -458,6 +520,7 @@ export function registerIpcHandlers(): void {
     if (!p.path) return
 
     // New program video: always autoplayed on take; mode only picks start point.
+    // Слайд-видео в PPTX на эфир не автоплеится — оператор запускает вручную.
     let video: import('./state.js').VideoState
     if (p.kind === 'video') {
       const resume = state.videoTakeMode === 'play-resume'
@@ -484,6 +547,7 @@ export function registerIpcHandlers(): void {
       currentSlide: state.currentSlide,
       notes: state.notes,
       playlistId: state.currentPlaylistId,
+      slideMedia: state.slideMedia,
       video:
         state.fileKind === 'video'
           ? { playing: false, anchorSec: oldProgramPos, anchorAt: null, durationSec: state.video.durationSec, muted: true }
@@ -498,6 +562,7 @@ export function registerIpcHandlers(): void {
       currentSlide: p.currentSlide,
       notes: p.notes,
       currentPlaylistId: p.playlistId,
+      slideMedia: p.slideMedia,
       video,
       preview: newPreview,
     })
@@ -970,6 +1035,7 @@ export function registerIpcHandlers(): void {
       totalSlides: 0,
       currentSlide: 1,
       notes: {},
+      slideMedia: [],
       blackout: false,
       preview: initialDeckState(),
       speakerMessage: null,
@@ -1029,6 +1095,7 @@ export function registerIpcHandlers(): void {
           totalSlides: 0,
           currentSlide: 1,
           notes: {},
+          slideMedia: [],
           preview: initialDeckState(),
         })
         persistPlaylist()

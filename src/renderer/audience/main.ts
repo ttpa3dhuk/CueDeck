@@ -1,11 +1,20 @@
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender } from '../shared/pdf-loader'
-import { applySinkId, shouldMute, syncVideoElement, videoSrc } from '../shared/video'
+import {
+  applySinkId,
+  placeSlideOverlay,
+  shouldMute,
+  slideMediaAt,
+  slideVideoSrc,
+  syncVideoElement,
+  videoSrc,
+} from '../shared/video'
 import type { AppState } from '../../preload/api'
 
 const canvas = document.getElementById('slide-canvas') as HTMLCanvasElement
 const slideImage = document.getElementById('slide-image') as HTMLImageElement
 const slideVideo = document.getElementById('slide-video') as HTMLVideoElement
+const mediaOverlay = document.getElementById('media-overlay') as HTMLVideoElement
 const blackout = document.getElementById('blackout') as HTMLDivElement
 const kvImage = document.getElementById('keyvisual') as HTMLImageElement
 
@@ -31,6 +40,51 @@ function unloadVideo(): void {
     slideVideo.load()
   }
   slideVideo.classList.add('hidden')
+}
+
+// ── Слайд-видео из PPTX (2.10) ───────────────────────────────────────────────
+// Ролик извлечён в pptx-cache при импорте; накладываем <video> поверх канваса
+// по прямоугольнику плейсхолдера и ведём его тем же общим клоком state.video.
+
+let overlaySrc: string | null = null
+let overlaySinkId: string | null | undefined = undefined
+// src, на котором <video> упал (кодек) — не перезаряжать его на каждом тике.
+let overlayFailedSrc: string | null = null
+
+function unloadMediaOverlay(): void {
+  if (mediaOverlay.src) {
+    mediaOverlay.pause()
+    mediaOverlay.removeAttribute('src')
+    mediaOverlay.load()
+  }
+  mediaOverlay.classList.add('hidden')
+  overlaySrc = null
+}
+
+function updateMediaOverlay(state: AppState): void {
+  const m = slideMediaAt(state.fileKind, state.slideMedia, state.currentSlide)
+  if (!m || !state.pdfSha1 || canvas.classList.contains('hidden')) {
+    unloadMediaOverlay()
+    return
+  }
+  const src = slideVideoSrc('program', m.file, state.pdfSha1)
+  if (src === overlayFailedSrc) {
+    unloadMediaOverlay()
+    return
+  }
+  if (overlaySrc !== src) {
+    overlaySrc = src
+    mediaOverlay.src = src
+    mediaOverlay.load()
+  }
+  mediaOverlay.muted = shouldMute(state, 'audience')
+  if (state.audioOutputId !== overlaySinkId) {
+    overlaySinkId = state.audioOutputId
+    applySinkId(mediaOverlay, state.audioOutputId)
+  }
+  placeSlideOverlay(mediaOverlay, canvas, m.rect)
+  mediaOverlay.classList.remove('hidden')
+  syncVideoElement(mediaOverlay, state.video)
 }
 
 async function loadFile(): Promise<void> {
@@ -152,6 +206,8 @@ async function applyState(state: AppState): Promise<void> {
   ) {
     await renderSlide()
   }
+
+  updateMediaOverlay(getState())
 }
 
 async function bootstrap(): Promise<void> {
@@ -162,6 +218,12 @@ async function bootstrap(): Promise<void> {
     if (getState().fileKind === 'video' && slideVideo.getAttribute('src')) {
       slideVideo.classList.add('hidden')
     }
+  })
+  // Слайд-видео не воспроизвелось → зал остаётся с постером из PDF.
+  mediaOverlay.addEventListener('error', () => {
+    if (!mediaOverlay.getAttribute('src')) return
+    overlayFailedSrc = overlaySrc
+    unloadMediaOverlay()
   })
 
   subscribe((state) => {
@@ -174,6 +236,7 @@ async function bootstrap(): Promise<void> {
   if (initial.pdfPath) {
     lastFilePath = initial.pdfPath
     await loadFile()
+    updateMediaOverlay(getState())
   }
 
   // Periodically nudge the video back onto the shared clock — guards against
@@ -184,13 +247,16 @@ async function bootstrap(): Promise<void> {
       slideVideo.muted = shouldMute(s, 'audience')
       syncVideoElement(slideVideo, s.video)
     }
+    if (s.fileKind === 'pptx') updateMediaOverlay(s)
   }, 500)
 
   window.addEventListener('resize', () => {
     const kind = getState().fileKind
     if (kind === 'image' || kind === 'video' || kind === null) return
     lastRenderedSlide = -1
-    renderSlide().catch(() => undefined)
+    renderSlide()
+      .then(() => updateMediaOverlay(getState()))
+      .catch(() => undefined)
   })
 }
 

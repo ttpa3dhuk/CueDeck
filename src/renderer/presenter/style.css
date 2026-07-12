@@ -832,6 +832,16 @@ body[data-role="speaker"] .playlist { display: none !important; }
   width: 100%;
   height: 100%;
 }
+/* Слайд-видео из PPTX (2.10): absolute поверх канваса по прямоугольнику
+   плейсхолдера; под бейджем деска (z-index 7) и системными оверлеями. */
+.current-slide .media-overlay {
+  position: absolute;
+  object-fit: contain;
+  background: #000;
+  z-index: 2;
+  max-width: none;
+  max-height: none;
+}
 
 /* ── Preview pane (operator off-air staging) ───────────────────────────── */
 .preview-slide {

@@ -1,12 +1,14 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { DONATE_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
 import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf, applyClickerShortcuts } from './ipc.js'
+import { mediaDirFor } from './pptx-media.js'
 import {
   getSavedMapping,
   saveMapping,
@@ -45,16 +47,39 @@ protocol.registerSchemesAsPrivileged([
 
 /**
  * Serves an open video file with HTTP Range support so the <video> element can
- * seek. The URL path selects which deck (`/program` = audience feed, `/preview`
- * = operator staging); only those two open videos are ever exposed, so renderers
+ * seek. URL paths:
+ *   /program | /preview                — the deck's open video file;
+ *   /slide/<deck>/<file>               — ролик, извлечённый из PPTX этого деска
+ *                                        (pptx-cache/<sha1>.media/<file>).
+ * Only files belonging to the two open decks are ever exposed, so renderers
  * can't read arbitrary files.
  */
 async function handleMediaRequest(request: Request): Promise<Response> {
   const state = store.get()
-  const deck = new URL(request.url).pathname.replace(/^\//, '') // 'program' | 'preview'
-  const filePath = deck === 'preview' ? state.preview.path : state.pdfPath
-  const kind = deck === 'preview' ? state.preview.kind : state.fileKind
-  if (!filePath || kind !== 'video') return new Response(null, { status: 404 })
+  const segments = new URL(request.url).pathname.split('/').filter(Boolean)
+
+  let filePath: string | null = null
+  if (segments[0] === 'slide') {
+    // Слайд-видео из PPTX: имя файла строго из manifest'а активного деска.
+    const deck = segments[1]
+    const file = decodeURIComponent(segments[2] ?? '')
+    const d = deck === 'preview' ? state.preview : { kind: state.fileKind, sha1: state.pdfSha1, slideMedia: state.slideMedia }
+    if (
+      d.kind === 'pptx' &&
+      d.sha1 &&
+      d.slideMedia.some((m) => m.file === file) &&
+      !file.includes('/') &&
+      !file.includes('..')
+    ) {
+      filePath = join(mediaDirFor(d.sha1), file)
+    }
+  } else {
+    const deck = segments[0] // 'program' | 'preview'
+    const path = deck === 'preview' ? state.preview.path : state.pdfPath
+    const kind = deck === 'preview' ? state.preview.kind : state.fileKind
+    if (path && kind === 'video') filePath = path
+  }
+  if (!filePath) return new Response(null, { status: 404 })
 
   let size: number
   try {

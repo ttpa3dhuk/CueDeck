@@ -9,6 +9,8 @@ export type {
   DeckState,
   FileKind,
   PlaylistEntry,
+  SlideMedia,
+  SlideMediaRect,
   TimerMode,
   TimerPosition,
   TimerState,
@@ -33,6 +35,7 @@ export function initialDeckState(): DeckState {
     video: initialVideoState(),
     notes: {},
     playlistId: null,
+    slideMedia: [],
   }
 }
 
@@ -46,6 +49,7 @@ export function initialState(): AppState {
     preview: initialDeckState(),
     blackout: false,
     video: initialVideoState(),
+    slideMedia: [],
     timer: { durationMs: DEFAULT_DURATION_MS, startedAt: null, elapsedMs: 0, running: false, cycles: 0 },
     timerMode: 'countdown',
     timerPosition: 'top-right',

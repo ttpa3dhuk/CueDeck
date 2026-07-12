@@ -1,4 +1,4 @@
-import type { AppState, Layout, Role, VideoState } from '../../preload/api'
+import type { AppState, FileKind, Layout, Role, SlideMedia, SlideMediaRect, VideoState } from '../../preload/api'
 
 export const MEDIA_SCHEME = 'cuedeck-media'
 
@@ -12,6 +12,40 @@ export type MediaDeck = 'program' | 'preview'
  */
 export function videoSrc(sha1: string, deck: MediaDeck = 'program'): string {
   return `${MEDIA_SCHEME}://stream/${deck}?v=${encodeURIComponent(sha1)}`
+}
+
+/** URL ролика, извлечённого из PPTX данного деска (слайд-видео, 2.10). */
+export function slideVideoSrc(deck: MediaDeck, file: string, sha1: string): string {
+  return `${MEDIA_SCHEME}://stream/slide/${deck}/${encodeURIComponent(file)}?v=${encodeURIComponent(sha1)}`
+}
+
+/** Видео на данном слайде PPTX-деска; undefined для остальных форматов. */
+export function slideMediaAt(
+  kind: FileKind | null,
+  slideMedia: SlideMedia[],
+  slide: number,
+): SlideMedia | undefined {
+  if (kind !== 'pptx') return undefined
+  return slideMedia.find((m) => m.slide === slide)
+}
+
+/**
+ * Позиционирует оверлей поверх отрендеренного слайда: rect задан в долях
+ * слайда, канвас — референс его экранного положения. Оверлей должен быть
+ * absolutely positioned в том же offset-контейнере, что и канвас.
+ */
+export function placeSlideOverlay(
+  el: HTMLElement,
+  canvas: HTMLElement,
+  rect: SlideMediaRect,
+): void {
+  const w = canvas.clientWidth
+  const h = canvas.clientHeight
+  if (w <= 0 || h <= 0) return
+  el.style.left = `${canvas.offsetLeft + rect.x * w}px`
+  el.style.top = `${canvas.offsetTop + rect.y * h}px`
+  el.style.width = `${rect.w * w}px`
+  el.style.height = `${rect.h * h}px`
 }
 
 /** Position (seconds) the shared logical clock currently points at. */
