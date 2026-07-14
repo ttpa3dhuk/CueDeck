@@ -41,6 +41,7 @@ const api: PresenterApi = {
     clear: () => ipcRenderer.invoke('preview:clear'),
     take: () => ipcRenderer.invoke('preview:take'),
     setVideoTakeMode: (mode) => ipcRenderer.invoke('preview:set-video-take-mode', mode),
+    setSlideTakeMode: (mode) => ipcRenderer.invoke('preview:set-slide-take-mode', mode),
     video: {
       toggle: () => ipcRenderer.invoke('preview:video:toggle'),
       seek: (sec) => ipcRenderer.invoke('preview:video:seek', sec),

@@ -28,6 +28,7 @@ import {
   setTimerPosition,
   setTimerScale,
   setVideoTakeMode,
+  setSlideTakeMode,
   setNotesFontSize,
   setPlaylist,
   setCurrentPlaylistId,
@@ -283,6 +284,18 @@ async function programNext(): Promise<void> {
     }
   }
 
+  // Файл-видео в эфире (Б-2): та же механика, что и у слайд-видео выше —
+  // неигравший ролик (позиция 0, после автоперехода плейлиста) первый клик
+  // «далее» запускает; играющий/отмотанный — прежняя перемотка +5с кликера.
+  if (state.fileKind === 'video') {
+    if (!state.video.playing && store.videoPositionSec() < 0.5) {
+      store.patchVideo({ playing: true, anchorAt: Date.now() })
+    } else {
+      programSeekBy(5)
+    }
+    return
+  }
+
   if (currentSlide < totalSlides) {
     store.patch({ currentSlide: currentSlide + 1 })
     resetProgramVideoOnSlideChange()
@@ -296,9 +309,13 @@ async function programNext(): Promise<void> {
 }
 
 function programPrev(): void {
-  const { currentSlide } = store.get()
-  if (currentSlide > 1) {
-    store.patch({ currentSlide: currentSlide - 1 })
+  const state = store.get()
+  if (state.fileKind === 'video') {
+    programSeekBy(-5)
+    return
+  }
+  if (state.currentSlide > 1) {
+    store.patch({ currentSlide: state.currentSlide - 1 })
     resetProgramVideoOnSlideChange()
   }
 }
@@ -333,14 +350,10 @@ export function applyClickerShortcuts(
   for (const key of ['PageDown', 'PageUp', 'Right', 'Left']) globalShortcut.unregister(key)
   if (!global) return { global: false, arrows: false }
 
-  const forward = (): void => {
-    if (store.get().fileKind === 'video') programSeekBy(5)
-    else void programNext()
-  }
-  const back = (): void => {
-    if (store.get().fileKind === 'video') programSeekBy(-5)
-    else programPrev()
-  }
+  // Видео-логику (свежий ролик → play, играющий → ±5с) решает сам
+  // programNext/programPrev — единая точка для кликера, клавиш и кнопок.
+  const forward = (): void => void programNext()
+  const back = (): void => programPrev()
 
   const okPages = globalShortcut.register('PageDown', forward) && globalShortcut.register('PageUp', back)
   if (!okPages) {
@@ -556,12 +569,19 @@ export function registerIpcHandlers(): void {
           : { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: true },
     }
 
+    // Слайдовые деки (Б-3): по режиму — с первого слайда (дефолт, оператор мог
+    // полистать превью и забыть вернуть) или с текущего слайда превью.
+    const takeSlide =
+      (p.kind === 'pdf' || p.kind === 'pptx') && state.slideTakeMode === 'from-start'
+        ? 1
+        : p.currentSlide
+
     store.patch({
       pdfPath: p.path,
       pdfSha1: p.sha1,
       fileKind: p.kind,
       totalSlides: p.totalSlides,
-      currentSlide: p.currentSlide,
+      currentSlide: takeSlide,
       notes: p.notes,
       currentPlaylistId: p.playlistId,
       slideMedia: p.slideMedia,
@@ -587,6 +607,12 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('preview:set-video-take-mode', (_e, mode: VideoTakeMode) => {
     store.patch({ videoTakeMode: mode })
     setVideoTakeMode(mode)
+  })
+
+  ipcMain.handle('preview:set-slide-take-mode', (_e, mode: string) => {
+    const v = mode === 'from-current' ? 'from-current' : 'from-start'
+    store.patch({ slideTakeMode: v })
+    setSlideTakeMode(v)
   })
 
   // Preview video transport — mirrors the program clock helpers on preview.video.

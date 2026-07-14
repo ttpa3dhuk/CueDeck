@@ -8,6 +8,7 @@ import type {
   MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
+  SlideTakeMode,
   TimerMode,
   TimerPosition,
   UiTheme,
@@ -29,6 +30,7 @@ export type {
   Role,
   SlideMedia,
   SlideMediaRect,
+  SlideTakeMode,
   TimerMode,
   TimerPosition,
   TimerState,
@@ -77,6 +79,8 @@ export interface PresenterApi {
     clear(): Promise<void>
     take(): Promise<void>
     setVideoTakeMode(mode: VideoTakeMode): Promise<void>
+    /** С какого слайда TAKE выдаёт презентацию: с первого или с текущего в превью (Б-3). */
+    setSlideTakeMode(mode: SlideTakeMode): Promise<void>
     video: {
       toggle(): Promise<void>
       seek(sec: number): Promise<void>

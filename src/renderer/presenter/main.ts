@@ -20,6 +20,7 @@ import type {
   Layout,
   PlaylistEntry,
   Role,
+  SlideTakeMode,
   TimerMode,
   TimerPosition,
   VideoTakeMode,
@@ -139,6 +140,7 @@ const previewNextBtn = isOperator ? $<HTMLButtonElement>('preview-next') : null
 const previewCounter = isOperator ? $('preview-counter') : null
 const takeBtn = isOperator ? $<HTMLButtonElement>('take-btn') : null
 const videoTakeModeSelect = isOperator ? $<HTMLSelectElement>('video-take-mode') : null
+const slideTakeModeSelect = isOperator ? $<HTMLSelectElement>('slide-take-mode') : null
 
 // ── Мониторы выходов + тема оператора ─────────────────────────────────────
 const outputMonitors = isOperator ? $('output-monitors') : null
@@ -471,6 +473,12 @@ function updatePreviewUI(state: AppState): void {
   if (videoTakeModeSelect && document.activeElement !== videoTakeModeSelect && videoTakeModeSelect.value !== state.videoTakeMode) {
     videoTakeModeSelect.value = state.videoTakeMode
   }
+  // Плашка «с первого / с этого слайда» (Б-3) — только для слайдовых дек
+  const isSlides = p.kind === 'pdf' || p.kind === 'pptx'
+  slideTakeModeSelect?.classList.toggle('hidden', !isSlides)
+  if (slideTakeModeSelect && document.activeElement !== slideTakeModeSelect && slideTakeModeSelect.value !== state.slideTakeMode) {
+    slideTakeModeSelect.value = state.slideTakeMode
+  }
   if (isVideo) {
     const v = p.video
     if (previewVideoPlay) previewVideoPlay.textContent = v.playing ? '⏸' : '▶'
@@ -607,7 +615,18 @@ function updateNextSpeaker(state: AppState): void {
   const idx = state.currentPlaylistId
     ? state.playlist.findIndex((e) => e.id === state.currentPlaylistId)
     : -1
-  const next = idx >= 0 && idx < state.playlist.length - 1 ? state.playlist[idx + 1] : undefined
+  // Б-4: превью правдивее порядка плейлиста — оператор мог зарядить другое.
+  // Но после TAKE в превью swap'ом возвращается ПРОШЛЫЙ спикер (раньше текущего
+  // по списку) — его как «Далее» не показываем, берём фолбэк по порядку.
+  const stagedIdx = state.preview.playlistId
+    ? state.playlist.findIndex((e) => e.id === state.preview.playlistId)
+    : -1
+  const staged =
+    stagedIdx >= 0 && stagedIdx !== idx && (idx < 0 || stagedIdx > idx)
+      ? state.playlist[stagedIdx]
+      : undefined
+  const next =
+    staged ?? (idx >= 0 && idx < state.playlist.length - 1 ? state.playlist[idx + 1] : undefined)
   if (next) {
     nextSpeakerEl.textContent = `Далее: ${next.speakerName || next.displayName || next.fileName}`
     nextSpeakerEl.classList.remove('hidden')
@@ -755,6 +774,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
     e.stopPropagation()
     startRename(li, fresh())
   })
+  renameBtn.addEventListener('dblclick', (e) => e.stopPropagation())
 
   const removeBtn = document.createElement('button')
   removeBtn.className = 'remove'
@@ -764,16 +784,22 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
     e.stopPropagation()
     window.api.playlist.remove(entry.id)
   })
+  removeBtn.addEventListener('dblclick', (e) => e.stopPropagation())
 
   row1.append(handle, kindBadge, name, renameBtn, removeBtn)
 
   const speakerInput = document.createElement('input')
   speakerInput.type = 'text'
   speakerInput.className = 'speaker-name'
-  speakerInput.placeholder = 'Имя спикера'
+  // Поле свободное: имя спикера, пометка «после обеда» — что угодно (Б-6).
+  // Текст попадает в «Далее: …» на суфлёре, если запись следующая.
+  speakerInput.placeholder = 'Комментарий'
+  speakerInput.title = 'Любая пометка: имя спикера, примечание. Показывается в «Далее: …», когда запись следующая'
   speakerInput.value = entry.speakerName
   speakerInput.addEventListener('click', (e) => e.stopPropagation())
   speakerInput.addEventListener('mousedown', (e) => e.stopPropagation())
+  // Б-1: dblclick с полей карточки всплывал до li → «сразу в эфир»
+  speakerInput.addEventListener('dblclick', (e) => e.stopPropagation())
   let speakerDebounce: number | null = null
   speakerInput.addEventListener('input', () => {
     if (speakerDebounce) window.clearTimeout(speakerDebounce)
@@ -794,6 +820,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   durInput.value = String(Math.round(entry.durationMs / 60000))
   durInput.addEventListener('click', (e) => e.stopPropagation())
   durInput.addEventListener('mousedown', (e) => e.stopPropagation())
+  durInput.addEventListener('dblclick', (e) => e.stopPropagation())
   let durDebounce: number | null = null
   durInput.addEventListener('input', () => {
     if (durDebounce) window.clearTimeout(durDebounce)
@@ -1212,14 +1239,14 @@ function keyLabel(code: string): string {
 }
 function dispatchHotkey(action: string): void {
   const state = getState()
-  const isVideo = state.fileKind === 'video'
   // Слайд-видео из PPTX: Space/M рулят роликом, но стрелки остаются листанием —
   // спикер кликером идёт дальше, даже если ролик на слайде ещё крутится.
   const hasVideo = programHasVideo(state)
   switch (action) {
     case 'take': window.api.preview.take(); break
-    case 'programNext': isVideo ? window.api.video.seekBy(5) : window.api.nav.next(); break
-    case 'programPrev': isVideo ? window.api.video.seekBy(-5) : window.api.nav.prev(); break
+    // Видео-логика (свежий ролик → play, играющий → ±5с) — в main (programNext/Prev)
+    case 'programNext': window.api.nav.next(); break
+    case 'programPrev': window.api.nav.prev(); break
     case 'previewNext': window.api.preview.next(); break
     case 'previewPrev': window.api.preview.prev(); break
     case 'videoPlay': hasVideo ? window.api.video.toggle() : window.api.nav.next(); break
@@ -1298,17 +1325,14 @@ function setupKeyboard(): void {
     // Logitech R400 и т.п.), Enter (легаси-Take) и комбинации с модификаторами.
     // Дублировать коды дефолтов карты здесь нельзя: иначе переназначенная
     // клавиша продолжит срабатывать по-старому.
-    const isVideo = getState().fileKind === 'video'
     switch (e.code) {
       case 'PageDown':
         e.preventDefault()
-        if (isVideo) window.api.video.seekBy(5)
-        else window.api.nav.next()
+        window.api.nav.next()
         break
       case 'PageUp':
         e.preventDefault()
-        if (isVideo) window.api.video.seekBy(-5)
-        else window.api.nav.prev()
+        window.api.nav.prev()
         break
       case 'Period':
         e.preventDefault()
@@ -1408,9 +1432,8 @@ function wireGotoInput(input: HTMLInputElement, goto: (slide: number) => void): 
 
 function setupOperatorControls(): void {
   if (role !== 'operator') return
-  $('nav-prev').addEventListener('click', () => window.api.nav.prev())
-  $('nav-next').addEventListener('click', () => window.api.nav.next())
-  wireGotoInput($<HTMLInputElement>('goto-input'), (n) => window.api.nav.goto(n))
+  // Prev/№/Next из футера убраны (Б-5): эфиром рулят кликер и клавиши,
+  // точечный переход по номеру остался в навигации превью.
   wireGotoInput($<HTMLInputElement>('preview-goto-input'), (n) => window.api.preview.goto(n))
   timerToggle.addEventListener('click', toggleTimer)
   timerReset.addEventListener('click', () => window.api.timer.reset())
@@ -1589,6 +1612,10 @@ function setupOperatorControls(): void {
 
   // ── Preview deck controls ────────────────────────────────────────────────
   takeBtn!.addEventListener('click', () => window.api.preview.take())
+  slideTakeModeSelect!.addEventListener('change', () => {
+    window.api.preview.setSlideTakeMode(slideTakeModeSelect!.value as SlideTakeMode)
+    slideTakeModeSelect!.blur()
+  })
   videoTakeModeSelect!.addEventListener('change', () => {
     window.api.preview.setVideoTakeMode(videoTakeModeSelect!.value as VideoTakeMode)
   })

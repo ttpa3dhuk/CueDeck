@@ -182,6 +182,10 @@
               <option value="play-start">▶ играть с начала</option>
               <option value="play-resume">▶ играть с этой точки</option>
             </select>
+            <select id="slide-take-mode" class="video-take-mode hidden" title="С какого слайда выдавать презентацию в эфир">
+              <option value="from-start">▶ с первого слайда</option>
+              <option value="from-current">▶ с этого слайда</option>
+            </select>
             <button id="take-btn" class="take-btn" title="Выдать превью в эфир (Enter)" disabled>TAKE ▶</button>
           </div>
           <canvas id="preview-canvas" class="hidden"></canvas>
@@ -268,11 +272,6 @@
       <footer class="bottombar op-only">
         <div class="bottombar-left">
           <button id="hotkeys-btn" title="Настроить горячие клавиши">⌨ Клавиши…</button>
-        </div>
-        <div class="bottombar-nav">
-          <button id="nav-prev" title="← / PgUp">◀ Prev</button>
-          <input id="goto-input" class="goto-input" type="number" min="1" placeholder="№" title="Перейти к слайду в эфире: номер + Enter" />
-          <button id="nav-next" title="→ / Space / PgDn">Next ▶</button>
         </div>
         <div class="bottombar-right">
           <button id="theme-toggle" title="Переключить тему оператора">☀️ Светлая</button>

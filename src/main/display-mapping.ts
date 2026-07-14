@@ -1,7 +1,7 @@
 import Store from 'electron-store'
 import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
-import type { PlaylistEntry, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
+import type { PlaylistEntry, SlideTakeMode, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
 import { DEFAULT_SPEAKER_MSG_PRESETS } from './state.js'
 
 interface SavedMapping {
@@ -17,6 +17,7 @@ interface PersistedShape {
   timerPosition: TimerPosition
   timerScale: number
   videoTakeMode: VideoTakeMode
+  slideTakeMode: SlideTakeMode
   notesFontSize: number
   playlist: PlaylistEntry[]
   currentPlaylistId: string | null
@@ -45,6 +46,7 @@ const STORE_DEFAULTS: PersistedShape = {
   timerPosition: 'top-right',
   timerScale: 1,
   videoTakeMode: 'play-start',
+  slideTakeMode: 'from-start',
   notesFontSize: 18,
   playlist: [],
   currentPlaylistId: null,
@@ -141,6 +143,14 @@ export function getVideoTakeMode(): VideoTakeMode {
 
 export function setVideoTakeMode(mode: VideoTakeMode): void {
   store().set('videoTakeMode', mode)
+}
+
+export function getSlideTakeMode(): SlideTakeMode {
+  return store().get('slideTakeMode') === 'from-current' ? 'from-current' : 'from-start'
+}
+
+export function setSlideTakeMode(mode: SlideTakeMode): void {
+  store().set('slideTakeMode', mode)
 }
 
 export function getNotesFontSize(): number {

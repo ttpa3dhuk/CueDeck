@@ -47,6 +47,13 @@ export type MonitorRole = 'speaker' | 'audience'
 export type VideoTakeMode = 'play-start' | 'play-resume'
 
 /**
+ * С какого слайда презентация уходит в эфир по TAKE: с первого или с того,
+ * на котором оператор остановился в превью. Дефолт «с первого» — оператор
+ * мог полистать превью и забыть вернуть на начало (Б-3).
+ */
+export type SlideTakeMode = 'from-start' | 'from-current'
+
+/**
  * Logical playback clock shared across all windows (like TimerState).
  * Current position is derived, never stored as a moving value:
  *   playing && anchorAt → anchorSec + (now - anchorAt) / 1000
@@ -132,6 +139,7 @@ export interface AppState {
   timerPosition: TimerPosition
   timerScale: number
   videoTakeMode: VideoTakeMode
+  slideTakeMode: SlideTakeMode
   notesFontSize: number
   notes: Record<number, string>
   layout: Layout

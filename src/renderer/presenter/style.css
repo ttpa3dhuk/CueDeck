@@ -672,6 +672,15 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   width: 48px;
   text-align: right;
   font-family: inherit;
+  /* Б-1: без стрелок-спиннеров — быстрые клики по ним читались как dblclick
+     карточки («сразу в эфир»); значение вписывается руками */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.playlist-item input.duration::-webkit-outer-spin-button,
+.playlist-item input.duration::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 /* Help modal */
@@ -1183,11 +1192,6 @@ body[data-role="operator"] #current-slide {
   justify-self: start;
   display: flex;
   gap: 6px;
-}
-.bottombar-nav {
-  display: flex;
-  gap: 8px;
-  justify-self: center;
 }
 .bottombar-right {
   justify-self: end;
