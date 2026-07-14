@@ -1977,55 +1977,87 @@ function buildOperatorBottomBar(): void {
   bottom.append(timerBox, notes, $('speaker-msg-box'), takeBtn)
 }
 
-// Сплиттер суфлёра (Б-8): граница между слайдом и колонкой «Дальше/Заметки»
-// таскается мышью (курсор дотягивается на экран суфлёра как на обычный
-// extended-дисплей); ширина колонки в % персистится в localStorage.
-function setupSpeakerSplitter(): void {
+// Сплиттеры суфлёра (Б-8): вертикальный — ширина колонки «Дальше/Заметки»,
+// горизонтальный — дележ высоты между «Дальше» и «Заметками». Таскаются мышью
+// (курсор дотягивается на экран суфлёра как на обычный extended-дисплей),
+// проценты персистятся в localStorage, после перетаскивания — чёткий ререндер.
+function setupSpeakerSplitters(): void {
   const sidebar = document.querySelector<HTMLElement>('.sidebar')
-  if (!sidebar) return
-  const MIN_PCT = 18
-  const MAX_PCT = 60
-  const apply = (pct: number): void =>
-    document.documentElement.style.setProperty('--speaker-sidebar', `${pct}%`)
-  try {
-    const saved = Number(localStorage.getItem('cuedeck.speakerSideW'))
-    if (saved >= MIN_PCT && saved <= MAX_PCT) apply(saved)
-  } catch { /* localStorage unavailable — ignore */ }
+  const notes = sidebar?.querySelector<HTMLElement>('.notes')
+  if (!sidebar || !notes) return
 
-  const handle = document.createElement('div')
-  handle.className = 'speaker-splitter'
-  handle.title = 'Ширина колонки «Дальше / Заметки»'
-  sidebar.appendChild(handle)
-
-  let dragging = false
-  const onMove = (e: MouseEvent): void => {
-    if (!dragging) return
-    const pct = ((window.innerWidth - e.clientX) / window.innerWidth) * 100
-    apply(Math.round(Math.max(MIN_PCT, Math.min(MAX_PCT, pct)) * 10) / 10)
-  }
-  const onUp = (): void => {
-    if (!dragging) return
-    dragging = false
-    document.removeEventListener('mousemove', onMove)
-    document.removeEventListener('mouseup', onUp)
-    document.body.style.userSelect = ''
-    const pct = parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue('--speaker-sidebar'),
-    )
+  const setVar = (name: string, pct: number): void =>
+    document.documentElement.style.setProperty(name, `${pct}%`)
+  const restore = (key: string, name: string, min: number, max: number): void => {
     try {
-      if (pct >= MIN_PCT) localStorage.setItem('cuedeck.speakerSideW', String(pct))
-    } catch { /* ignore */ }
-    // Ширина слайда изменилась — перерисовать текущий и «Дальше» чётко
-    lastRenderedSlide = -1
-    renderCurrent().catch(() => undefined)
+      const saved = Number(localStorage.getItem(key))
+      if (saved >= min && saved <= max) setVar(name, saved)
+    } catch { /* localStorage unavailable — ignore */ }
   }
-  handle.addEventListener('mousedown', (e) => {
-    dragging = true
-    document.body.style.userSelect = 'none'
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-    e.preventDefault()
-  })
+  const persist = (key: string, pct: number): void => {
+    try {
+      if (Number.isFinite(pct)) localStorage.setItem(key, String(pct))
+    } catch { /* ignore */ }
+  }
+  const wireDrag = (handle: HTMLElement, onMove: (e: MouseEvent) => void, onDone: () => void): void => {
+    let dragging = false
+    const move = (e: MouseEvent): void => {
+      if (dragging) onMove(e)
+    }
+    const up = (): void => {
+      if (!dragging) return
+      dragging = false
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+      document.body.style.userSelect = ''
+      onDone()
+      // Размеры слайда/«Дальше» изменились — перерисовать чётко
+      lastRenderedSlide = -1
+      renderCurrent().catch(() => undefined)
+    }
+    handle.addEventListener('mousedown', (e) => {
+      dragging = true
+      document.body.style.userSelect = 'none'
+      document.addEventListener('mousemove', move)
+      document.addEventListener('mouseup', up)
+      e.preventDefault()
+    })
+  }
+  const clampPct = (pct: number, min: number, max: number): number =>
+    Math.round(Math.max(min, Math.min(max, pct)) * 10) / 10
+
+  // Вертикальная граница: ширина всей колонки (18–60% окна)
+  restore('cuedeck.speakerSideW', '--speaker-sidebar', 18, 60)
+  const vHandle = document.createElement('div')
+  vHandle.className = 'speaker-splitter'
+  vHandle.title = 'Ширина колонки «Дальше / Заметки»'
+  sidebar.appendChild(vHandle)
+  let sideW = NaN
+  wireDrag(
+    vHandle,
+    (e) => {
+      sideW = clampPct(((window.innerWidth - e.clientX) / window.innerWidth) * 100, 18, 60)
+      setVar('--speaker-sidebar', sideW)
+    },
+    () => persist('cuedeck.speakerSideW', sideW),
+  )
+
+  // Горизонтальная граница: высота «Дальше» против «Заметок» (15–85% колонки)
+  restore('cuedeck.speakerNextH', '--speaker-next-h', 15, 85)
+  const hHandle = document.createElement('div')
+  hHandle.className = 'speaker-hsplitter'
+  hHandle.title = 'Высота «Дальше» / «Заметки»'
+  notes.appendChild(hHandle)
+  let nextH = NaN
+  wireDrag(
+    hHandle,
+    (e) => {
+      const r = sidebar.getBoundingClientRect()
+      nextH = clampPct(((e.clientY - r.top) / r.height) * 100, 15, 85)
+      setVar('--speaker-next-h', nextH)
+    },
+    () => persist('cuedeck.speakerNextH', nextH),
+  )
 }
 
 // Draggable splitter for the bottom bar height (persisted per-window in localStorage).
@@ -2083,7 +2115,7 @@ async function bootstrap(): Promise<void> {
   setupOperatorControls()
   setupKeyboard()
   setupFileDrop()
-  if (role === 'speaker') setupSpeakerSplitter()
+  if (role === 'speaker') setupSpeakerSplitters()
   if (isOperator) {
     buildOperatorBottomBar()
     setupBottomBarResize()
