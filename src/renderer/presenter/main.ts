@@ -1184,7 +1184,7 @@ function showBanner(text: string, ms: number = 4000): void {
 // Shift/Ctrl+digits) stay handled by the switch below and are NOT remappable.
 interface HotkeyAction { id: string; label: string; def: string }
 const HOTKEY_ACTIONS: HotkeyAction[] = [
-  { id: 'take', label: 'TAKE (превью → эфир)', def: 'Tab' },
+  { id: 'take', label: 'ЭФИР / take (превью → эфир)', def: 'Tab' },
   { id: 'programNext', label: 'Эфир: следующий слайд', def: 'ArrowRight' },
   { id: 'programPrev', label: 'Эфир: предыдущий слайд', def: 'ArrowLeft' },
   { id: 'previewNext', label: 'Превью: следующий слайд', def: 'BracketRight' },
