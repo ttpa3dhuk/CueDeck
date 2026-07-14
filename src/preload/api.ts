@@ -5,10 +5,12 @@ import type {
   DisplayInfo,
   DisplayMap,
   Layout,
+  MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
   TimerMode,
   TimerPosition,
+  UiTheme,
   VideoTakeMode,
 } from '../shared/types.js'
 
@@ -21,6 +23,7 @@ export type {
   DisplayMap,
   FileKind,
   Layout,
+  MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
   Role,
@@ -29,6 +32,7 @@ export type {
   TimerMode,
   TimerPosition,
   TimerState,
+  UiTheme,
   VideoState,
   VideoTakeMode,
 } from '../shared/types.js'
@@ -131,6 +135,16 @@ export interface PresenterApi {
     set(layout: Layout, displayMap: DisplayMap, audienceWindowed?: boolean): Promise<void>
     getAskOnStartup(): Promise<boolean>
     setAskOnStartup(value: boolean): Promise<void>
+  }
+  monitor: {
+    /** Мониторы выходов под эфиром: вкл/выкл (персистится). */
+    setEnabled(value: boolean): Promise<void>
+    /** JPEG-кадры окон суфлёра/зала (~2 fps); приходят только оператору. */
+    onFrame(cb: (frame: { role: MonitorRole; dataUrl: string }) => void): Unsubscribe
+  }
+  ui: {
+    /** Тема окна оператора (персистится). */
+    setTheme(theme: UiTheme): Promise<void>
   }
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */

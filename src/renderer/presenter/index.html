@@ -106,7 +106,7 @@
               <input id="clicker-global-toggle" type="checkbox" />
               <span>🌐 Глобально</span>
             </label>
-            <label class="toggle" title="Для кликеров, шлющих стрелки вместо PgUp/PgDn (Logitech Spotlight): ←/→ тоже листают глобально. Пока включено, стрелки недоступны другим приложениям — включай на время выступления.">
+            <label class="toggle" title="Для кликеров, шлющих стрелки вместо PgUp/PgDn (Logitech Spotlight, DSan MicroCue на маке): ←/→ тоже листают глобально. Пока включено, стрелки недоступны другим приложениям — включай на время выступления.">
               <input id="clicker-arrows-toggle" type="checkbox" />
               <span>⬅➡ Стрелки</span>
             </label>
@@ -212,6 +212,18 @@
             <button id="preview-next" title="Превью: следующий слайд">▶</button>
           </div>
         </section>
+        <section id="output-monitors" class="output-monitors op-only hidden">
+          <div id="monitor-speaker" class="monitor hidden" title="Живой снимок экрана суфлёра: таймер, заметки, сообщение спикеру">
+            <div class="monitor-label">СУФЛЁР</div>
+            <img id="monitor-speaker-img" class="monitor-img" alt="" />
+            <div class="monitor-waiting">нет сигнала</div>
+          </div>
+          <div id="monitor-audience" class="monitor hidden" title="Живой снимок зрительского экрана: слайд, blackout, заставка">
+            <div class="monitor-label">ЗАЛ</div>
+            <img id="monitor-audience-img" class="monitor-img" alt="" />
+            <div class="monitor-waiting">нет сигнала</div>
+          </div>
+        </section>
         <aside class="sidebar">
           <div class="next-slide">
             <div class="label">Дальше</div>
@@ -263,6 +275,7 @@
           <button id="nav-next" title="→ / Space / PgDn">Next ▶</button>
         </div>
         <div class="bottombar-right">
+          <button id="theme-toggle" title="Переключить тему оператора">☀️ Светлая</button>
           <button id="audio-setup" title="Куда отдавать звук видео">🔊 Аудиовыход…</button>
           <button id="display-setup">Настройка экранов…</button>
           <button id="help-btn" title="Горячие клавиши (?)">?</button>
@@ -313,6 +326,12 @@
           <label class="windowed-label">
             <input id="audience-windowed-toggle" type="checkbox" />
             <span>Аудитория в окне <span class="windowed-hint">(для захвата в Zoom / OBS)</span></span>
+          </label>
+        </div>
+        <div id="output-monitors-section" class="windowed-section">
+          <label class="windowed-label">
+            <input id="output-monitors-toggle" type="checkbox" />
+            <span>Монитор суфлёра под эфиром <span class="windowed-hint">(живой снимок; в 1-экранном режиме — скрытый суфлёр, в 2-экранном — зал)</span></span>
           </label>
         </div>
         <div class="windowed-section">

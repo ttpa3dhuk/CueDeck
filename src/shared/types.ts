@@ -34,6 +34,12 @@ export type TimerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-r
 
 export type FileKind = 'pdf' | 'image' | 'pptx' | 'video'
 
+/** Тема интерфейса оператора. Суфлёр и зал всегда тёмные — это выходные экраны. */
+export type UiTheme = 'dark' | 'light'
+
+/** Окна, чью картинку мониторим у оператора (мультивьюер под эфиром). */
+export type MonitorRole = 'speaker' | 'audience'
+
 /**
  * What happens to a video clip when it is taken from preview to program:
  * always autoplay, either from 0 or resuming at the preview scrub position.
@@ -161,6 +167,14 @@ export interface AppState {
    * every other app while active, so it's a separate opt-in.
    */
   clickerGlobalArrows: boolean
+  /**
+   * Мониторы выходов под эфиром: живые снимки окон суфлёра и зала (~2 fps),
+   * чтобы оператор видел, что реально ушло на внешние экраны — таймер,
+   * заметки, неснятое сообщение спикеру. Выключается в «Настройке экранов».
+   */
+  outputMonitorsEnabled: boolean
+  /** Тема окна оператора; персистится. */
+  uiTheme: UiTheme
 }
 
 export const DEFAULT_SPEAKER_MSG_PRESETS = ['Заканчивайте', 'Ближе к микрофону', 'Финальный слайд']

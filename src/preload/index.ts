@@ -95,6 +95,17 @@ const api: PresenterApi = {
     getAskOnStartup: () => ipcRenderer.invoke('layout:get-ask-on-startup'),
     setAskOnStartup: (value) => ipcRenderer.invoke('layout:set-ask-on-startup', Boolean(value)),
   },
+  monitor: {
+    setEnabled: (value) => ipcRenderer.invoke('monitor:set-enabled', Boolean(value)),
+    onFrame: (cb) => {
+      const listener = (_e: Electron.IpcRendererEvent, frame: { role: 'speaker' | 'audience'; dataUrl: string }) => cb(frame)
+      ipcRenderer.on('monitor:frame', listener)
+      return () => ipcRenderer.removeListener('monitor:frame', listener)
+    },
+  },
+  ui: {
+    setTheme: (theme) => ipcRenderer.invoke('ui:set-theme', theme),
+  },
   files: {
     // Sandboxed renderer has no File.path (removed in Electron 32) — this is
     // the only way to resolve a dropped File to its filesystem path.

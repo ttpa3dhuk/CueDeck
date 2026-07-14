@@ -140,6 +140,10 @@ const previewCounter = isOperator ? $('preview-counter') : null
 const takeBtn = isOperator ? $<HTMLButtonElement>('take-btn') : null
 const videoTakeModeSelect = isOperator ? $<HTMLSelectElement>('video-take-mode') : null
 
+// ── Мониторы выходов + тема оператора ─────────────────────────────────────
+const outputMonitors = isOperator ? $('output-monitors') : null
+const themeToggleBtn = isOperator ? $<HTMLButtonElement>('theme-toggle') : null
+
 // ── Speaker flash message (1.1) ────────────────────────────────────────────
 const speakerMessageOverlay = $('speaker-message')
 const smInput = isOperator ? $<HTMLInputElement>('sm-input') : null
@@ -922,6 +926,34 @@ function renderPlaylist(state: AppState): void {
   updateLibreOfficeNotice(state)
 }
 
+// ── Монитор выхода под эфиром: живой снимок окна суфлёра (или зала) ───────
+let monitorsShownPrev: boolean | null = null
+
+// Суфлёр в приоритете (таймер/заметки/сообщение — главное, что мониторим):
+// в solo это скрытое окно суфлёра (преднастройка без второго экрана),
+// в 2-экранной раскладке суфлёра нет — показываем зал.
+function activeMonitorRole(layout: Layout): 'speaker' | 'audience' {
+  return layout === 'presenter-audience' ? 'audience' : 'speaker'
+}
+
+function updateOutputMonitors(state: AppState): void {
+  if (!outputMonitors) return
+  const mon = activeMonitorRole(state.layout)
+  const show = state.outputMonitorsEnabled
+  outputMonitors.classList.toggle('hidden', !show)
+  document.querySelector('.grid')?.classList.toggle('with-monitors', show)
+  $('monitor-speaker').classList.toggle('hidden', mon !== 'speaker')
+  $('monitor-audience').classList.toggle('hidden', mon !== 'audience')
+  if (monitorsShownPrev !== null && monitorsShownPrev !== show) {
+    // Высота панели эфира изменилась — перерисовать оба деска чётко
+    lastRenderedSlide = -1
+    renderCurrent().catch(() => undefined)
+    previewLastRenderedSlide = -1
+    renderPreview().catch(() => undefined)
+  }
+  monitorsShownPrev = show
+}
+
 function applyState(state: AppState): void {
   if (state.pdfPath) {
     slidePlaceholder.classList.add('hidden')
@@ -1014,6 +1046,16 @@ function applyState(state: AppState): void {
   updateSpeakerMessage(state)
   updateNextSpeaker(state)
   refreshKeyVisualPreview(state).catch(() => undefined)
+
+  if (isOperator) {
+    document.body.dataset.theme = state.uiTheme
+    if (themeToggleBtn) {
+      themeToggleBtn.textContent = state.uiTheme === 'dark' ? '☀️ Светлая' : '🌙 Тёмная'
+      themeToggleBtn.title =
+        state.uiTheme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'
+    }
+    updateOutputMonitors(state)
+  }
 }
 
 async function projectNew(): Promise<void> {
@@ -1376,6 +1418,9 @@ function setupOperatorControls(): void {
   $('display-setup').addEventListener('click', openSetup)
   $('audio-setup').addEventListener('click', () => { openAudioModal().catch(() => undefined) })
   $('audio-close').addEventListener('click', () => $('audio-modal').classList.add('hidden'))
+  $('theme-toggle').addEventListener('click', () => {
+    window.api.ui.setTheme(getState().uiTheme === 'dark' ? 'light' : 'dark')
+  })
 
   // Duration inputs (мин + сек) — debounced, коммитим сумму обоих полей
   let durDebounce: number | null = null
@@ -1781,6 +1826,8 @@ function buildSetupModal(displays: DisplayInfo[]): void {
   const layoutInputs = setupModal.querySelectorAll<HTMLInputElement>('input[name="layout"]')
   const windowedToggle = $<HTMLInputElement>('audience-windowed-toggle')
   windowedToggle.checked = state.audienceWindowed
+  const monitorsToggle = $<HTMLInputElement>('output-monitors-toggle')
+  monitorsToggle.checked = state.outputMonitorsEnabled
   const askLayoutToggle = $<HTMLInputElement>('ask-layout-toggle')
   window.api.layout.getAskOnStartup().then((v) => {
     askLayoutToggle.checked = v
@@ -1806,14 +1853,14 @@ function buildSetupModal(displays: DisplayInfo[]): void {
     })
     setupModal.classList.add('hidden')
     await window.api.layout.setAskOnStartup(askLayoutToggle.checked)
+    await window.api.monitor.setEnabled(monitorsToggle.checked)
     await window.api.layout.set(selectedLayout, mapping, windowedToggle.checked)
   }
 }
 
 function updateWindowedSection(layout: Layout): void {
   const section = document.getElementById('audience-windowed-section')
-  if (!section) return
-  section.classList.toggle('hidden', layout === 'solo')
+  if (section) section.classList.toggle('hidden', layout === 'solo')
 }
 
 function renderRoleMapping(layout: Layout, displays: DisplayInfo[], current: DisplayMap): void {
@@ -1961,6 +2008,14 @@ async function bootstrap(): Promise<void> {
   if (isOperator) {
     buildOperatorBottomBar()
     setupBottomBarResize()
+    // Кадры мониторов выходов (~2 fps с окон суфлёра/зала)
+    window.api.monitor.onFrame(({ role: monRole, dataUrl }) => {
+      const tile = document.getElementById(`monitor-${monRole}`)
+      const img = document.getElementById(`monitor-${monRole}-img`) as HTMLImageElement | null
+      if (!tile || !img) return
+      img.src = dataUrl
+      tile.classList.add('live')
+    })
   }
 
   // Pre-check LibreOffice so the notice shows immediately if needed

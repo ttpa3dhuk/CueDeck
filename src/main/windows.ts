@@ -103,6 +103,7 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
 
 let activeWindows = new Map<Role, BrowserWindow>()
 
+
 export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWindowed = false): Map<Role, BrowserWindow> {
   const desiredRoles = new Set<Role>(rolesForLayout(layout))
 
@@ -122,13 +123,23 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
     const existing = activeWindows.get(role)
     if (existing && !existing.isDestroyed()) {
       if (!DEV_TILE) {
-        existing.setFullScreen(false)
-        if (windowed) {
-          existing.setBounds(windowedAudienceBounds(displayMap[role]))
-        } else {
-          const bounds = displayBounds(displayMap[role])
-          existing.setBounds(bounds)
-          if (fullscreen) existing.setFullScreen(true)
+        const target = windowed
+          ? windowedAudienceBounds(displayMap[role])
+          : displayBounds(displayMap[role])
+        const displayChanged =
+          screen.getDisplayMatching(existing.getBounds()).id !==
+          screen.getDisplayMatching(target).id
+        const modeChanged = existing.isFullScreen() !== fullscreen
+        if (displayChanged || modeChanged) {
+          // Переезд fullscreen-окна между экранами через setBounds ненадёжен:
+          // macOS Spaces возвращает окно на прежний дисплей даже после
+          // 'leave-full-screen'. Пересоздаём окно на целевом экране — тот же
+          // путь, что при старте, работает детерминированно.
+          store.unregisterWindow(role)
+          existing.destroy()
+          activeWindows.set(role, createWindow(role, displayMap[role], fullscreen, windowed))
+        } else if (!existing.isFullScreen()) {
+          existing.setBounds(target)
         }
       }
     } else {
@@ -147,4 +158,33 @@ export function getActiveWindows(): Map<Role, BrowserWindow> {
 
 export function getOperatorWindow(): BrowserWindow | undefined {
   return activeWindows.get('operator')
+}
+
+/**
+ * Скрытое окно суфлёра для solo-режима: рендерит настоящий суфлёрский вид
+ * (таймер, заметки, сообщение) в FullHD, но никогда не показывается — живёт
+ * только ради capturePage в мониторе оператора (преднастройка проекта дома /
+ * в номере без второго экрана). Регистрируется в store как обычный speaker;
+ * в activeWindows НЕ попадает, чтобы applyLayout его не трогал — жизненным
+ * циклом управляет output-monitor.ts.
+ */
+export function createHiddenSpeakerWindow(): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 1920,
+    height: 1080,
+    show: false,
+    backgroundColor: '#1a1a1a',
+    title: 'CueDeck — speaker (hidden)',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      // Скрытое окно не должно засыпать — иначе таймер на снимках замирает.
+      backgroundThrottling: false,
+    },
+  })
+  loadRenderer(win, { entry: 'presenter', role: 'speaker' })
+  store.registerWindow('speaker', win)
+  return win
 }

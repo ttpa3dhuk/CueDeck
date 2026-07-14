@@ -14,6 +14,7 @@ export type {
   TimerMode,
   TimerPosition,
   TimerState,
+  UiTheme,
   VideoState,
   VideoTakeMode,
 } from '../shared/types.js'
@@ -74,6 +75,8 @@ export function initialState(): AppState {
     timerLoop: false,
     clickerGlobal: false,
     clickerGlobalArrows: false,
+    outputMonitorsEnabled: true,
+    uiTheme: 'dark',
   }
 }
 

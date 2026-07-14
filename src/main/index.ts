@@ -30,7 +30,10 @@ import {
   getClickerGlobal,
   getClickerGlobalArrows,
   getSpeakerMsgPresets,
+  getOutputMonitorsEnabled,
+  getUiTheme,
 } from './display-mapping.js'
+import { startOutputMonitor } from './output-monitor.js'
 import { store } from './state.js'
 
 export const MEDIA_SCHEME = 'cuedeck-media'
@@ -220,11 +223,21 @@ function sendToOperator(channel: string, ...args: unknown[]): void {
 }
 
 
-const LAYOUT_CHOICES: { layout: Layout; label: string }[] = [
-  { layout: 'solo', label: '1 экран (только я)' },
-  { layout: 'presenter-audience', label: '2 экрана (ноут + проектор)' },
-  { layout: 'operator-speaker-audience', label: '3 экрана (+ суфлёр)' },
-]
+// macOS NSAlert при вертикальной раскладке показывает кнопки в порядке
+// [первая, последняя, ..., вторая] сверху вниз — чтобы визуально было
+// «1 / 2 / 3 экрана», массив для мака идёт 1-3-2. Windows рисует по порядку.
+const LAYOUT_CHOICES: { layout: Layout; label: string }[] =
+  process.platform === 'darwin'
+    ? [
+        { layout: 'solo', label: '1 экран (только я)' },
+        { layout: 'operator-speaker-audience', label: '3 экрана (+ суфлёр)' },
+        { layout: 'presenter-audience', label: '2 экрана (ноут + проектор)' },
+      ]
+    : [
+        { layout: 'solo', label: '1 экран (только я)' },
+        { layout: 'presenter-audience', label: '2 экрана (ноут + проектор)' },
+        { layout: 'operator-speaker-audience', label: '3 экрана (+ суфлёр)' },
+      ]
 
 async function bootLayout(): Promise<void> {
   const displays = screen.getAllDisplays()
@@ -307,6 +320,8 @@ app.whenReady().then(async () => {
     timerGongEnabled: getTimerGongEnabled(),
     timerLoop: getTimerLoop(),
     speakerMsgPresets: getSpeakerMsgPresets(),
+    outputMonitorsEnabled: getOutputMonitorsEnabled(),
+    uiTheme: getUiTheme(),
     // Re-register the global clicker if it was on; reflect actual success
     // (registration fails when another app holds the keys).
     ...(() => {
@@ -321,6 +336,7 @@ app.whenReady().then(async () => {
 
   await bootLayout()
   watchDisplayChanges()
+  startOutputMonitor()
 
   // Check for updates a few seconds after boot, then daily
   const scheduleUpdateCheck = () => {

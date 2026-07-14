@@ -46,6 +46,8 @@ import {
   getClickerGlobalArrows,
   setClickerGlobalArrows,
   setSpeakerMsgPresets,
+  setOutputMonitorsEnabled,
+  setUiTheme,
 } from './display-mapping.js'
 import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
@@ -800,11 +802,12 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('displays:list', (): DisplayInfo[] => {
-    const primary = screen.getPrimaryDisplay()
     return screen.getAllDisplays().map((d, i) => ({
       id: d.id,
-      label: d.id === primary.id ? `Display ${i + 1} (internal)` : `Display ${i + 1}`,
-      internal: d.id === primary.id,
+      // Имя модели монитора от ОС (как в системных настройках macOS);
+      // пустое (старые ОС/кривой EDID) — фолбэк на нумерацию.
+      label: d.label || `Display ${i + 1}${d.internal ? ' (internal)' : ''}`,
+      internal: d.internal,
       bounds: d.bounds,
     }))
   })
@@ -820,6 +823,19 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('layout:set-ask-on-startup', (_e, value: boolean) => {
     setAskLayoutOnStartup(Boolean(value))
+  })
+
+  // Мониторы выходов под эфиром (живые снимки окон суфлёра/зала)
+  ipcMain.handle('monitor:set-enabled', (_e, enabled: boolean) => {
+    const v = Boolean(enabled)
+    store.patch({ outputMonitorsEnabled: v })
+    setOutputMonitorsEnabled(v)
+  })
+
+  ipcMain.handle('ui:set-theme', (_e, theme: string) => {
+    const v = theme === 'light' ? 'light' : 'dark'
+    store.patch({ uiTheme: v })
+    setUiTheme(v)
   })
 
   /** Append supported files to the playlist; unsupported paths are skipped. */

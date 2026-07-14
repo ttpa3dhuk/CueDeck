@@ -1,7 +1,7 @@
 import Store from 'electron-store'
 import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
-import type { PlaylistEntry, TimerMode, TimerPosition, VideoTakeMode } from './state.js'
+import type { PlaylistEntry, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
 import { DEFAULT_SPEAKER_MSG_PRESETS } from './state.js'
 
 interface SavedMapping {
@@ -33,6 +33,8 @@ interface PersistedShape {
   clickerGlobal: boolean
   clickerGlobalArrows: boolean
   speakerMsgPresets: string[]
+  outputMonitorsEnabled: boolean
+  uiTheme: UiTheme
 }
 
 const STORE_DEFAULTS: PersistedShape = {
@@ -59,6 +61,8 @@ const STORE_DEFAULTS: PersistedShape = {
   clickerGlobal: false,
   clickerGlobalArrows: false,
   speakerMsgPresets: [...DEFAULT_SPEAKER_MSG_PRESETS],
+  outputMonitorsEnabled: true,
+  uiTheme: 'dark',
 }
 
 let _store: Store<PersistedShape> | null = null
@@ -275,6 +279,22 @@ export function getSpeakerMsgPresets(): string[] {
 
 export function setSpeakerMsgPresets(presets: string[]): void {
   store().set('speakerMsgPresets', presets)
+}
+
+export function getOutputMonitorsEnabled(): boolean {
+  return Boolean(store().get('outputMonitorsEnabled'))
+}
+
+export function setOutputMonitorsEnabled(value: boolean): void {
+  store().set('outputMonitorsEnabled', value)
+}
+
+export function getUiTheme(): UiTheme {
+  return store().get('uiTheme') === 'light' ? 'light' : 'dark'
+}
+
+export function setUiTheme(theme: UiTheme): void {
+  store().set('uiTheme', theme)
 }
 
 export function getAskLayoutOnStartup(): boolean {

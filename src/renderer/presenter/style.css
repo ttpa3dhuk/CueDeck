@@ -273,6 +273,65 @@ body[data-role="operator"] #op-bottombar { grid-area: bottom; }
 body[data-role="operator"] .sidebar { display: none; }
 body[data-role="operator"] .next-slide { display: none; }
 
+/* ── Монитор выхода под эфиром: правая колонка = PGM сверху, суфлёр снизу
+   (превью слева остаётся во всю высоту). Живой снимок окна суфлёра — таймер,
+   заметки, сообщение; если суфлёра в раскладке нет — окно зала. ── */
+body[data-role="operator"] .grid.with-monitors {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) var(--bottom-h, 270px);
+  grid-template-areas:
+    "playlist preview program"
+    "playlist preview monitor"
+    "playlist bottom  bottom";
+}
+body[data-role="operator"] #output-monitors { grid-area: monitor; }
+.output-monitors {
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+}
+/* Синяя рамка — в один ряд с цветовым кодом шин: превью зелёная, эфир красный,
+   монитор суфлёра синий (акцент, как у кнопки «Последний»). */
+.output-monitors .monitor {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: #000;
+  border: 3px solid var(--accent);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.output-monitors .monitor-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.output-monitors .monitor-label {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #cdd3da;
+  background: rgba(20, 20, 22, 0.75);
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+.output-monitors .monitor-waiting {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+.output-monitors .monitor.live .monitor-waiting { display: none; }
+
 /* Bottom bar: [ notes | timer | big TAKE ] */
 .op-bottombar {
   display: flex;
@@ -1402,6 +1461,38 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   max-width: 320px;
 }
 body[data-role="speaker"] .next-speaker { font-size: 18px; }
+
+/* ── Светлая тема окна оператора (data-theme ставится только оператору;
+   суфлёр и зал — выходные экраны, всегда тёмные). Палитра через переменные,
+   ниже — точечные правки тёмных хардкодов. Оверлеи на чёрных панелях
+   (deck-label, video-controls, preview-nav) не трогаем. ── */
+body[data-theme="light"] {
+  --bg: #eef1f5;
+  --panel: #ffffff;
+  --panel-2: #e7ebf2;
+  --text: #1d2433;
+  --muted: #5d6675;
+  --accent: #2f6fdb;
+  --danger: #d13c34;
+  --warning: #b97a00;
+  --border: #cfd6e1;
+  --timer-green: #1e9e57;
+  --timer-yellow: #bd8a00;
+  --timer-red: #d13c34;
+}
+body[data-theme="light"] button:hover { background: #dbe2ec; }
+body[data-theme="light"] button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+body[data-theme="light"] button.primary:hover { background: #4681e0; }
+body[data-theme="light"] .timer.neutral { color: var(--text); }
+body[data-theme="light"] .slide-placeholder .placeholder-title { color: #4a5262; }
+body[data-theme="light"] .position-btn:hover { border-color: #9aa4b5; }
+body[data-theme="light"] .hk-row { background: var(--panel-2); }
+body[data-theme="light"] .playlist-list::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.18); }
+body[data-theme="light"] .playlist-list::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.32); }
+body[data-theme="light"] .playlist-item input.rename-input { background: #fff; }
+body[data-theme="light"] .lo-code-block code { color: #1c7a3d; }
+body[data-theme="light"] .op-bottombar-handle::after { background: rgba(0, 0, 0, 0.25); }
+body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--accent); }
 
 /* Вспышка на суфлёре в конце отсчёта (3 импульса ~1.2с) */
 .timer-flash {
