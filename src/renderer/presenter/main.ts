@@ -1977,6 +1977,57 @@ function buildOperatorBottomBar(): void {
   bottom.append(timerBox, notes, $('speaker-msg-box'), takeBtn)
 }
 
+// Сплиттер суфлёра (Б-8): граница между слайдом и колонкой «Дальше/Заметки»
+// таскается мышью (курсор дотягивается на экран суфлёра как на обычный
+// extended-дисплей); ширина колонки в % персистится в localStorage.
+function setupSpeakerSplitter(): void {
+  const sidebar = document.querySelector<HTMLElement>('.sidebar')
+  if (!sidebar) return
+  const MIN_PCT = 18
+  const MAX_PCT = 60
+  const apply = (pct: number): void =>
+    document.documentElement.style.setProperty('--speaker-sidebar', `${pct}%`)
+  try {
+    const saved = Number(localStorage.getItem('cuedeck.speakerSideW'))
+    if (saved >= MIN_PCT && saved <= MAX_PCT) apply(saved)
+  } catch { /* localStorage unavailable — ignore */ }
+
+  const handle = document.createElement('div')
+  handle.className = 'speaker-splitter'
+  handle.title = 'Ширина колонки «Дальше / Заметки»'
+  sidebar.appendChild(handle)
+
+  let dragging = false
+  const onMove = (e: MouseEvent): void => {
+    if (!dragging) return
+    const pct = ((window.innerWidth - e.clientX) / window.innerWidth) * 100
+    apply(Math.round(Math.max(MIN_PCT, Math.min(MAX_PCT, pct)) * 10) / 10)
+  }
+  const onUp = (): void => {
+    if (!dragging) return
+    dragging = false
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.userSelect = ''
+    const pct = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--speaker-sidebar'),
+    )
+    try {
+      if (pct >= MIN_PCT) localStorage.setItem('cuedeck.speakerSideW', String(pct))
+    } catch { /* ignore */ }
+    // Ширина слайда изменилась — перерисовать текущий и «Дальше» чётко
+    lastRenderedSlide = -1
+    renderCurrent().catch(() => undefined)
+  }
+  handle.addEventListener('mousedown', (e) => {
+    dragging = true
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    e.preventDefault()
+  })
+}
+
 // Draggable splitter for the bottom bar height (persisted per-window in localStorage).
 function setupBottomBarResize(): void {
   const bottom = $('op-bottombar')
@@ -2032,6 +2083,7 @@ async function bootstrap(): Promise<void> {
   setupOperatorControls()
   setupKeyboard()
   setupFileDrop()
+  if (role === 'speaker') setupSpeakerSplitter()
   if (isOperator) {
     buildOperatorBottomBar()
     setupBottomBarResize()

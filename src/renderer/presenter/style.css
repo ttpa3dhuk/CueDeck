@@ -241,9 +241,33 @@ body[data-role="speaker"] .slide-placeholder { display: none; }
   overflow: hidden;
   min-height: 0;
 }
+/* Ширина колонки «Дальше/Заметки» таскается сплиттером (Б-8); дефолт 37% ≈
+   прежним пропорциям 1.7fr/1fr. Переменную ставит setupSpeakerSplitter(). */
 body[data-role="speaker"] .grid {
-  grid-template-columns: 1.7fr 1fr;
+  grid-template-columns: minmax(0, 1fr) var(--speaker-sidebar, 37%);
 }
+body[data-role="speaker"] .sidebar { position: relative; }
+.speaker-splitter {
+  position: absolute;
+  left: -9px;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  cursor: col-resize;
+  z-index: 6;
+}
+.speaker-splitter::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 56px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.speaker-splitter:hover::after { background: var(--accent); }
 /* Operator: OBS Studio-Mode layout. Top row = PREVIEW | PROGRAM (эфир справа).
    Bottom row = notes + timer + big TAKE (built by reparenting in main.ts).
    Playlist spans both rows on the left. Right .sidebar is unused for operator. */
