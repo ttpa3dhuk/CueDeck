@@ -155,7 +155,7 @@ export interface AppState {
   audioOutputId: string | null
   /** Flash message on the speaker monitor; stays (blinking) until cleared. null = none. */
   speakerMessage: string | null
-  /** User-editable texts of the three speaker-message preset buttons (ПКМ по кнопке). */
+  /** User-editable texts of the six speaker-message preset buttons (ПКМ по кнопке); '' = пустой слот. */
   speakerMsgPresets: string[]
   /** Sound cue on the operator: ticks in the last 10s of a countdown. */
   timerTickEnabled: boolean
@@ -163,6 +163,8 @@ export interface AppState {
   timerGongEnabled: boolean
   /** Loop mode: countdown restarts automatically on zero (15/30-second rounds etc.). */
   timerLoop: boolean
+  /** User-editable minutes of the four timer preset buttons (ПКМ по кнопке). */
+  timerPresets: number[]
   /**
    * Global clicker: PgUp/PgDn switch program slides system-wide (globalShortcut),
    * so the speaker keeps clicking while the operator works in a browser/Finder.
@@ -185,7 +187,17 @@ export interface AppState {
   uiTheme: UiTheme
 }
 
-export const DEFAULT_SPEAKER_MSG_PRESETS = ['Заканчивайте', 'Ближе к микрофону', 'Финальный слайд']
+/** Slots 4–6 are empty by default — free rows the user fills in via ПКМ. */
+export const DEFAULT_SPEAKER_MSG_PRESETS = [
+  'Заканчивайте',
+  'Ближе к микрофону',
+  'Финальный слайд',
+  '',
+  '',
+  '',
+]
+
+export const DEFAULT_TIMER_PRESETS = [5, 10, 15, 20]
 
 /**
  * Donation page URL. Empty string hides every donate entry point

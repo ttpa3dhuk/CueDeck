@@ -1,10 +1,11 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { DONATE_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
+import { askBootLayout } from './boot-dialog.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
 import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf, applyClickerShortcuts } from './ipc.js'
@@ -31,6 +32,7 @@ import {
   getClickerGlobal,
   getClickerGlobalArrows,
   getSpeakerMsgPresets,
+  getTimerPresets,
   getOutputMonitorsEnabled,
   getUiTheme,
 } from './display-mapping.js'
@@ -224,22 +226,6 @@ function sendToOperator(channel: string, ...args: unknown[]): void {
 }
 
 
-// macOS NSAlert при вертикальной раскладке показывает кнопки в порядке
-// [первая, последняя, ..., вторая] сверху вниз — чтобы визуально было
-// «1 / 2 / 3 экрана», массив для мака идёт 1-3-2. Windows рисует по порядку.
-const LAYOUT_CHOICES: { layout: Layout; label: string }[] =
-  process.platform === 'darwin'
-    ? [
-        { layout: 'solo', label: '1 экран (только я)' },
-        { layout: 'operator-speaker-audience', label: '3 экрана (+ суфлёр)' },
-        { layout: 'presenter-audience', label: '2 экрана (ноут + проектор)' },
-      ]
-    : [
-        { layout: 'solo', label: '1 экран (только я)' },
-        { layout: 'presenter-audience', label: '2 экрана (ноут + проектор)' },
-        { layout: 'operator-speaker-audience', label: '3 экрана (+ суфлёр)' },
-      ]
-
 async function bootLayout(): Promise<void> {
   const displays = screen.getAllDisplays()
   const primaryId = screen.getPrimaryDisplay().id
@@ -251,25 +237,14 @@ async function bootLayout(): Promise<void> {
 
   // macOS does not guarantee identical window placement between launches even
   // for the same display IDs, so a silently restored multi-screen layout can
-  // come up scrambled. Ask which mode we're working in (native dialog — no
-  // windows exist yet, so it cleanly blocks boot). Opt out via the checkbox;
+  // come up scrambled. Ask which mode we're working in (кастомное окно —
+  // см. boot-dialog.ts; no app windows exist yet, so it cleanly blocks boot).
+  // Esc/Enter = accept the suggested mode. Opt out via the checkbox;
   // re-enable in Display Setup (Cmd+,).
   if (getAskLayoutOnStartup()) {
-    const defaultId = Math.max(0, LAYOUT_CHOICES.findIndex((c) => c.layout === layout))
-    const { response, checkboxChecked } = await dialog.showMessageBox({
-      type: 'question',
-      title: 'CueDeck',
-      message: 'В каком режиме работаем?',
-      detail: `Сейчас подключено экранов: ${displays.length}.`,
-      buttons: LAYOUT_CHOICES.map((c) => c.label),
-      defaultId,
-      cancelId: defaultId, // Esc = accept the suggested mode
-      noLink: true,
-      checkboxLabel: 'Больше не спрашивать при запуске',
-      checkboxChecked: false,
-    })
-    layout = LAYOUT_CHOICES[response]?.layout ?? layout
-    if (checkboxChecked) setAskLayoutOnStartup(false)
+    const choice = await askBootLayout(displays.length, layout)
+    if (choice.layout) layout = choice.layout
+    if (choice.dontAsk) setAskLayoutOnStartup(false)
   }
 
   // Keep manual role→display assignments when the chosen mode matches the
@@ -322,6 +297,7 @@ app.whenReady().then(async () => {
     timerGongEnabled: getTimerGongEnabled(),
     timerLoop: getTimerLoop(),
     speakerMsgPresets: getSpeakerMsgPresets(),
+    timerPresets: getTimerPresets(),
     outputMonitorsEnabled: getOutputMonitorsEnabled(),
     uiTheme: getUiTheme(),
     // Re-register the global clicker if it was on; reflect actual success

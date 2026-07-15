@@ -648,9 +648,10 @@ function updateSpeakerMessage(state: AppState): void {
     const label = state.speakerMsgPresets[i] ?? btn.dataset.msg ?? ''
     if (btn.dataset.msg !== label) {
       btn.dataset.msg = label
-      btn.textContent = label
+      btn.textContent = label || '+' // пустой слот показываем плюсиком
     }
-    const active = msg !== null && btn.dataset.msg === msg
+    btn.classList.toggle('empty', !label)
+    const active = msg !== null && label !== '' && btn.dataset.msg === msg
     btn.classList.toggle('active', active)
     if (active) presetActive = true
   })
@@ -1032,6 +1033,13 @@ function applyState(state: AppState): void {
     reflectToggle('timer-loop-toggle', state.timerLoop)
     reflectToggle('clicker-global-toggle', state.clickerGlobal)
     reflectToggle('clicker-arrows-toggle', state.clickerGlobalArrows)
+    document.querySelectorAll<HTMLButtonElement>('button.preset').forEach((btn, i) => {
+      const min = state.timerPresets[i]
+      if (typeof min === 'number' && btn.dataset.min !== String(min)) {
+        btn.dataset.min = String(min)
+        btn.textContent = String(min)
+      }
+    })
   }
   document.body.dataset.timerPosition = state.timerPosition
   document.documentElement.style.setProperty(
@@ -1458,13 +1466,57 @@ function setupOperatorControls(): void {
   durationInput!.addEventListener('input', scheduleDurationCommit)
   durationSecInput!.addEventListener('input', scheduleDurationCommit)
 
-  // Presets
-  document.querySelectorAll<HTMLButtonElement>('button.preset').forEach((btn) => {
+  // Presets (минуты; ПКМ по кнопке — своё значение)
+  document.querySelectorAll<HTMLButtonElement>('button.preset').forEach((btn, idx) => {
     btn.addEventListener('click', () => {
       const min = Number(btn.dataset.min ?? 0)
       window.api.timer.setDuration(min * 60_000)
     })
+    btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      startTimerPresetEdit(btn, idx)
+    })
   })
+
+  // ПКМ по пресету таймера: кнопка на время превращается в числовое поле.
+  // Enter/клик мимо — сохранить, Esc — отмена; мусор и пустоту не сохраняем.
+  function startTimerPresetEdit(btn: HTMLButtonElement, idx: number): void {
+    const input = document.createElement('input')
+    input.type = 'number'
+    input.className = 'preset-edit'
+    input.min = '1'
+    input.max = '999'
+    input.value = btn.dataset.min ?? ''
+    btn.style.display = 'none'
+    btn.after(input)
+    input.focus()
+    input.select()
+    let finished = false
+    const done = (commit: boolean): void => {
+      if (finished) return
+      finished = true
+      const val = Math.floor(Number(input.value))
+      input.remove()
+      btn.style.display = ''
+      if (
+        commit &&
+        Number.isFinite(val) &&
+        val >= 1 &&
+        val <= 999 &&
+        val !== Number(btn.dataset.min)
+      ) {
+        const presets = [...getState().timerPresets]
+        presets[idx] = val
+        void window.api.timer.setPresets(presets)
+      }
+    }
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') done(true)
+      else if (e.key === 'Escape') done(false)
+    })
+    input.addEventListener('blur', () => done(true))
+  }
 
   // Adjustments
   document.querySelectorAll<HTMLButtonElement>('button.adjust').forEach((btn) => {
@@ -1649,6 +1701,11 @@ function setupOperatorControls(): void {
   document.querySelectorAll<HTMLButtonElement>('button.sm-preset').forEach((btn, idx) => {
     btn.addEventListener('click', () => {
       const msg = btn.dataset.msg ?? ''
+      if (!msg) {
+        // Пустой слот: клик = сразу вписать своё сообщение (как ПКМ).
+        startPresetEdit(btn, idx)
+        return
+      }
       const active = getState().speakerMessage === msg
       window.api.speakerMessage.set(active ? null : msg)
     })
@@ -1668,12 +1725,14 @@ function setupOperatorControls(): void {
   })
 
   // ПКМ по пресету: кнопка на время превращается в поле ввода.
-  // Enter/клик мимо — сохранить, Esc — отмена; пустой текст не сохраняем.
+  // Enter/клик мимо — сохранить, Esc — отмена. Пустой текст очищает слот
+  // (слоты 1–3 при этом откатываются на дефолт в main-процессе).
   function startPresetEdit(btn: HTMLButtonElement, idx: number): void {
     const input = document.createElement('input')
     input.type = 'text'
     input.className = 'sm-preset-edit'
     input.value = btn.dataset.msg ?? ''
+    input.placeholder = 'Текст кнопки…'
     input.maxLength = 60
     btn.style.display = 'none'
     btn.after(input)
@@ -1686,7 +1745,7 @@ function setupOperatorControls(): void {
       const val = input.value.trim()
       input.remove()
       btn.style.display = ''
-      if (commit && val && val !== btn.dataset.msg) {
+      if (commit && val !== (btn.dataset.msg ?? '')) {
         const presets = [...getState().speakerMsgPresets]
         presets[idx] = val
         void window.api.speakerMessage.setPresets(presets)

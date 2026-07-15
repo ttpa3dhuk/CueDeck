@@ -66,6 +66,7 @@ const api: PresenterApi = {
     setTickSound: (enabled) => ipcRenderer.invoke('timer:set-tick-sound', enabled),
     setGongSound: (enabled) => ipcRenderer.invoke('timer:set-gong-sound', enabled),
     setLoop: (enabled) => ipcRenderer.invoke('timer:set-loop', enabled),
+    setPresets: (presets) => ipcRenderer.invoke('timer:set-presets', presets),
   },
   blackout: {
     toggle: () => ipcRenderer.invoke('blackout:toggle'),

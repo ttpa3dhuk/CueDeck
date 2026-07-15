@@ -58,7 +58,7 @@
             <span class="suffix">сек</span>
             <span class="edit-hint" title="Можно вводить вручную">✎</span>
           </div>
-          <div class="group">
+          <div class="group" title="Минуты. Правый клик по кнопке — своё значение">
             <label class="group-label">Пресет</label>
             <button class="preset" data-min="5">5</button>
             <button class="preset" data-min="10">10</button>
@@ -94,7 +94,6 @@
             </label>
           </div>
           <div class="group">
-            <label class="group-label">Цикл</label>
             <label class="toggle" title="Отсчёт перезапускается сам: 30с → гонг → снова 30с. Для кругов по 15/30 секунд.">
               <input id="timer-loop-toggle" type="checkbox" />
               <span>🔁 Повтор</span>
@@ -253,10 +252,13 @@
           <!-- Reparented by buildOperatorBottomBar() into position: timer | notes | msg | TAKE -->
           <div id="speaker-msg-box" class="speaker-msg">
             <div class="label">Сообщение спикеру</div>
-            <div class="sm-presets" title="Клик — показать/снять, правый клик — изменить текст кнопки">
+            <div class="sm-presets" title="Клик — показать/снять, правый клик — изменить текст кнопки. Пустые строки — под свои сообщения">
               <button class="sm-preset" data-msg="Заканчивайте">Заканчивайте</button>
               <button class="sm-preset" data-msg="Ближе к микрофону">Ближе к микрофону</button>
               <button class="sm-preset" data-msg="Финальный слайд">Финальный слайд</button>
+              <button class="sm-preset empty" data-msg="">+</button>
+              <button class="sm-preset empty" data-msg="">+</button>
+              <button class="sm-preset empty" data-msg="">+</button>
             </div>
             <div class="sm-send-row">
               <input id="sm-input" type="text" placeholder="Свой текст… (Enter)" />

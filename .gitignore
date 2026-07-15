@@ -10,6 +10,7 @@ PLAN.md
 TEST-CHECKLIST.md
 RUN.command
 generated/presentation/
+generated/youtube/
 
 # User content — never commit presentations or notes
 *.pdf
@@ -20,6 +21,12 @@ generated/presentation/
 *.notes.json
 *.pdpres
 pptx-cache/
+*.mp4
+*.m4v
+*.mov
+*.webm
+*.wav
+*.srt
 
 # OS / IDE / temp
 .idea/

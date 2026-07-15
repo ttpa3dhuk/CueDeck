@@ -2,7 +2,7 @@ import Store from 'electron-store'
 import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
 import type { PlaylistEntry, SlideTakeMode, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
-import { DEFAULT_SPEAKER_MSG_PRESETS } from './state.js'
+import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 
 interface SavedMapping {
   layout: Layout
@@ -34,6 +34,7 @@ interface PersistedShape {
   clickerGlobal: boolean
   clickerGlobalArrows: boolean
   speakerMsgPresets: string[]
+  timerPresets: number[]
   outputMonitorsEnabled: boolean
   uiTheme: UiTheme
 }
@@ -63,6 +64,7 @@ const STORE_DEFAULTS: PersistedShape = {
   clickerGlobal: false,
   clickerGlobalArrows: false,
   speakerMsgPresets: [...DEFAULT_SPEAKER_MSG_PRESETS],
+  timerPresets: [...DEFAULT_TIMER_PRESETS],
   outputMonitorsEnabled: true,
   uiTheme: 'dark',
 }
@@ -289,6 +291,20 @@ export function getSpeakerMsgPresets(): string[] {
 
 export function setSpeakerMsgPresets(presets: string[]): void {
   store().set('speakerMsgPresets', presets)
+}
+
+/** Always exactly 4 valid minute values: holes are backfilled with the defaults. */
+export function getTimerPresets(): number[] {
+  const raw = store().get('timerPresets')
+  const arr = Array.isArray(raw) ? raw : []
+  return DEFAULT_TIMER_PRESETS.map((def, i) => {
+    const v = Math.floor(Number(arr[i]))
+    return Number.isFinite(v) && v >= 1 && v <= 999 ? v : def
+  })
+}
+
+export function setTimerPresets(presets: number[]): void {
+  store().set('timerPresets', presets)
 }
 
 export function getOutputMonitorsEnabled(): boolean {

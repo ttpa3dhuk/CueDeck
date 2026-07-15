@@ -108,6 +108,8 @@ export interface PresenterApi {
     setGongSound(enabled: boolean): Promise<void>
     /** Loop mode: countdown restarts automatically on zero. */
     setLoop(enabled: boolean): Promise<void>
+    /** Minutes of the four preset buttons (ПКМ по кнопке). */
+    setPresets(presets: number[]): Promise<void>
   }
   blackout: {
     toggle(): Promise<void>

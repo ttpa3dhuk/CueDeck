@@ -159,6 +159,17 @@ body[data-role="speaker"] .slide-placeholder { display: none; }
   font-size: 12px;
   min-width: 32px;
 }
+/* ПКМ-редактирование пресета таймера: числовой инпут на месте кнопки */
+.topbar-row.timer-controls .preset-edit {
+  width: 48px;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
 .topbar-row.timer-controls select {
   background: var(--panel-2);
   color: var(--text);
@@ -1239,7 +1250,9 @@ body[data-role="operator"] #current-slide {
 
 .bottombar {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  /* Две колонки: «Клавиши…» слева, остальное прижато вправо (третья
+     пустая колонка в 3-колоночном гриде утаскивала правый блок в центр). */
+  grid-template-columns: 1fr auto;
   align-items: center;
   padding: 0 16px;
   background: var(--panel);
@@ -1441,6 +1454,12 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   background: var(--danger);
   border-color: var(--danger);
   color: #fff;
+}
+/* Пустой слот: свободная строка под своё сообщение (клик/ПКМ — вписать) */
+.speaker-msg .sm-preset.empty {
+  color: var(--muted);
+  border-style: dashed;
+  text-align: center;
 }
 /* ПКМ-редактирование текста пресета: инпут на месте кнопки */
 .speaker-msg .sm-preset-edit {

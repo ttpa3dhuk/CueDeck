@@ -12,7 +12,7 @@ import type {
   TimerPosition,
   VideoTakeMode,
 } from './state.js'
-import { store, initialDeckState, DEFAULT_SPEAKER_MSG_PRESETS } from './state.js'
+import { store, initialDeckState, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 import { computePdfSha1, computeStatSha1, loadNotes, notesWriter, sha1FromBuffer, sidecarPathFor } from './notes-store.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
 import {
@@ -47,6 +47,7 @@ import {
   getClickerGlobalArrows,
   setClickerGlobalArrows,
   setSpeakerMsgPresets,
+  setTimerPresets,
   setOutputMonitorsEnabled,
   setUiTheme,
 } from './display-mapping.js'
@@ -723,6 +724,18 @@ export function registerIpcHandlers(): void {
     setTimerLoop(v)
   })
 
+  // Minutes of the four preset buttons are user-editable (ПКМ по кнопке);
+  // invalid/empty slots fall back to the defaults slot by slot.
+  ipcMain.handle('timer:set-presets', (_e, presets: number[]) => {
+    const arr = Array.isArray(presets) ? presets : []
+    const clean = DEFAULT_TIMER_PRESETS.map((def, i) => {
+      const v = Math.floor(Number(arr[i]))
+      return Number.isFinite(v) && v >= 1 && v <= 999 ? v : def
+    })
+    store.patch({ timerPresets: clean })
+    setTimerPresets(clean)
+  })
+
   // Цикличный таймер: на нуле перезапускаем круг. cycles++ — сигнал рендерерам
   // (гонг/вспышка), даже если между их тиками ноль «проскочил». Только countdown
   // и только при ненулевой длительности (иначе бесконечный спин рестартов).
@@ -754,8 +767,9 @@ export function registerIpcHandlers(): void {
     store.patch({ speakerMessage: msg ? msg : null })
   })
 
-  // Texts of the three preset buttons are user-editable (ПКМ по кнопке);
-  // holes/empties fall back to the defaults slot by slot.
+  // Texts of the six preset buttons are user-editable (ПКМ по кнопке);
+  // holes/empties fall back to the defaults slot by slot (слоты 4–6
+  // по умолчанию пустые — очистка оставляет их свободными).
   ipcMain.handle('speaker-message:set-presets', (_e, presets: string[]) => {
     const arr = Array.isArray(presets) ? presets : []
     const clean = DEFAULT_SPEAKER_MSG_PRESETS.map((def, i) => {
