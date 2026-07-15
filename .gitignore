@@ -7,6 +7,9 @@ release/
 .vite/
 CLAUDE.md
 PLAN.md
+TEST-CHECKLIST.md
+RUN.command
+generated/presentation/
 
 # User content — never commit presentations or notes
 *.pdf

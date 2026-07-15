@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: 📥 Скачать последнюю версию
-    url: https://github.com/ttpa3dhuk/PDF-Presenter/releases/latest
+    url: https://github.com/ttpa3dhuk/CueDeck/releases/latest
     about: GitHub Releases — DMG для Mac, ZIP для Windows
   - name: 📖 Документация
-    url: https://github.com/ttpa3dhuk/PDF-Presenter#readme
+    url: https://github.com/ttpa3dhuk/CueDeck#readme
     about: README с инструкциями по установке и горячим клавишам
