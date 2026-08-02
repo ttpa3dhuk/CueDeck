@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' blob: cuedeck-media:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' blob: mediastream: cuedeck-media:;" />
     <title>Audience</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -10,6 +10,8 @@
     <canvas id="slide-canvas"></canvas>
     <img id="slide-image" class="slide-image hidden" alt="" />
     <video id="slide-video" class="slide-video hidden" playsinline></video>
+    <video id="live-video" class="slide-video hidden" playsinline></video>
+    <div id="live-status" class="live-status hidden"></div>
     <video id="media-overlay" class="media-overlay hidden" playsinline></video>
     <div id="blackout" class="blackout hidden"></div>
     <img id="keyvisual" class="keyvisual hidden" alt="" />

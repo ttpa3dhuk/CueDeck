@@ -666,6 +666,7 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 .playlist-item .kind-badge.kind-pptx { background: #ffc97a; }
 .playlist-item .kind-badge.kind-image { background: #b9e9b6; }
 .playlist-item .kind-badge.kind-video { background: #e0b3ff; }
+.playlist-item .kind-badge.kind-live { background: #ff9d9d; }
 
 .playlist-item .pdf-name {
   flex: 1;
@@ -1372,6 +1373,87 @@ body[data-role="operator"] #current-slide {
 .audio-device-row:hover { border-color: var(--accent); }
 .audio-device-row input { flex: none; }
 .audio-loading { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+
+/* ── Внешний вход (2.13): модалка выбора устройства ─────────────────────── */
+.audio-hint.compact { margin: 8px 0 0; font-size: 12px; }
+.live-field { margin-bottom: 14px; }
+.live-field .audio-device-list { margin-bottom: 0; max-height: 190px; }
+.live-field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.live-audio-select {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+/* Диагностика живого входа: что источник реально отдаёт. Нужна, потому что
+   заявленный устройством формат и фактическая доставка расходятся (Continuity
+   по Wi-Fi разгоняется первые секунды, дешёвый капчер молча даёт 640×480). */
+.live-info {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #d7dbe3;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  z-index: 7;
+  pointer-events: none;
+}
+.live-info.slow { color: #ffb454; }
+
+/* Индикатор уровня звука с живого входа. Превью немое, поэтому «идёт ли звук»
+   иначе не проверить до выдачи в эфир. */
+.audio-meter {
+  position: absolute;
+  right: 8px;
+  bottom: 32px;
+  width: 120px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.62);
+  overflow: hidden;
+  z-index: 7;
+  pointer-events: none;
+}
+.audio-meter i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: #3fb950;
+  transition: width 0.08s linear;
+}
+.audio-meter.hot i { background: var(--danger, #d64045); }
+
+/* Плашка вместо картинки, пока вход не поднялся: «устройство не найдено»,
+   «сигнал пропал», «занято другой программой». */
+.live-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: #14161b;
+  z-index: 6;
+}
 
 .windowed-section {
   margin-top: 4px;

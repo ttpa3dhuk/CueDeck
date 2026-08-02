@@ -1,6 +1,6 @@
 {
   "name": "cue-deck",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Presentation operator tool for live events — speaker playlist, per-speaker timers, confidence monitor, blackout",
   "author": "Azat Khusaenov",
   "main": "out/main/index.js",
@@ -57,6 +57,10 @@
       ],
       "category": "public.app-category.productivity",
       "identity": "-",
+      "extendInfo": {
+        "NSCameraUsageDescription": "CueDeck берёт картинку с USB-капчера или камеры, чтобы выдать внешний источник (ноутбук ведущего, диджея) на экран зала.",
+        "NSMicrophoneUsageDescription": "CueDeck берёт звук с аудиовхода капчера, когда сигнал приходит вместе с картинкой по HDMI."
+      },
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },

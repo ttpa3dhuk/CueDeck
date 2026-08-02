@@ -6,6 +6,7 @@ import type { DisplayMap, Layout } from './layout.js'
 import type {
   DeckState,
   FileKind,
+  LiveFit,
   PlaylistEntry,
   SlideMedia,
   TimerMode,
@@ -13,6 +14,9 @@ import type {
   VideoTakeMode,
 } from './state.js'
 import { store, initialDeckState, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
+import { DEFAULT_LIVE_FIT } from '../shared/types.js'
+import { isLiveUri, liveDisplayName, makeLiveUri, parseLiveUri } from '../shared/live.js'
+import type { LiveSource } from '../shared/live.js'
 import { computePdfSha1, computeStatSha1, loadNotes, notesWriter, sha1FromBuffer, sidecarPathFor } from './notes-store.js'
 import { applyLayout, getOperatorWindow } from './windows.js'
 import {
@@ -38,6 +42,7 @@ import {
   setAutoAdvance,
   setAudienceWindowed,
   setAudioOutputId,
+  setPreviewAudioOutputId,
   setTimerTickEnabled,
   setTimerGongEnabled,
   setTimerLoop,
@@ -92,6 +97,8 @@ function extOf(path: string): string {
 }
 
 export function kindOf(path: string): FileKind | null {
+  // Живой вход опознаём до расширений — у него псевдо-путь, а не файл.
+  if (isLiveUri(path)) return 'live'
   const ext = extOf(path)
   if (PDF_EXTS.has(ext)) return 'pdf'
   if (IMAGE_EXTS.has(ext)) return 'image'
@@ -131,6 +138,13 @@ interface InspectedFile {
 async function inspectFile(filePath: string): Promise<InspectedFile> {
   const kind = kindOf(filePath)
   if (!kind) throw new Error('Неподдерживаемый формат файла')
+
+  // Живой вход: файла нет — ни читать, ни считать страницы, ни искать заметки.
+  // Идентичность = сам псевдо-путь (сменил устройство → сменился «файл»).
+  if (kind === 'live') {
+    if (!parseLiveUri(filePath)) throw new Error('Неверно задан внешний вход')
+    return { kind, sha1: filePath, totalSlides: 1, notes: {}, sha1Mismatch: false, slideMedia: [] }
+  }
 
   let sha1: string
   let totalSlides = 1
@@ -297,6 +311,10 @@ async function programNext(): Promise<void> {
     return
   }
 
+  // Живой вход: листать и перематывать нечего. Молчим намеренно — иначе
+  // случайный клик спикера увёл бы эфир на следующего по autoAdvance.
+  if (state.fileKind === 'live') return
+
   if (currentSlide < totalSlides) {
     store.patch({ currentSlide: currentSlide + 1 })
     resetProgramVideoOnSlideChange()
@@ -311,6 +329,7 @@ async function programNext(): Promise<void> {
 
 function programPrev(): void {
   const state = store.get()
+  if (state.fileKind === 'live') return
   if (state.fileKind === 'video') {
     programSeekBy(-5)
     return
@@ -396,7 +415,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('pdf:read', async (): Promise<{ bytes: Uint8Array; mime: string } | null> => {
     const { pdfPath, fileKind, pdfSha1 } = store.get()
-    if (!pdfPath) return null
+    if (!pdfPath || fileKind === 'live') return null
     try {
       // For PPTX, read the cached converted PDF instead of the source file
       const readPath =
@@ -479,7 +498,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('preview:read', async (): Promise<{ bytes: Uint8Array; mime: string } | null> => {
     const { path, kind, sha1 } = store.get().preview
-    if (!path) return null
+    if (!path || kind === 'live') return null
     try {
       const readPath = kind === 'pptx' && sha1 ? cachedPdfPathFor(sha1) : path
       const buf = await readFile(readPath)
@@ -841,6 +860,17 @@ export function registerIpcHandlers(): void {
     setAudioOutputId(id)
   })
 
+  /**
+   * Предпрослушка (SOLO/PFL): выход под наушники оператора. null = выключена,
+   * превью снова немое. Дефолта «системный выход» здесь намеренно нет — на
+   * площадке он запросто окажется трактом зала.
+   */
+  ipcMain.handle('audio:set-preview-output', (_e, deviceId: string | null) => {
+    const id = deviceId ? String(deviceId) : null
+    store.patch({ previewAudioOutputId: id })
+    setPreviewAudioOutputId(id)
+  })
+
   ipcMain.handle('displays:list', (): DisplayInfo[] => {
     return screen.getAllDisplays().map((d, i) => ({
       id: d.id,
@@ -891,10 +921,11 @@ export function registerIpcHandlers(): void {
         id: randomUUID(),
         kind,
         filePath: p,
-        fileName: basename(p),
+        fileName: kind === 'live' ? liveDisplayName(p) : basename(p),
         displayName: '',
         speakerName: '',
         durationMs: defaultDur,
+        ...(kind === 'live' ? { liveFit: DEFAULT_LIVE_FIT } : {}),
       })
     }
     if (newEntries.length > 0) {
@@ -915,13 +946,58 @@ export function registerIpcHandlers(): void {
     return appendToPlaylist(res.filePaths)
   })
 
+  /**
+   * Живой вход в плейлист: устройство приходит метками (их знает только
+   * рендерер — enumerateDevices живёт в вебе), здесь склеивается в псевдо-путь.
+   * Имя записи оператор потом правит как у обычного файла («Ноут ведущего»).
+   */
+  ipcMain.handle('playlist:add-live', (_e, src: LiveSource): PlaylistEntry[] => {
+    if (!src || typeof src.videoLabel !== 'string' || !src.videoLabel) return []
+    return appendToPlaylist([
+      makeLiveUri({ videoLabel: src.videoLabel, audioLabel: src.audioLabel || null }),
+    ])
+  })
+
   // Drag & drop из Finder/Explorer: пути приходят из рендерера (webUtils).
   ipcMain.handle('playlist:add-paths', (_e, paths: string[]): PlaylistEntry[] => {
     if (!Array.isArray(paths)) return []
     return appendToPlaylist(paths)
   })
 
+  /**
+   * Переназначить устройства у живого входа, не пересоздавая запись: смена
+   * аудиовхода не должна стоить «удалить и завести заново». Меняется сам
+   * псевдо-путь, поэтому деки, которые на него смотрят, переводим следом —
+   * иначе эфир остался бы на старом источнике.
+   */
+  ipcMain.handle('playlist:update-live', (_e, payload: { id: string; src: LiveSource }) => {
+    const entry = store.get().playlist.find((e) => e.id === payload.id)
+    if (!entry || entry.kind !== 'live' || !payload.src?.videoLabel) return
+    const oldPath = entry.filePath
+    const uri = makeLiveUri({
+      videoLabel: payload.src.videoLabel,
+      audioLabel: payload.src.audioLabel || null,
+    })
+    if (uri === oldPath) return
+
+    store.patch({
+      playlist: store.get().playlist.map((e) =>
+        e.id === payload.id ? { ...e, filePath: uri, fileName: liveDisplayName(uri) } : e,
+      ),
+    })
+    persistPlaylist()
+
+    if (store.get().pdfPath === oldPath) {
+      store.patch({ pdfPath: uri, pdfSha1: uri })
+      setLastPdfPath(uri)
+    }
+    if (store.get().preview.path === oldPath) {
+      store.patchPreview({ path: uri, sha1: uri })
+    }
+  })
+
   ipcMain.handle('playlist:remove', (_e, id: string) => {
+    const removed = store.get().playlist.find((e) => e.id === id)
     const next = store.get().playlist.filter((e) => e.id !== id)
     const patch: Partial<import('./state.js').AppState> = { playlist: next }
     if (store.get().currentPlaylistId === id) {
@@ -929,6 +1005,12 @@ export function registerIpcHandlers(): void {
       setCurrentPlaylistId(null)
     }
     store.patch(patch)
+    // Живой вход держит железо занятым, пока на него кто-то смотрит. Убрали
+    // запись — снимаем её и с превью, иначе устройство останется захваченным
+    // невидимым деском. Эфир не трогаем: удаление строки не должно гасить зал.
+    if (removed?.kind === 'live' && store.get().preview.path === removed.filePath) {
+      store.patch({ preview: initialDeckState() })
+    }
     persistPlaylist()
   })
 
@@ -941,7 +1023,16 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'playlist:update',
-    (_e, payload: { id: string; displayName?: string; speakerName?: string; durationMs?: number }) => {
+    (
+      _e,
+      payload: {
+        id: string
+        displayName?: string
+        speakerName?: string
+        durationMs?: number
+        liveFit?: LiveFit
+      },
+    ) => {
       const next = store.get().playlist.map((e) =>
         e.id === payload.id
           ? {
@@ -950,6 +1041,7 @@ export function registerIpcHandlers(): void {
               speakerName: payload.speakerName ?? e.speakerName,
               durationMs:
                 typeof payload.durationMs === 'number' ? payload.durationMs : e.durationMs,
+              liveFit: payload.liveFit ?? e.liveFit,
             }
           : e,
       )

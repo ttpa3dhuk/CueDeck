@@ -5,6 +5,7 @@ import type {
   DisplayInfo,
   DisplayMap,
   Layout,
+  LiveFit,
   MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
@@ -14,8 +15,10 @@ import type {
   UiTheme,
   VideoTakeMode,
 } from '../shared/types.js'
+import type { LiveSource } from '../shared/live.js'
 
 export { DONATE_URL } from '../shared/types.js'
+export type { LiveSource } from '../shared/live.js'
 
 export type {
   AppState,
@@ -24,6 +27,7 @@ export type {
   DisplayMap,
   FileKind,
   Layout,
+  LiveFit,
   MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
@@ -133,6 +137,8 @@ export interface PresenterApi {
   }
   audio: {
     setOutput(deviceId: string | null): Promise<void>
+    /** Предпрослушка в наушники (SOLO/PFL); null = выключить. */
+    setPreviewOutput(deviceId: string | null): Promise<void>
   }
   displays: {
     list(): Promise<DisplayInfo[]>
@@ -160,9 +166,13 @@ export interface PresenterApi {
     add(): Promise<PlaylistEntry[]>
     /** Append files by path (drag & drop); unsupported paths are skipped. */
     addPaths(paths: string[]): Promise<PlaylistEntry[]>
+    /** Живой вход (2.13): устройство приходит метками, main склеит псевдо-путь. */
+    addLive(src: LiveSource): Promise<PlaylistEntry[]>
+    /** Переназначить устройства у живого входа без пересоздания записи. */
+    updateLive(id: string, src: LiveSource): Promise<void>
     remove(id: string): Promise<void>
     reorder(ids: string[]): Promise<void>
-    update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number }): Promise<void>
+    update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number; liveFit?: LiveFit }): Promise<void>
     /** Load entry into the off-air preview deck (safe; does not touch the audience feed). */
     activate(id: string): Promise<OpenPdfResult>
     /** Load entry straight to the program/audience feed (double-click / Take-now). */
@@ -202,6 +212,19 @@ export interface PresenterApi {
   }
   external: {
     open(url: string): Promise<void>
+  }
+  live: {
+    /**
+     * Разовый системный запрос доступа к камере/микрофону (macOS). Без него
+     * enumerateDevices отдаёт пустые метки, а getUserMedia падает.
+     */
+    requestAccess(): Promise<{ camera: boolean; mic: boolean }>
+  }
+  meter: {
+    /** Окно-озвучиватель шлёт уровень эфира (0..1) оператору на индикатор. */
+    report(level: number): void
+    /** Только у оператора: уровень звука, реально уходящего в зал. */
+    onProgramLevel(cb: (level: number) => void): Unsubscribe
   }
 }
 

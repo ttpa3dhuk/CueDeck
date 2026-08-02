@@ -12,12 +12,15 @@ import {
   videoPosition,
   videoSrc,
 } from '../shared/video'
+import { elementAudioStream, LiveMeter, LivePool, LiveView, listMediaDevices } from '../shared/live-stream'
+import { liveDisplayName, liveFitFor, parseLiveUri } from '../../shared/live'
 import { DONATE_URL } from '../../preload/api'
 import type {
   AppState,
   DisplayInfo,
   DisplayMap,
   Layout,
+  LiveFit,
   PlaylistEntry,
   Role,
   SlideTakeMode,
@@ -48,6 +51,7 @@ const modeSelect = role === 'operator' ? $<HTMLSelectElement>('mode-select') : n
 const playlistList = role === 'operator' ? $<HTMLOListElement>('playlist-list') : null
 const playlistEmpty = role === 'operator' ? $('playlist-empty') : null
 const playlistAddBtn = role === 'operator' ? $<HTMLButtonElement>('playlist-add') : null
+const playlistAddLiveBtn = role === 'operator' ? $<HTMLButtonElement>('playlist-add-live') : null
 const playlistCompactToggle = role === 'operator' ? $<HTMLInputElement>('playlist-compact-toggle') : null
 const playlistAutoAdvanceToggle = role === 'operator' ? $<HTMLInputElement>('playlist-auto-advance-toggle') : null
 const kvPreview = role === 'operator' ? $('kv-preview') : null
@@ -103,6 +107,11 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
 const currentCanvas = $<HTMLCanvasElement>('current-canvas')
 const currentImage = $<HTMLImageElement>('current-image')
 const currentVideo = $<HTMLVideoElement>('current-video')
+const currentLive = $<HTMLVideoElement>('current-live')
+const currentLiveStatus = $('current-live-status')
+const currentLiveInfo = $('current-live-info')
+const currentMeterEl = $('current-meter')
+const currentLiveFit = role === 'operator' ? $<HTMLSelectElement>('current-live-fit') : null
 const mediaOverlay = $<HTMLVideoElement>('media-overlay')
 const videoControls = role === 'operator' ? $('video-controls') : null
 const videoPlayBtn = role === 'operator' ? $<HTMLButtonElement>('video-play') : null
@@ -128,6 +137,11 @@ const isOperator = role === 'operator'
 const previewCanvas = isOperator ? $<HTMLCanvasElement>('preview-canvas') : null
 const previewImage = isOperator ? $<HTMLImageElement>('preview-image') : null
 const previewVideo = isOperator ? $<HTMLVideoElement>('preview-video') : null
+const previewLive = isOperator ? $<HTMLVideoElement>('preview-live') : null
+const previewLiveStatus = isOperator ? $('preview-live-status') : null
+const previewLiveInfo = isOperator ? $('preview-live-info') : null
+const previewMeterEl = isOperator ? $('preview-meter') : null
+const previewLiveFit = isOperator ? $<HTMLSelectElement>('preview-live-fit') : null
 const previewPlaceholder = isOperator ? $('preview-placeholder') : null
 const previewVideoControls = isOperator ? $('preview-video-controls') : null
 const previewVideoPlay = isOperator ? $<HTMLButtonElement>('preview-video-play') : null
@@ -236,12 +250,231 @@ function programHasVideo(state: AppState): boolean {
   )
 }
 
+// ── Живой вход (2.13) ────────────────────────────────────────────────────────
+// Эфирный источник открывают оба окна этого рендерера (оператор и суфлёр),
+// превью — только оператор. Устройство от этого не «раздваивается»: Chromium
+// держит его открытым один раз и раздаёт копию каждому клиенту.
+
+let liveSinkId: string | null | undefined = undefined
+
+const livePool = new LivePool()
+const programLiveView = new LiveView(currentLive, livePool)
+const previewLiveView = previewLive ? new LiveView(previewLive, livePool) : null
+// Меряем звук по самому потоку, а не по элементу: превью немое, а в эфире
+// звучит другое окно — на слух у оператора проверить нечего.
+const programMeter = new LiveMeter()
+const previewMeter = new LiveMeter()
+// Измеритель эфира в solo — тогда озвучивает сам оператор.
+const airMeter = new LiveMeter()
+// Уровень эфира, присланный окном-озвучивателем (зал) по IPC.
+const airLevel = { level: 0, at: 0 }
+
+// Пул поднимает потоки асинхронно и сам переподключает упавшие — перерисовываем
+// по его событиям, а не только по патчам состояния.
+livePool.onChange(() => {
+  const s = getState()
+  applyProgramLive(s)
+  applyPreviewLive(s)
+})
+
+// ── Предпрослушка (SOLO / PFL) ──────────────────────────────────────────────
+// Звук эфира уходит своим трактом (HDMI на vMix, звуковая карта), а наушники
+// оператора при этом свободны. `previewAudioOutputId` — второй выход: послушать
+// принесённый ролик или живой вход в превью до выдачи в зал.
+// null = выключено, превью немое (как было). Дефолта «системный выход» нет
+// намеренно: на площадке он запросто окажется трактом зала.
+
+// Счётчик применённого выхода — свой на каждый элемент: общий давал бы
+// «выход уже применён» при переключении ролик ⇄ живой вход в превью.
+const previewSinks = new Map<HTMLMediaElement, string | null>()
+
+/** Приводит элемент превью к состоянию предпрослушки. */
+function applyPreviewMonitoring(el: HTMLMediaElement | null, state: AppState): void {
+  if (!el) return
+  const out = state.previewAudioOutputId
+  el.muted = out === null
+  if (out !== null && previewSinks.get(el) !== out) {
+    previewSinks.set(el, out)
+    applySinkId(el, out)
+  }
+}
+
+function statusText(s: { status: string; message: string | null }): string {
+  return s.status === 'error' ? (s.message ?? '') : 'Подключаю внешний вход…'
+}
+
+/**
+ * Плашка «что реально приходит»: разрешение от устройства + измеренный fps.
+ * Заявленное и фактическое расходятся — Continuity-камера по Wi-Fi первые
+ * секунды отдаёт единицы кадров, разгоняясь до 30, а дешёвый капчер молча
+ * встаёт на 640×480. Оператору это надо видеть до выдачи в эфир.
+ */
+function updateLiveInfo(
+  el: HTMLElement | null,
+  uri: string | null,
+  view: LiveView,
+): void {
+  if (!el) return
+  const st = uri ? livePool.settingsOf(uri) : null
+  if (!st || livePool.stateOf(uri).status !== 'live') {
+    el.classList.add('hidden')
+    return
+  }
+  const fps = view.fps()
+  el.textContent = `${st.width}×${st.height} · ${fps || '—'} к/с`
+  el.classList.toggle('slow', fps > 0 && fps < st.frameRate * 0.7)
+  el.classList.remove('hidden')
+}
+
+/**
+ * Куда подключить измерители уровня. Источники разные, и это принципиально:
+ *
+ * - живой вход меряем по потоку с устройства из пула — работает всегда,
+ *   элемент при этом может быть немым;
+ * - ролик меряем по самому элементу, а с НЕМОГО элемента уровень не снимается
+ *   (проверено спайком). Поэтому в превью индикатор для роликов появляется
+ *   только с включённой предпрослушкой, а уровень эфира приходит по IPC из
+ *   окна, которое реально озвучивает зал.
+ */
+function attachMeters(state: AppState): void {
+  const p = state.preview
+  if (p.kind === 'live') previewMeter.attach(livePool.get(p.path))
+  else if (p.kind === 'video' && previewVideo && !previewVideo.muted) {
+    previewMeter.attach(elementAudioStream(previewVideo))
+  } else previewMeter.attach(null)
+
+  // Эфирный живой вход меряем сами — поток устройства у нас уже есть.
+  if (state.fileKind === 'live') programMeter.attach(livePool.get(state.pdfPath))
+  else programMeter.attach(null)
+
+  // Если это окно само озвучивает зал (solo), оно и рапортует уровень эфира —
+  // ровно как это делает окно зала в остальных раскладках.
+  const airEl =
+    state.fileKind === 'video'
+      ? currentVideo
+      : mediaOverlay.classList.contains('hidden')
+        ? null
+        : mediaOverlay
+  if (airEl && !airEl.muted) {
+    airMeter.attach(elementAudioStream(airEl))
+    if (airMeter.hasAudio()) window.api.meter.report(airMeter.level())
+  } else {
+    airMeter.attach(null)
+  }
+}
+
+function paintMeter(
+  meterEl: HTMLElement | null,
+  meter: LiveMeter,
+  /** Уровень из окна-озвучивателя (IPC); используется, когда мерить локально нечего. */
+  remote?: { level: number; at: number },
+): void {
+  if (!meterEl) return
+  // Пакеты приходят 10 раз в секунду; пауза дольше секунды = звука в эфире нет.
+  const remoteFresh = remote !== undefined && Date.now() - remote.at < 1000
+  if (!meter.hasAudio() && !remoteFresh) {
+    meterEl.classList.add('hidden')
+    return
+  }
+  const level = meter.hasAudio() ? meter.level() : remote!.level
+  const bar = meterEl.firstElementChild as HTMLElement | null
+  if (bar) bar.style.width = `${Math.min(100, Math.round(level * 100))}%`
+  meterEl.classList.toggle('hot', level > 0.9)
+  meterEl.classList.remove('hidden')
+}
+
+/**
+ * Какие источники это окно держит открытыми. Оператор — все живые записи
+ * плейлиста: просьба Азата, устройство должно быть занято приложением с
+ * момента добавления и до удаления из списка, чтобы капчер не пересогласовывал
+ * формат на каждом переключении, а айфон не выходил из режима показа.
+ * Суфлёр показывает только эфир — ему хватает эфирного источника.
+ */
+function retainedLiveUris(state: AppState): string[] {
+  const onAir = state.fileKind === 'live' && state.pdfPath ? [state.pdfPath] : []
+  if (!isOperator) return onAir
+  // Эфир добавлен отдельно от плейлиста: удаление строки из списка не должно
+  // гасить картинку, которая прямо сейчас идёт в зал. Превью такой защиты не
+  // получает — иначе удалённая запись продолжала бы держать устройство
+  // занятым из невидимого деска.
+  return [
+    ...new Set([
+      ...state.playlist.filter((e) => e.kind === 'live').map((e) => e.filePath),
+      ...onAir,
+    ]),
+  ]
+}
+
+/**
+ * Режим вписывания живого входа (2.13). Гости приносят ноуты 4:3 и 16:10 —
+ * по умолчанию поля по краям, но иногда просят заполнить экран целиком.
+ * Настройка живёт у записи плейлиста: «этот ноут 16:10» должно запоминаться
+ * за источником, а не сбрасываться на каждом переключении.
+ */
+function applyLiveFit(
+  el: HTMLVideoElement,
+  select: HTMLSelectElement | null,
+  state: AppState,
+  uri: string | null,
+  playlistId: string | null,
+): void {
+  const fit = liveFitFor(state.playlist, playlistId, uri)
+  el.style.objectFit = fit
+  if (!select) return
+  select.classList.toggle('hidden', !uri)
+  if (uri && document.activeElement !== select && select.value !== fit) select.value = fit
+}
+
+function applyProgramLive(state: AppState): void {
+  livePool.retain(retainedLiveUris(state))
+  const uri = state.fileKind === 'live' ? state.pdfPath : null
+  const s = programLiveView.show(uri)
+  applyLiveFit(currentLive, currentLiveFit, state, uri, state.currentPlaylistId)
+  currentLiveStatus.classList.toggle('hidden', s.status === 'off' || s.status === 'live')
+  currentLiveStatus.textContent = statusText(s)
+  if (isOperator) updateLiveInfo(currentLiveInfo, uri, programLiveView)
+  currentLive.muted = shouldMute(state, role)
+  // Счётчик выхода свой, не общий с файлом-видео: иначе при переключении
+  // файл ⇄ живой вход setSinkId не переприменился бы и звук ушёл бы не туда.
+  if (uri && state.audioOutputId !== liveSinkId) {
+    liveSinkId = state.audioOutputId
+    applySinkId(currentLive, state.audioOutputId)
+  }
+}
+
+/** Превью звучит только в наушники оператора (предпрослушка), не в зал. */
+function applyPreviewLive(state: AppState): void {
+  if (!previewLiveView) return
+  const p = state.preview
+  const uri = p.kind === 'live' ? p.path : null
+  applyPreviewMonitoring(previewLive, state)
+  const s = previewLiveView.show(uri)
+  if (previewLive) applyLiveFit(previewLive, previewLiveFit, state, uri, p.playlistId)
+  previewLiveStatus?.classList.toggle('hidden', s.status === 'off' || s.status === 'live')
+  if (previewLiveStatus) previewLiveStatus.textContent = statusText(s)
+  updateLiveInfo(previewLiveInfo, uri, previewLiveView)
+}
+
 async function loadCurrentFile(): Promise<void> {
   const state = getState()
   disposeCurrentImage()
   docLoaded = false
   lastRenderedSlide = -1
   videoError.classList.add('hidden')
+
+  if (state.fileKind === 'live') {
+    // Поток поднимает applyProgramLive(); здесь только убираем файловые слои.
+    unloadCurrentVideo()
+    slidePlaceholder.classList.add('hidden')
+    currentCanvas.classList.add('hidden')
+    currentImage.classList.add('hidden')
+    currentImage.removeAttribute('src')
+    clearCanvas(nextCanvas)
+    nextCanvas.classList.add('hidden')
+    nextEmpty.classList.remove('hidden')
+    await window.api.pdf.reportTotal(1)
+    return
+  }
 
   if (state.fileKind === 'video') {
     slidePlaceholder.classList.add('hidden')
@@ -404,12 +637,21 @@ async function loadPreviewFile(): Promise<void> {
 
   previewPlaceholder.classList.add('hidden')
 
+  if (p.kind === 'live') {
+    unloadPreviewVideo()
+    previewCanvas.classList.add('hidden')
+    previewImage.classList.add('hidden')
+    previewImage.removeAttribute('src')
+    await window.api.preview.reportTotal(1)
+    return
+  }
+
   if (p.kind === 'video') {
     previewCanvas.classList.add('hidden')
     previewImage.classList.add('hidden')
     previewImage.removeAttribute('src')
     previewVideo.classList.remove('hidden')
-    previewVideo.muted = true
+    applyPreviewMonitoring(previewVideo, getState())
     previewVideo.src = videoSrc(p.sha1 ?? '', 'preview')
     previewVideo.load()
     await window.api.preview.reportTotal(1)
@@ -464,7 +706,9 @@ function updatePreviewUI(state: AppState): void {
     previewCounter.textContent = p.path
       ? p.kind === 'video'
         ? 'видео'
-        : `${p.currentSlide} / ${p.totalSlides || '—'}`
+        : p.kind === 'live'
+          ? 'внешний вход'
+          : `${p.currentSlide} / ${p.totalSlides || '—'}`
       : '— / —'
   }
   const isVideo = p.kind === 'video'
@@ -501,7 +745,7 @@ async function handlePreviewChange(state: AppState): Promise<void> {
     previewLastRenderedSlide = -1
     await loadPreviewFile()
   } else if (p.kind === 'video') {
-    previewVideo.muted = true
+    applyPreviewMonitoring(previewVideo, state)
     syncVideoElement(previewVideo, p.video)
   } else if (p.currentSlide !== previewLastRenderedSlide) {
     await renderPreview()
@@ -760,7 +1004,9 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
         ? 'IMG'
         : entry.kind === 'video'
           ? 'VIDEO'
-          : 'PDF'
+          : entry.kind === 'live'
+            ? 'ВХОД'
+            : 'PDF'
 
   const name = document.createElement('span')
   name.className = 'pdf-name'
@@ -787,7 +1033,24 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   })
   removeBtn.addEventListener('dblclick', (e) => e.stopPropagation())
 
-  row1.append(handle, kindBadge, name, renameBtn, removeBtn)
+  row1.append(handle, kindBadge, name)
+
+  // У живого входа устройство и аудиовход можно переназначить на месте —
+  // иначе смена звука требовала бы удалить запись и завести заново.
+  if (entry.kind === 'live') {
+    const setupBtn = document.createElement('button')
+    setupBtn.className = 'rename'
+    setupBtn.textContent = '⚙'
+    setupBtn.title = 'Настроить внешний вход: устройство картинки и звука'
+    setupBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      openLiveModal(fresh()).catch(() => showBanner('Не удалось получить список устройств'))
+    })
+    setupBtn.addEventListener('dblclick', (e) => e.stopPropagation())
+    row1.append(setupBtn)
+  }
+
+  row1.append(renameBtn, removeBtn)
 
   const speakerInput = document.createElement('input')
   speakerInput.type = 'text'
@@ -985,8 +1248,14 @@ function updateOutputMonitors(state: AppState): void {
 function applyState(state: AppState): void {
   if (state.pdfPath) {
     slidePlaceholder.classList.add('hidden')
-    pdfName.textContent = baseName(state.pdfPath)
-    if (state.fileKind === 'video') {
+    pdfName.textContent =
+      state.fileKind === 'live' ? liveDisplayName(state.pdfPath) : baseName(state.pdfPath)
+    if (state.fileKind === 'live') {
+      // Листать нечего — вместо счётчика слайдов показываем, что в эфире вход.
+      slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
+      slideCounter.textContent = 'Внешний вход'
+      slideRemaining.textContent = ''
+    } else if (state.fileKind === 'video') {
       updateVideoHeader(state)
     } else {
       slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
@@ -1132,6 +1401,9 @@ let prevSlide = 0
 
 async function handleStateChange(state: AppState, patch: Partial<AppState> | null): Promise<void> {
   applyState(state)
+  applyProgramLive(state)
+  applyPreviewLive(state)
+  if (isOperator) attachMeters(state)
 
   if (isOperator) handlePreviewChange(state).catch(() => undefined)
 
@@ -1599,6 +1871,26 @@ function setupOperatorControls(): void {
     window.api.playlist.add()
   })
 
+  playlistAddLiveBtn!.addEventListener('click', () => {
+    openLiveModal().catch(() => showBanner('Не удалось получить список устройств'))
+  })
+
+  // Режим вписывания правится прямо на шине — просьбу «заполните весь экран»
+  // отрабатываем, не уходя в настройки и не снимая источник с эфира.
+  currentLiveFit?.addEventListener('change', () => {
+    const id = getState().currentPlaylistId
+    if (id) window.api.playlist.update(id, { liveFit: currentLiveFit.value as LiveFit })
+  })
+  previewLiveFit?.addEventListener('change', () => {
+    const id = getState().preview.playlistId
+    if (id) window.api.playlist.update(id, { liveFit: previewLiveFit.value as LiveFit })
+  })
+
+  $('live-cancel').addEventListener('click', () => $('live-modal').classList.add('hidden'))
+  $('live-add').addEventListener('click', () => {
+    confirmLiveModal().catch(() => showBanner('Не удалось добавить внешний вход'))
+  })
+
   // Compact toggle
   playlistCompactToggle!.addEventListener('change', () => {
     const v = playlistCompactToggle!.checked
@@ -1874,25 +2166,125 @@ async function listAudioOutputs(): Promise<MediaDeviceInfo[]> {
   return outs
 }
 
+// ── Модалка «+ Вход»: выбор внешнего источника ──────────────────────────────
+
+/** Выбранная камера в открытой модалке (метка, а не id — её и запоминаем). */
+let liveChosenVideo: string | null = null
+/** id редактируемой записи; null — заводим новую. */
+let liveEditingId: string | null = null
+
+/** Без аргумента — добавление нового входа, с записью — правка существующей. */
+async function openLiveModal(entry?: PlaylistEntry): Promise<void> {
+  const modal = $('live-modal')
+  const list = $('live-video-list')
+  const audioSelect = $<HTMLSelectElement>('live-audio-select')
+  const current = entry ? parseLiveUri(entry.filePath) : null
+  liveEditingId = entry?.id ?? null
+  liveChosenVideo = current?.videoLabel ?? null
+  $('live-modal-title').textContent = entry ? 'Настройка внешнего входа' : 'Внешний вход'
+  $('live-add').textContent = entry ? 'Сохранить' : 'Добавить в плейлист'
+  list.innerHTML = '<div class="audio-loading">Поиск устройств…</div>'
+  audioSelect.innerHTML = ''
+  modal.classList.remove('hidden')
+
+  // На macOS системный запрос доступа показывается один раз за жизнь приложения.
+  await window.api.live.requestAccess()
+  const devices = await listMediaDevices()
+  const cams = devices.filter((d) => d.kind === 'videoinput')
+
+  list.innerHTML = ''
+  if (cams.length === 0) {
+    list.innerHTML =
+      '<div class="audio-loading">Устройств не найдено. Проверь, что капчер воткнут и виден системе.<br/>' +
+      'Карты Blackmagic UltraStudio и DeckLink работают через свой драйвер и здесь не появляются — нужен UVC-капчер.</div>'
+  }
+  for (const d of cams) {
+    const row = document.createElement('label')
+    row.className = 'audio-device-row'
+    const radio = document.createElement('input')
+    radio.type = 'radio'
+    radio.name = 'live-video'
+    radio.checked = d.label === liveChosenVideo
+    radio.addEventListener('change', () => {
+      if (radio.checked) liveChosenVideo = d.label
+    })
+    const span = document.createElement('span')
+    span.textContent = d.label || 'Устройство без имени'
+    row.append(radio, span)
+    list.appendChild(row)
+  }
+  // Единственную камеру выбираем сразу — лишний клик оператору не нужен.
+  if (cams.length === 1 && !liveChosenVideo) {
+    liveChosenVideo = cams[0].label
+    list.querySelector<HTMLInputElement>('input')!.checked = true
+  }
+
+  const none = document.createElement('option')
+  none.value = ''
+  none.textContent = 'Без звука (уходит в пульт напрямую)'
+  audioSelect.appendChild(none)
+  for (const d of devices.filter((x) => x.kind === 'audioinput')) {
+    if (d.deviceId === 'default') continue
+    const opt = document.createElement('option')
+    opt.value = d.label
+    opt.textContent = d.label || 'Вход без имени'
+    audioSelect.appendChild(opt)
+  }
+  // Сохранённый аудиовход мог отвалиться вместе с железом — тогда останется
+  // «Без звука», и это честнее, чем молча показать выбранным отсутствующее.
+  audioSelect.value = current?.audioLabel ?? ''
+}
+
+async function confirmLiveModal(): Promise<void> {
+  if (!liveChosenVideo) {
+    showBanner('Сначала выбери устройство картинки')
+    return
+  }
+  const audioLabel = $<HTMLSelectElement>('live-audio-select').value || null
+  const src = { videoLabel: liveChosenVideo, audioLabel }
+
+  if (liveEditingId) {
+    await window.api.playlist.updateLive(liveEditingId, src)
+    $('live-modal').classList.add('hidden')
+    showBanner('Внешний вход перенастроен', 3000)
+    return
+  }
+
+  const added = await window.api.playlist.addLive(src)
+  $('live-modal').classList.add('hidden')
+  if (added.length > 0) {
+    showBanner(`Внешний вход добавлен: ${added[0].fileName}`, 4000)
+  }
+}
+
 async function openAudioModal(): Promise<void> {
   const modal = $('audio-modal')
   const list = $('audio-device-list')
   list.innerHTML = '<div class="audio-loading">Поиск устройств…</div>'
   modal.classList.remove('hidden')
 
+  const previewList = $('audio-preview-list')
   const outs = await listAudioOutputs()
-  const current = getState().audioOutputId
+  const state = getState()
   list.innerHTML = ''
+  previewList.innerHTML = ''
 
-  const makeRow = (value: string | null, label: string): HTMLLabelElement => {
+  const makeRow = (
+    group: 'main' | 'preview',
+    value: string | null,
+    label: string,
+  ): HTMLLabelElement => {
+    const current = group === 'main' ? state.audioOutputId : state.previewAudioOutputId
     const row = document.createElement('label')
     row.className = 'audio-device-row'
     const radio = document.createElement('input')
     radio.type = 'radio'
-    radio.name = 'audio-output'
+    radio.name = `audio-output-${group}`
     radio.checked = (value ?? null) === (current ?? null)
     radio.addEventListener('change', () => {
-      if (radio.checked) window.api.audio.setOutput(value)
+      if (!radio.checked) return
+      if (group === 'main') window.api.audio.setOutput(value)
+      else window.api.audio.setPreviewOutput(value)
     })
     const span = document.createElement('span')
     span.textContent = label
@@ -1900,10 +2292,15 @@ async function openAudioModal(): Promise<void> {
     return row
   }
 
-  list.appendChild(makeRow(null, 'Системный выход по умолчанию'))
+  list.appendChild(makeRow('main', null, 'Системный выход по умолчанию'))
+  // У предпрослушки дефолта «системный выход» нет намеренно: на площадке он
+  // запросто окажется трактом зала, и превью зазвучало бы в зал.
+  previewList.appendChild(makeRow('preview', null, 'Выключена (превью без звука)'))
   for (const d of outs) {
     if (d.deviceId === 'default') continue // covered by our "default" option
-    list.appendChild(makeRow(d.deviceId, d.label || `Устройство ${d.deviceId.slice(0, 6)}…`))
+    const label = d.label || `Устройство ${d.deviceId.slice(0, 6)}…`
+    list.appendChild(makeRow('main', d.deviceId, label))
+    previewList.appendChild(makeRow('preview', d.deviceId, label))
   }
 }
 
@@ -2224,6 +2621,10 @@ async function bootstrap(): Promise<void> {
 
   const initial = getState()
   applyState(initial)
+  // Восстановленная сессия могла закончиться на живом входе — поднимаем поток
+  // сразу, не дожидаясь первого патча состояния.
+  applyProgramLive(initial)
+  applyPreviewLive(initial)
   if (initial.pdfPath) {
     prevFilePath = initial.pdfPath
     await loadCurrentFile()
@@ -2235,6 +2636,18 @@ async function bootstrap(): Promise<void> {
       prevPreviewPath = initial.preview.path
       await loadPreviewFile()
     }
+  }
+
+  if (isOperator) {
+    window.api.meter.onProgramLevel((level) => {
+      airLevel.level = level
+      airLevel.at = Date.now()
+    })
+    window.setInterval(() => {
+      attachMeters(getState())
+      paintMeter(currentMeterEl, programMeter, airLevel)
+      paintMeter(previewMeterEl, previewMeter)
+    }, 80)
   }
 
   startTick(250, () => {
@@ -2253,9 +2666,15 @@ async function bootstrap(): Promise<void> {
       if (role === 'operator' && !mediaOverlay.classList.contains('hidden')) updateVideoUI(s)
     }
     if (isOperator) {
+      // Плашка fps живёт на тике: пул шлёт события только на смену статуса,
+      // а частота кадров меняется непрерывно (Continuity разгоняется).
+      if (s.fileKind === 'live')
+        updateLiveInfo(currentLiveInfo, s.pdfPath, programLiveView)
+      if (s.preview.kind === 'live')
+        updateLiveInfo(previewLiveInfo, s.preview.path, previewLiveView!)
       const pv = s.preview
       if (pv.kind === 'video' && previewVideo && !previewVideo.classList.contains('hidden')) {
-        previewVideo.muted = true
+        applyPreviewMonitoring(previewVideo, s)
         syncVideoElement(previewVideo, pv.video)
       }
       updatePreviewUI(s)

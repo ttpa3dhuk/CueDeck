@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' blob: cuedeck-media:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' blob: mediastream: cuedeck-media:;" />
     <title>CueDeck</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -118,6 +118,7 @@
           <div class="playlist-header">
             <span class="label">Спикеры</span>
             <button id="playlist-add" title="Добавить PDF / PPTX / видео / изображение">+ Добавить</button>
+            <button id="playlist-add-live" title="Добавить внешний вход: USB-капчер HDMI, камера (ноутбук ведущего или диджея)">+ Вход</button>
           </div>
           <div class="playlist-toggles">
             <label class="toggle" title="Скрыть имя и таймер у каждого спикера">
@@ -143,10 +144,21 @@
           </div>
         </aside>
         <section id="current-slide" class="current-slide">
-          <div class="deck-label program op-only">● ЭФИР</div>
+          <div class="deck-label program op-only">
+            <span>● ЭФИР</span>
+            <select id="current-live-fit" class="video-take-mode hidden" title="Как вписать внешний вход в экран зала">
+              <option value="contain">⬛ вписать (поля)</option>
+              <option value="cover">⛶ заполнить (обрезать)</option>
+              <option value="fill">↔ растянуть</option>
+            </select>
+          </div>
           <canvas id="current-canvas" class="hidden"></canvas>
           <img id="current-image" class="slide-image hidden" alt="" />
           <video id="current-video" class="slide-video hidden" playsinline></video>
+          <video id="current-live" class="slide-video hidden" playsinline></video>
+          <div id="current-live-status" class="live-status hidden"></div>
+          <div id="current-live-info" class="live-info op-only hidden" title="Что реально отдаёт внешний вход: разрешение и измеренная частота кадров"></div>
+          <div id="current-meter" class="audio-meter op-only hidden" title="Уровень звука, приходящего с внешнего входа"><i></i></div>
           <video id="media-overlay" class="media-overlay hidden" playsinline></video>
           <div id="video-controls" class="video-controls op-only hidden">
             <button id="video-play" title="Play / Pause (Space)">▶</button>
@@ -185,11 +197,20 @@
               <option value="from-start">▶ с первого слайда</option>
               <option value="from-current">▶ с этого слайда</option>
             </select>
+            <select id="preview-live-fit" class="video-take-mode hidden" title="Как вписать внешний вход в экран зала">
+              <option value="contain">⬛ вписать (поля)</option>
+              <option value="cover">⛶ заполнить (обрезать)</option>
+              <option value="fill">↔ растянуть</option>
+            </select>
             <button id="take-btn" class="take-btn" title="Выдать превью в эфир (Enter)" disabled>ЭФИР ▶</button>
           </div>
           <canvas id="preview-canvas" class="hidden"></canvas>
           <img id="preview-image" class="slide-image hidden" alt="" />
           <video id="preview-video" class="slide-video hidden" playsinline muted></video>
+          <video id="preview-live" class="slide-video hidden" playsinline muted></video>
+          <div id="preview-live-status" class="live-status hidden"></div>
+          <div id="preview-live-info" class="live-info op-only hidden" title="Что реально отдаёт внешний вход: разрешение и измеренная частота кадров"></div>
+          <div id="preview-meter" class="audio-meter op-only hidden" title="Уровень звука, приходящего с внешнего входа — превью немое, на слух не проверить"><i></i></div>
           <div id="preview-video-controls" class="video-controls preview-controls hidden">
             <button id="preview-video-play" title="Play / Pause превью">▶</button>
             <button id="preview-video-restart" title="В начало">⏮</button>
@@ -277,7 +298,7 @@
         </div>
         <div class="bottombar-right">
           <button id="theme-toggle" title="Переключить тему оператора">☀️ Светлая</button>
-          <button id="audio-setup" title="Куда отдавать звук видео">🔊 Аудиовыход…</button>
+          <button id="audio-setup" title="Выход звука эфира и предпрослушка в наушники">🔊 Звук…</button>
           <button id="display-setup">Настройка экранов…</button>
           <button id="help-btn" title="Горячие клавиши (?)">?</button>
         </div>
@@ -293,11 +314,45 @@
 
     <div id="audio-modal" class="modal hidden">
       <div class="modal-content">
-        <h2>Аудиовыход для звука видео</h2>
-        <p class="audio-hint">Куда отдавать звук роликов: звуковая карта, миниджек ноута, HDMI на vMix-машину и т.п. Звук идёт на выход того экрана, что озвучивает зал.</p>
-        <div id="audio-device-list" class="audio-device-list"></div>
+        <h2>Звук: эфир и предпрослушка</h2>
+        <div class="live-field">
+          <span class="live-field-label">Эфир (MAIN)</span>
+          <p class="audio-hint compact">Куда отдавать звук роликов и внешних входов: звуковая карта, миниджек ноута, HDMI на vMix-машину. Идёт на выход того окна, что озвучивает зал.</p>
+          <div id="audio-device-list" class="audio-device-list"></div>
+        </div>
+        <div class="live-field">
+          <span class="live-field-label">Предпрослушка (SOLO, наушники)</span>
+          <p class="audio-hint compact">Отдельный выход, чтобы послушать принесённый ролик или внешний вход в превью до выдачи в зал. Пока выключено — превью немое.</p>
+          <div id="audio-preview-list" class="audio-device-list"></div>
+        </div>
         <div class="modal-actions">
           <button id="audio-close" class="primary">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="live-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2 id="live-modal-title">Внешний вход</h2>
+        <p class="audio-hint">
+          Картинка с USB-капчера HDMI или камеры — ноутбук ведущего или диджея, который крутит контент только у себя.
+          Источник встанет в плейлист наравне с презентациями: клик — в превью, ЭФИР — в зал.
+        </p>
+        <div class="live-field">
+          <span class="live-field-label">Картинка</span>
+          <div id="live-video-list" class="audio-device-list"></div>
+        </div>
+        <div class="live-field">
+          <span class="live-field-label">Звук</span>
+          <select id="live-audio-select" class="live-audio-select"></select>
+          <p class="audio-hint compact">
+            «Без звука» — когда звук с ноутбука уходит в пульт напрямую. Обработку голоса
+            (шумодав, авто-громкость) CueDeck на этом входе не включает — музыка идёт как есть.
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button id="live-cancel">Отмена</button>
+          <button id="live-add" class="primary">Добавить в плейлист</button>
         </div>
       </div>
     </div>

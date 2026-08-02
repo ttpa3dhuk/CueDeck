@@ -9,11 +9,15 @@ import {
   syncVideoElement,
   videoSrc,
 } from '../shared/video'
+import { elementAudioStream, LiveMeter, LivePool, LiveView } from '../shared/live-stream'
+import { liveFitFor } from '../../shared/live'
 import type { AppState } from '../../preload/api'
 
 const canvas = document.getElementById('slide-canvas') as HTMLCanvasElement
 const slideImage = document.getElementById('slide-image') as HTMLImageElement
 const slideVideo = document.getElementById('slide-video') as HTMLVideoElement
+const liveVideo = document.getElementById('live-video') as HTMLVideoElement
+const liveStatus = document.getElementById('live-status') as HTMLDivElement
 const mediaOverlay = document.getElementById('media-overlay') as HTMLVideoElement
 const blackout = document.getElementById('blackout') as HTMLDivElement
 const kvImage = document.getElementById('keyvisual') as HTMLImageElement
@@ -30,6 +34,64 @@ function disposeSlideImage(): void {
   if (slideImageBlobUrl) {
     URL.revokeObjectURL(slideImageBlobUrl)
     slideImageBlobUrl = null
+  }
+}
+
+// ── Живой вход (2.13) ────────────────────────────────────────────────────────
+// Зал — озвучивающая роль во всех раскладках кроме solo (см. shouldMute в
+// shared/video.ts). Звук пул тянет всегда, когда он задан у источника;
+// решает, кому его слышно, muted на элементе.
+
+let liveSinkId: string | null | undefined = undefined
+
+// Индикатор эфирного звука у оператора: меряет тот, кто реально озвучивает.
+// С немого элемента уровень не снимается (проверено спайком), а в 2–3-экранной
+// раскладке немой как раз операторский — поэтому меряем здесь и шлём число.
+const programMeter = new LiveMeter()
+
+function reportProgramLevel(state: AppState): void {
+  const el =
+    state.fileKind === 'video'
+      ? slideVideo
+      : mediaOverlay.classList.contains('hidden')
+        ? null
+        : mediaOverlay
+  programMeter.attach(el ? elementAudioStream(el) : null)
+  if (programMeter.hasAudio()) window.api.meter.report(programMeter.level())
+}
+
+const livePool = new LivePool()
+const liveView = new LiveView(liveVideo, livePool)
+
+// Пул поднимает поток асинхронно (и переподключает упавший) — перерисовываем
+// по его событиям, а не только по патчам состояния.
+livePool.onChange(() => applyLive(getState()))
+
+/**
+ * Аудиодорожку тянем по РОЛИ окна, а не по текущему mute: mute и blackout
+ * гасятся на элементе. Иначе каждое нажатие «звук выкл» пересобирало бы поток
+ * с устройства — лишний захват и моргание картинки в зале.
+ */
+function applyLive(state: AppState): void {
+  const uri = state.fileKind === 'live' ? state.pdfPath : null
+  // Зал держит только то, что в эфире: постоянный «держатель» устройств —
+  // окно оператора, здесь удерживать весь плейлист незачем.
+  livePool.retain(uri ? [uri] : [])
+  const s = liveView.show(uri)
+  // Режим вписывания задан у записи плейлиста (гости приносят 4:3 и 16:10).
+  liveVideo.style.objectFit = liveFitFor(state.playlist, state.currentPlaylistId, uri)
+  liveStatus.classList.toggle('hidden', s.status === 'off' || s.status === 'live')
+  liveStatus.textContent = s.status === 'error' ? (s.message ?? '') : ''
+  liveVideo.muted = shouldMute(state, 'audience')
+  if (uri) {
+    // Свой счётчик выхода, отдельный от файла-видео: общий давал бы «выход уже
+    // применён» при переключении файл ⇄ живой вход, и звук уходил бы не туда.
+    if (state.audioOutputId !== liveSinkId) {
+      liveSinkId = state.audioOutputId
+      applySinkId(liveVideo, state.audioOutputId)
+    }
+  } else {
+    liveStatus.classList.add('hidden')
   }
 }
 
@@ -92,6 +154,15 @@ async function loadFile(): Promise<void> {
   docLoaded = false
   lastRenderedSlide = -1
   const state = getState()
+
+  if (state.fileKind === 'live') {
+    // Поток поднимает applyLive() — здесь только убираем со сцены файловые слои.
+    unloadVideo()
+    canvas.classList.add('hidden')
+    slideImage.classList.add('hidden')
+    slideImage.removeAttribute('src')
+    return
+  }
 
   if (state.fileKind === 'video') {
     canvas.classList.add('hidden')
@@ -176,6 +247,7 @@ function applyOverlay(state: AppState): void {
 async function applyState(state: AppState): Promise<void> {
   await refreshKeyVisual(state)
   applyOverlay(state)
+  applyLive(state)
 
   if (!state.pdfPath) {
     // Программный деск очищен (напр. «Новый проект») — гасим то, что осталось на экране.
@@ -233,6 +305,7 @@ async function bootstrap(): Promise<void> {
   const initial = getState()
   await refreshKeyVisual(initial)
   applyOverlay(initial)
+  applyLive(initial)
   if (initial.pdfPath) {
     lastFilePath = initial.pdfPath
     await loadFile()
@@ -241,6 +314,10 @@ async function bootstrap(): Promise<void> {
 
   // Periodically nudge the video back onto the shared clock — guards against
   // buffering/stall drift between this window and the operator's preview.
+  // Уровень шлём чаще, чем идёт общий тик синхронизации: индикатор на 2 Гц
+  // выглядел бы стоящим на месте.
+  window.setInterval(() => reportProgramLevel(getState()), 100)
+
   window.setInterval(() => {
     const s = getState()
     if (s.fileKind === 'video' && !slideVideo.classList.contains('hidden')) {

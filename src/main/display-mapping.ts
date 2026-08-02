@@ -27,6 +27,7 @@ interface PersistedShape {
   projectPath: string | null
   audienceWindowed: boolean
   audioOutputId: string | null
+  previewAudioOutputId: string | null
   timerTickEnabled: boolean
   timerGongEnabled: boolean
   timerLoop: boolean
@@ -57,6 +58,7 @@ const STORE_DEFAULTS: PersistedShape = {
   projectPath: null,
   audienceWindowed: false,
   audioOutputId: null,
+  previewAudioOutputId: null,
   timerTickEnabled: false,
   timerGongEnabled: false,
   timerLoop: false,
@@ -237,6 +239,14 @@ export function getAudioOutputId(): string | null {
 
 export function setAudioOutputId(id: string | null): void {
   store().set('audioOutputId', id)
+}
+
+export function getPreviewAudioOutputId(): string | null {
+  return store().get('previewAudioOutputId')
+}
+
+export function setPreviewAudioOutputId(id: string | null): void {
+  store().set('previewAudioOutputId', id)
 }
 
 export function getTimerTickEnabled(): boolean {

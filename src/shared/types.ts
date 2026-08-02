@@ -32,7 +32,9 @@ export type TimerMode = 'countdown' | 'stopwatch' | 'clock'
 // через vMix и режиссёр накладывает свой таймер поверх.
 export type TimerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'hidden'
 
-export type FileKind = 'pdf' | 'image' | 'pptx' | 'video'
+// 'live' — не файл, а внешний источник (USB-капчер/камера); путь у него
+// псевдо-URI `live://…`, см. src/shared/live.ts.
+export type FileKind = 'pdf' | 'image' | 'pptx' | 'video' | 'live'
 
 /** Тема интерфейса оператора. Суфлёр и зал всегда тёмные — это выходные экраны. */
 export type UiTheme = 'dark' | 'light'
@@ -91,6 +93,17 @@ export interface SlideMedia {
   file: string
 }
 
+/**
+ * Как вписывать картинку живого входа в экран 16:9 (2.13). Гости приносят
+ * ноуты 4:3 и 16:10 — по умолчанию поля по краям, но иногда просят заполнить.
+ * - `contain` — вписать целиком, поля по краям (безопасный дефолт)
+ * - `cover`   — увеличить до заполнения, края обрезаются, пропорции целы
+ * - `fill`    — растянуть до 16:9, пропорции искажаются
+ */
+export type LiveFit = 'contain' | 'cover' | 'fill'
+
+export const DEFAULT_LIVE_FIT: LiveFit = 'contain'
+
 export interface PlaylistEntry {
   id: string
   kind: FileKind
@@ -100,6 +113,8 @@ export interface PlaylistEntry {
   displayName: string
   speakerName: string
   durationMs: number
+  /** Только для kind='live'. Отсутствует у старых сохранённых плейлистов. */
+  liveFit?: LiveFit
 }
 
 /**
@@ -153,6 +168,14 @@ export interface AppState {
   audienceWindowed: boolean
   /** Output device id for video sound (setSinkId). null = system default. */
   audioOutputId: string | null
+  /**
+   * Предпрослушка (SOLO/PFL): отдельный выход под наушники оператора, чтобы
+   * послушать ролик или живой вход в превью, пока эфир идёт своим трактом.
+   * null = предпрослушка ВЫКЛЮЧЕНА (превью немое). Именно выключена, а не
+   * «системный по умолчанию»: на площадке дефолтный выход запросто окажется
+   * трактом зала, и превью зазвучало бы в зал.
+   */
+  previewAudioOutputId: string | null
   /** Flash message on the speaker monitor; stays (blinking) until cleared. null = none. */
   speakerMessage: string | null
   /** User-editable texts of the six speaker-message preset buttons (ПКМ по кнопке); '' = пустой слот. */

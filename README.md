@@ -83,6 +83,21 @@ PDF и картинки работают сразу, без зависимост
 
 **Короткое правило:** гони видео в **MP4 (H.264 + AAC)** — играет у всех и всегда. Если прилетел ProRes-мастер с монтажа или HEVC — перекодируй бесплатным [HandBrake](https://handbrake.fr/) (пресет «Fast 1080p30»). Если файл не открывается — CueDeck покажет подсказку.
 
+#### Внешний вход — какой капчер подойдёт
+
+CueDeck берёт картинку тем же способом, что Zoom и браузеры, поэтому видит устройства класса **UVC** — те, что система показывает как обычную веб-камеру.
+
+| | Устройство | Почему |
+|---|---|---|
+| ✅ Работает | AVMatrix, Elgato Cam Link, недорогие HDMI→USB донглы | UVC, драйвер не нужен |
+| ✅ Работает | Blackmagic **ATEM Mini**, **Web Presenter** | отдаются системе как веб-камера |
+| ✅ Работает | Веб-камера ноутбука, iPhone по Continuity | удобно проверить схему без капчера |
+| ❌ Не видно | Blackmagic **DeckLink**, **UltraStudio** | работают через свой драйвер Desktop Video, в списке камер не появляются |
+
+**Проверка за пять секунд:** открой Photo Booth. Видно устройство — CueDeck его возьмёт.
+
+Про **Continuity-камеру iPhone**: по Wi-Fi первые секунды идёт «слайд-шоу», пока канал не разгонится — это особенность беспроводного транспорта, а не CueDeck. По кабелю и на обычном капчере такого нет; фактическую частоту кадров видно в углу превью.
+
 ---
 
 ### ✨ Возможности
@@ -105,7 +120,10 @@ PDF и картинки работают сразу, без зависимост
 - 🎞 **Видео внутри PPTX-слайдов** — вшитый в слайд ролик играет прямо на слайде, на своём месте, синхронно у оператора, суфлёра и зала. Первый клик «далее» запускает видео (спикер стартует ролик сам, как привык), следующий — листает дальше; транспорт и звук — как у обычного видео
 - ✨ **Анимации PowerPoint «по клику»** — построчные появления текста разворачиваются в шаги-страницы: кликер листает их как в оригинальном PowerPoint, «назад» прячет строки обратно
 - 🎬 **Видео** — ролики между выступлениями прямо в плейлисте. Play/pause, перемотка и звук синхронизированы между окном оператора и залом; звук идёт только на основной выход. В шапке — таймкод и крупный обратный отсчёт до конца ролика (оранжевый за 30с, красный за 10с). Управление: `Space` — play/pause, `←/→` — ±5с, `M` — звук
-- 🔊 **Выбор аудиовыхода** — кнопка «Аудиовыход…» открывает меню, где задаёшь, на какое устройство отдавать звук видео: звуковая карта, миниджек ноута, HDMI на vMix-машину, NDI и т.п. Выбор запоминается
+- 📹 **Живой вход — чужой ноутбук на экране зала** — ведущий или диджей пришёл со своим ноутом и крутит контент только у себя? Подключаешь его HDMI через USB-капчер, и он встаёт в плейлист наравне с презентациями: клик — в превью, TAKE — в зал. Устройство занимается приложением с момента добавления и до удаления из списка, поэтому переключения мгновенные, а горячее переподключение кабеля подхватывается само. В углу — что источник реально отдаёт: разрешение и измеренная частота кадров. Три режима вписывания под гостевые 4:3 и 16:10 — вписать с полями, заполнить с обрезкой, растянуть; переключается на лету, не снимая источник с эфира
+- 🎧 **Предпрослушка (SOLO) — послушать в наушники до эфира** — звук эфира уходит своим трактом (звуковая карта, HDMI на vMix), а наушники оператора при этом свободны. Задаёшь им отдельный выход — и слушаешь принесённый ролик или внешний вход прямо в превью, пока в зале идёт другое. По умолчанию выключено: превью немое, пока сам не выберешь устройство
+- 📊 **Индикаторы уровня звука** — полоска под превью и под эфиром показывает, что звук реально идёт: у ролика есть аудиодорожка, у гостевого ноута не пропал сигнал. Краснеет на перегрузе
+- 🔊 **Выбор аудиовыхода** — кнопка «Звук…» открывает меню, где задаёшь, на какое устройство отдавать звук эфира: звуковая карта, миниджек ноута, HDMI на vMix-машину, NDI и т.п. Там же — выход предпрослушки. Выбор запоминается
 - 📝 **Заметки оператора → суфлёр** — пишешь текст в окне оператора, он мгновенно появляется на экране суфлёра. Прямой канал связи со спикером без слов
 - 💬 **Сообщение спикеру** — флэш-сообщение на суфлёр: готовые пресеты («Заканчивайте», «Ближе к микрофону», «Финальный слайд») или свой текст, крупно и мигает, пока не снимешь. Тексты пресетов меняются под себя правым кликом
 - ⬛ **Blackout / Key Visual** — нажал `B`: аудитория видит заставку (если загружена) или чёрный фон, звук видео тоже глушится. Переключаешь слайды — аудитория ничего не видит
@@ -254,6 +272,21 @@ Note: the file format (**container**) and the **codec** inside it are different 
 
 **Rule of thumb:** export to **MP4 (H.264 + AAC)** — it plays everywhere, every time. If you get a ProRes master or HEVC, transcode it with the free [HandBrake](https://handbrake.fr/) ("Fast 1080p30" preset). If a file won't open, CueDeck shows a hint.
 
+#### Live input — which capture device works
+
+CueDeck grabs the picture the same way Zoom and browsers do, so it sees **UVC** devices — the ones your OS exposes as a regular webcam.
+
+| | Device | Why |
+|---|---|---|
+| ✅ Works | AVMatrix, Elgato Cam Link, cheap HDMI→USB dongles | UVC, no driver needed |
+| ✅ Works | Blackmagic **ATEM Mini**, **Web Presenter** | present themselves as a webcam |
+| ✅ Works | Laptop webcam, iPhone via Continuity | handy for testing the setup without a capture device |
+| ❌ Not visible | Blackmagic **DeckLink**, **UltraStudio** | run through their own Desktop Video driver, never appear in the camera list |
+
+**Five-second check:** open Photo Booth. If the device shows up there, CueDeck will pick it up.
+
+About the **iPhone Continuity camera**: over Wi-Fi the first seconds look like a slideshow until the link ramps up — that's the wireless transport, not CueDeck. Wired, and on a regular capture device, this does not happen; the actual frame rate is shown in the corner of the preview.
+
 ---
 
 ### ✨ Features
@@ -276,7 +309,10 @@ Note: the file format (**container**) and the **codec** inside it are different 
 - 🎞 **Videos inside PPTX slides** — a clip embedded in a slide plays right on the slide, in its exact position, in sync across operator, speaker and audience windows. The first "next" click starts the video (speakers launch clips themselves, as they're used to), the following click moves on; transport and audio work like regular video
 - ✨ **PowerPoint on-click animations** — line-by-line text builds expand into step pages: the clicker walks through them like in the original PowerPoint, "back" hides lines again
 - 🎬 **Video** — play clips between talks straight from the playlist. Play/pause, seek and audio stay in sync between the operator and the audience; sound goes to the main output only. The header shows the time-code and a large countdown to the end of the clip (orange at 30s, red at 10s). Controls: `Space` play/pause, `←/→` ±5s, `M` mute
-- 🔊 **Audio output selection** — the "Audio output…" button opens a menu to pick which device the video sound goes to: sound card, laptop minijack, HDMI to a vMix machine, NDI, etc. The choice is remembered
+- 📹 **Live input — a guest laptop on the hall screen** — the host or DJ shows up with their own laptop and runs content only from it? Feed their HDMI through a USB capture device and it joins the playlist like any presentation: click to preview, TAKE to air. The device is held by the app from the moment you add it until you remove it from the list, so switching is instant and hot-replugging the cable recovers on its own. A badge in the corner shows what the source actually delivers: resolution and measured frame rate. Three fit modes for guest 4:3 and 16:10 laptops — letterbox, fill with cropping, stretch; switchable on the fly without pulling the source off air
+- 🎧 **Cue / SOLO monitoring — listen on headphones before going live** — program audio goes out its own path (sound card, HDMI to vMix) while the operator's headphones sit idle. Assign them a separate output and audition an incoming clip or a live input right in preview while something else is on air. Off by default: preview stays silent until you pick a device
+- 📊 **Audio level meters** — a bar under preview and under program shows that sound is actually flowing: the clip does have an audio track, the guest laptop's signal hasn't dropped. Turns red on overload
+- 🔊 **Audio output selection** — the "Audio…" button opens a menu to pick which device program sound goes to: sound card, laptop minijack, HDMI to a vMix machine, NDI, etc. The cue output lives there too. The choice is remembered
 - 📝 **Operator notes → confidence monitor** — type in the operator window, text appears instantly on the speaker's screen. Silent communication channel during the presentation
 - 💬 **Speaker message** — flash a message on the confidence monitor: ready presets ("Wrap up", "Closer to the mic", "Final slide") or your own text, shown large and blinking until you clear it. Right-click a preset to edit its text
 - ⬛ **Blackout / Key Visual** — press `B`: audience sees your Key Visual image (if loaded) or a black screen, video sound is muted too. Switch slides freely — the audience sees nothing

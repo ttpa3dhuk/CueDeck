@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, protocol, screen, session, shell, systemPreferences } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -26,6 +26,7 @@ import {
   getAutoAdvance,
   getAudienceWindowed,
   getAudioOutputId,
+  getPreviewAudioOutputId,
   getTimerTickEnabled,
   getTimerGongEnabled,
   getTimerLoop,
@@ -274,6 +275,30 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
   buildMenu()
 
+  /**
+   * Живой вход (2.13): без выданного доступа к камере enumerateDevices() отдаёт
+   * пустые метки, а getUserMedia падает NotAllowedError. На macOS системный
+   * запрос показывается ровно один раз за жизнь приложения — дёргаем его перед
+   * открытием списка устройств, а не на старте, чтобы не пугать тех, кому
+   * внешний вход не нужен. На Windows/Linux вызов просто отдаёт true.
+   */
+  ipcMain.handle('live:request-access', async (): Promise<{ camera: boolean; mic: boolean }> => {
+    if (process.platform !== 'darwin') return { camera: true, mic: true }
+    const camera = await systemPreferences.askForMediaAccess('camera').catch(() => false)
+    const mic = await systemPreferences.askForMediaAccess('microphone').catch(() => false)
+    return { camera, mic }
+  })
+
+  /**
+   * Уровень звука эфира: меряет окно, которое реально озвучивает (зал, а в
+   * solo — сам оператор), и шлёт сюда; мы пересылаем оператору на индикатор.
+   * Через состояние это гнать нельзя — поток чисел 10 раз в секунду.
+   */
+  ipcMain.on('meter:report', (_e, level: number) => {
+    if (typeof level !== 'number' || !Number.isFinite(level)) return
+    sendToOperator('meter:program-level', Math.max(0, Math.min(1, level)))
+  })
+
   ipcMain.handle('external:open', (_e, url: string) => {
     if (typeof url === 'string' && /^https?:\/\//.test(url)) {
       shell.openExternal(url).catch(() => undefined)
@@ -293,6 +318,7 @@ app.whenReady().then(async () => {
     autoAdvance: getAutoAdvance(),
     audienceWindowed: getAudienceWindowed(),
     audioOutputId: getAudioOutputId(),
+    previewAudioOutputId: getPreviewAudioOutputId(),
     timerTickEnabled: getTimerTickEnabled(),
     timerGongEnabled: getTimerGongEnabled(),
     timerLoop: getTimerLoop(),

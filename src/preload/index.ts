@@ -88,6 +88,7 @@ const api: PresenterApi = {
   },
   audio: {
     setOutput: (deviceId) => ipcRenderer.invoke('audio:set-output', deviceId),
+    setPreviewOutput: (deviceId) => ipcRenderer.invoke('audio:set-preview-output', deviceId),
   },
   displays: {
     list: () => ipcRenderer.invoke('displays:list'),
@@ -116,6 +117,8 @@ const api: PresenterApi = {
   playlist: {
     add: () => ipcRenderer.invoke('playlist:add'),
     addPaths: (paths) => ipcRenderer.invoke('playlist:add-paths', paths),
+    addLive: (src) => ipcRenderer.invoke('playlist:add-live', src),
+    updateLive: (id, src) => ipcRenderer.invoke('playlist:update-live', { id, src }),
     remove: (id) => ipcRenderer.invoke('playlist:remove', id),
     reorder: (ids) => ipcRenderer.invoke('playlist:reorder', ids),
     update: (id, payload) => ipcRenderer.invoke('playlist:update', { id, ...payload }),
@@ -190,6 +193,17 @@ const api: PresenterApi = {
   },
   soffice: {
     check: () => ipcRenderer.invoke('soffice:check'),
+  },
+  live: {
+    requestAccess: () => ipcRenderer.invoke('live:request-access'),
+  },
+  meter: {
+    report: (level) => ipcRenderer.send('meter:report', level),
+    onProgramLevel: (cb) => {
+      const listener = (_e: Electron.IpcRendererEvent, level: number) => cb(level)
+      ipcRenderer.on('meter:program-level', listener)
+      return () => ipcRenderer.removeListener('meter:program-level', listener)
+    },
   },
   external: {
     open: (url) => ipcRenderer.invoke('external:open', url),
