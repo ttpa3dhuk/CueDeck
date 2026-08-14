@@ -195,6 +195,7 @@ const api: PresenterApi = {
     check: () => ipcRenderer.invoke('soffice:check'),
     recheck: () => ipcRenderer.invoke('soffice:recheck'),
     paths: () => ipcRenderer.invoke('soffice:paths'),
+    pick: () => ipcRenderer.invoke('soffice:pick'),
   },
   live: {
     requestAccess: () => ipcRenderer.invoke('live:request-access'),

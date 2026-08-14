@@ -3,6 +3,7 @@ import { mkdir, rename, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, parse } from 'node:path'
 import { app } from 'electron'
+import { getSofficePath, setSofficePath } from './display-mapping.js'
 
 /**
  * Где искать LibreOffice. Пути платформозависимы — на Windows их не было
@@ -59,8 +60,70 @@ function whichSoffice(): Promise<string | null> {
   })
 }
 
+/**
+ * Приводит выбранное оператором к исполняемому файлу. На macOS в диалоге
+ * выбирается бандл `LibreOffice.app` — внутрь него надо зайти самим. На
+ * Windows рядом с `soffice.exe` всегда лежит `soffice.com`, и для консольной
+ * конвертации нужен именно он (`.exe` не дожидается конца работы).
+ */
+function normalizeManualPath(picked: string): string {
+  if (picked.endsWith('.app')) {
+    return join(picked, 'Contents', 'MacOS', 'soffice')
+  }
+  if (picked.toLowerCase().endsWith('soffice.exe')) {
+    const com = picked.slice(0, -4) + '.com'
+    if (existsSync(com)) return com
+  }
+  return picked
+}
+
+/**
+ * Проверяет, что по пути действительно LibreOffice: запускаем с `--version`.
+ * Без этого оператор мог бы указать любой exe и получить невнятную ошибку
+ * позже, уже на конвертации во время мероприятия.
+ */
+function verifySoffice(path: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!existsSync(path)) return resolve(false)
+    const proc = spawn(path, ['--version'])
+    const timer = setTimeout(() => {
+      proc.kill()
+      resolve(false)
+    }, 15000)
+    let out = ''
+    proc.stdout.on('data', (d) => (out += String(d)))
+    proc.on('error', () => {
+      clearTimeout(timer)
+      resolve(false)
+    })
+    proc.on('close', (code) => {
+      clearTimeout(timer)
+      resolve(code === 0 && /libreoffice/i.test(out))
+    })
+  })
+}
+
+/**
+ * Задать путь вручную (установка вне стандартных папок — например, всё на
+ * диск D). Возвращает нормализованный путь или null, если по нему не
+ * LibreOffice. Успешный путь запоминается и кладётся в кэш.
+ */
+export async function setManualSoffice(picked: string): Promise<string | null> {
+  const path = normalizeManualPath(picked)
+  if (!(await verifySoffice(path))) return null
+  setSofficePath(path)
+  cachedSofficePath = path
+  return path
+}
+
 export async function findSoffice(): Promise<string | null> {
   if (cachedSofficePath !== undefined) return cachedSofficePath
+  // Указанный вручную путь — в приоритете: оператор знает лучше нас.
+  const manual = getSofficePath()
+  if (manual && existsSync(manual)) {
+    cachedSofficePath = manual
+    return manual
+  }
   for (const candidate of sofficeCandidates()) {
     if (existsSync(candidate)) {
       cachedSofficePath = candidate

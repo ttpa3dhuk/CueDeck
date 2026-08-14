@@ -28,6 +28,8 @@ interface PersistedShape {
   audienceWindowed: boolean
   audioOutputId: string | null
   previewAudioOutputId: string | null
+  /** Путь к LibreOffice, указанный оператором вручную (установка вне стандартных папок). */
+  sofficePath: string | null
   timerTickEnabled: boolean
   timerGongEnabled: boolean
   timerLoop: boolean
@@ -59,6 +61,7 @@ const STORE_DEFAULTS: PersistedShape = {
   audienceWindowed: false,
   audioOutputId: null,
   previewAudioOutputId: null,
+  sofficePath: null,
   timerTickEnabled: false,
   timerGongEnabled: false,
   timerLoop: false,
@@ -239,6 +242,14 @@ export function getAudioOutputId(): string | null {
 
 export function setAudioOutputId(id: string | null): void {
   store().set('audioOutputId', id)
+}
+
+export function getSofficePath(): string | null {
+  return store().get('sofficePath')
+}
+
+export function setSofficePath(path: string | null): void {
+  store().set('sofficePath', path)
 }
 
 export function getPreviewAudioOutputId(): string | null {

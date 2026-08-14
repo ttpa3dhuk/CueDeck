@@ -213,6 +213,8 @@ export interface PresenterApi {
     recheck(): Promise<boolean>
     /** Пути, по которым искали — для подсказки «не нашли». */
     paths(): Promise<string[]>
+    /** Указать LibreOffice вручную (установка вне стандартных папок). */
+    pick(): Promise<{ ok: boolean; path?: string }>
   }
   /** Нужна рендереру, чтобы не показывать macOS-команду установки на Windows. */
   platform: string

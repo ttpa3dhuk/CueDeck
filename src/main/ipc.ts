@@ -57,7 +57,7 @@ import {
   setUiTheme,
 } from './display-mapping.js'
 import { countPdfPages } from './pdf-pages.js'
-import { cachedPdfPathFor, convertPptxToPdf, findSoffice, recheckSoffice, sofficeSearchPaths } from './pptx-converter.js'
+import { cachedPdfPathFor, convertPptxToPdf, findSoffice, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
 import { preparePptxMedia } from './pptx-media.js'
 import {
   loadProjectFile,
@@ -1135,6 +1135,28 @@ export function registerIpcHandlers(): void {
 
   /** Где искали — показываем в подсказке, если LibreOffice так и не нашёлся. */
   ipcMain.handle('soffice:paths', () => sofficeSearchPaths())
+
+  /**
+   * Указать LibreOffice вручную: сканирование стандартных папок не спасает,
+   * если человек ставит всё на диск D. Выбранный файл проверяем запуском
+   * `--version` — иначе неверный exe всплыл бы ошибкой уже на мероприятии.
+   */
+  ipcMain.handle('soffice:pick', async (): Promise<{ ok: boolean; path?: string }> => {
+    const op = getOperatorWindow()
+    const win = process.platform === 'win32'
+    const res = await dialog.showOpenDialog(op!, {
+      title: 'Укажи, где установлен LibreOffice',
+      defaultPath: win ? 'C:\\Program Files' : '/Applications',
+      // На macOS бандл .app выбирается как файл — нужен openDirectory-обход.
+      properties: win ? ['openFile'] : ['openFile', 'treatPackageAsDirectory'],
+      filters: win
+        ? [{ name: 'LibreOffice', extensions: ['com', 'exe'] }]
+        : [{ name: 'LibreOffice', extensions: ['app', ''] }],
+    })
+    if (res.canceled || res.filePaths.length === 0) return { ok: false }
+    const path = await setManualSoffice(res.filePaths[0])
+    return path ? { ok: true, path } : { ok: false }
+  })
 
   ipcMain.handle('state:get', () => store.get())
 

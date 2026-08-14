@@ -1480,6 +1480,23 @@ function showLoModal(): void {
   modal?.classList.remove('hidden')
 }
 
+/**
+ * Указать LibreOffice вручную. Сканирование стандартных папок не спасает тех,
+ * кто ставит программы не на системный диск — а таких хватает.
+ */
+async function pickLibreOffice(): Promise<void> {
+  const res = await window.api.soffice.pick()
+  if (!res.ok) {
+    // Отмену диалога от неверного файла не отличаем — баннер нейтральный.
+    showBanner('LibreOffice по этому пути не найден. Нужен soffice.com или soffice.exe из папки program', 7000)
+    return
+  }
+  sofficePresentCache = true
+  document.getElementById('libreoffice-notice')?.classList.add('hidden')
+  hideLoModal()
+  showBanner(`LibreOffice подключён: ${res.path}`, 5000)
+}
+
 /** «Проверить снова» после установки — без перезапуска приложения. */
 async function recheckLibreOffice(): Promise<void> {
   const found = await window.api.soffice.recheck()
@@ -1960,6 +1977,9 @@ function setupOperatorControls(): void {
   document.getElementById('lo-install-btn')?.addEventListener('click', showLoModal)
   document.getElementById('lo-recheck-btn')?.addEventListener('click', () => {
     recheckLibreOffice().catch(() => showBanner('Не удалось проверить LibreOffice'))
+  })
+  document.getElementById('lo-pick-btn')?.addEventListener('click', () => {
+    pickLibreOffice().catch(() => showBanner('Не удалось указать LibreOffice'))
   })
   document.getElementById('lo-modal-close')?.addEventListener('click', hideLoModal)
   document.getElementById('lo-download-btn')?.addEventListener('click', () => {
