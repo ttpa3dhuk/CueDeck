@@ -57,7 +57,7 @@ import {
   setUiTheme,
 } from './display-mapping.js'
 import { countPdfPages } from './pdf-pages.js'
-import { cachedPdfPathFor, convertPptxToPdf, findSoffice } from './pptx-converter.js'
+import { cachedPdfPathFor, convertPptxToPdf, findSoffice, recheckSoffice, sofficeSearchPaths } from './pptx-converter.js'
 import { preparePptxMedia } from './pptx-media.js'
 import {
   loadProjectFile,
@@ -1129,6 +1129,12 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('soffice:check', async () => {
     return Boolean(await findSoffice())
   })
+
+  /** Кнопка «Проверить снова» после установки — сбрасывает кэш пути. */
+  ipcMain.handle('soffice:recheck', async () => Boolean(await recheckSoffice()))
+
+  /** Где искали — показываем в подсказке, если LibreOffice так и не нашёлся. */
+  ipcMain.handle('soffice:paths', () => sofficeSearchPaths())
 
   ipcMain.handle('state:get', () => store.get())
 

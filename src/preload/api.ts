@@ -209,7 +209,13 @@ export interface PresenterApi {
   }
   soffice: {
     check(): Promise<boolean>
+    /** Перепроверить после установки: сбрасывает закэшированный путь. */
+    recheck(): Promise<boolean>
+    /** Пути, по которым искали — для подсказки «не нашли». */
+    paths(): Promise<string[]>
   }
+  /** Нужна рендереру, чтобы не показывать macOS-команду установки на Windows. */
+  platform: string
   external: {
     open(url: string): Promise<void>
   }

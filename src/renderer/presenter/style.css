@@ -1376,6 +1376,8 @@ body[data-role="operator"] #current-slide {
 
 /* ── Внешний вход (2.13): модалка выбора устройства ─────────────────────── */
 .audio-hint.compact { margin: 8px 0 0; font-size: 12px; }
+/* Где искали LibreOffice — показываем, только если так и не нашли. */
+.lo-paths { font-size: 11px; line-height: 1.6; opacity: 0.75; word-break: break-all; }
 .live-field { margin-bottom: 14px; }
 .live-field .audio-device-list { margin-bottom: 0; max-height: 190px; }
 .live-field-label {

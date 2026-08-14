@@ -460,14 +460,16 @@
           </button>
         </div>
         <div class="lo-install-option">
-          <div class="lo-option-label">Вариант 2 — через Homebrew (терминал)</div>
+          <div id="lo-option-label" class="lo-option-label">Вариант 2 — через терминал</div>
           <div class="lo-code-block">
-            <code>brew install --cask libreoffice</code>
+            <code id="lo-cmd">brew install --cask libreoffice</code>
             <button id="lo-copy-btn" class="lo-copy-btn" title="Скопировать">⧉</button>
           </div>
         </div>
-        <p class="lo-modal-note">После установки перезапусти CueDeck.</p>
+        <p class="lo-modal-note">После установки нажми «Проверить снова» — перезапуск не нужен.</p>
+        <p id="lo-paths" class="lo-modal-note lo-paths hidden"></p>
         <div class="modal-actions">
+          <button id="lo-recheck-btn" class="primary">Проверить снова</button>
           <button id="lo-modal-close">Закрыть</button>
         </div>
       </div>

@@ -193,6 +193,8 @@ const api: PresenterApi = {
   },
   soffice: {
     check: () => ipcRenderer.invoke('soffice:check'),
+    recheck: () => ipcRenderer.invoke('soffice:recheck'),
+    paths: () => ipcRenderer.invoke('soffice:paths'),
   },
   live: {
     requestAccess: () => ipcRenderer.invoke('live:request-access'),
@@ -205,6 +207,7 @@ const api: PresenterApi = {
       return () => ipcRenderer.removeListener('meter:program-level', listener)
     },
   },
+  platform: process.platform,
   external: {
     open: (url) => ipcRenderer.invoke('external:open', url),
   },

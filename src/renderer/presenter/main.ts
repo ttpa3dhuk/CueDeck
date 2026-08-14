@@ -1442,9 +1442,62 @@ function hideHelpModal(): void {
   document.getElementById('help-modal')?.classList.add('hidden')
 }
 
+/**
+ * Команда установки зависит от платформы. Раньше здесь жёстко висела
+ * macOS-строка с `brew`, и на Windows оператор копировал её в PowerShell
+ * и получал «brew не распознано» (баг, найден Азатом 2026-08-02).
+ */
+function installCommandFor(platform: string): { label: string; cmd: string } | null {
+  if (platform === 'darwin') {
+    return { label: 'Вариант 2 — через Homebrew (терминал)', cmd: 'brew install --cask libreoffice' }
+  }
+  if (platform === 'win32') {
+    return {
+      label: 'Вариант 2 — через winget (PowerShell)',
+      cmd: 'winget install --id TheDocumentFoundation.LibreOffice',
+    }
+  }
+  return null
+}
+
 function showLoModal(): void {
   const modal = document.getElementById('lo-modal')
+  const cmd = installCommandFor(window.api.platform)
+  const cmdEl = document.getElementById('lo-cmd')
+  const labelEl = document.getElementById('lo-option-label')
+  const block = cmdEl?.parentElement
+  if (cmd && cmdEl && labelEl) {
+    cmdEl.textContent = cmd.cmd
+    labelEl.textContent = cmd.label
+    labelEl.classList.remove('hidden')
+    block?.classList.remove('hidden')
+  } else {
+    // Незнакомая платформа — показываем только кнопку скачивания.
+    labelEl?.classList.add('hidden')
+    block?.classList.add('hidden')
+  }
+  document.getElementById('lo-paths')?.classList.add('hidden')
   modal?.classList.remove('hidden')
+}
+
+/** «Проверить снова» после установки — без перезапуска приложения. */
+async function recheckLibreOffice(): Promise<void> {
+  const found = await window.api.soffice.recheck()
+  sofficePresentCache = found
+  document.getElementById('libreoffice-notice')?.classList.toggle('hidden', found)
+  if (found) {
+    hideLoModal()
+    showBanner('LibreOffice найден — PPTX теперь откроются', 4000)
+    return
+  }
+  // Не нашли — показываем, где именно искали: чаще всего LibreOffice просто
+  // установлен в нестандартную папку.
+  const paths = await window.api.soffice.paths()
+  const el = document.getElementById('lo-paths')
+  if (el) {
+    el.textContent = `Не нашли. Искали здесь: ${paths.join(' · ')} — а также по PATH.`
+    el.classList.remove('hidden')
+  }
 }
 
 function hideLoModal(): void {
@@ -1905,12 +1958,17 @@ function setupOperatorControls(): void {
 
   // LibreOffice notice + install modal
   document.getElementById('lo-install-btn')?.addEventListener('click', showLoModal)
+  document.getElementById('lo-recheck-btn')?.addEventListener('click', () => {
+    recheckLibreOffice().catch(() => showBanner('Не удалось проверить LibreOffice'))
+  })
   document.getElementById('lo-modal-close')?.addEventListener('click', hideLoModal)
   document.getElementById('lo-download-btn')?.addEventListener('click', () => {
     window.api.external.open('https://www.libreoffice.org/download/download-libreoffice/')
   })
   document.getElementById('lo-copy-btn')?.addEventListener('click', (e) => {
-    navigator.clipboard.writeText('brew install --cask libreoffice').catch(() => undefined)
+    // Берём то, что реально показано: команда зависит от платформы.
+    const cmd = document.getElementById('lo-cmd')?.textContent ?? ''
+    navigator.clipboard.writeText(cmd).catch(() => undefined)
     const btn = e.currentTarget as HTMLButtonElement
     const prev = btn.textContent
     btn.textContent = '✓'
