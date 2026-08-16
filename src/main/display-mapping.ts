@@ -40,6 +40,8 @@ interface PersistedShape {
   timerPresets: number[]
   outputMonitorsEnabled: boolean
   uiTheme: UiTheme
+  /** Время прошлого запуска — по нему пропускаем плашку при быстром рестарте. */
+  lastLaunchAt: number
 }
 
 const STORE_DEFAULTS: PersistedShape = {
@@ -72,6 +74,7 @@ const STORE_DEFAULTS: PersistedShape = {
   timerPresets: [...DEFAULT_TIMER_PRESETS],
   outputMonitorsEnabled: true,
   uiTheme: 'dark',
+  lastLaunchAt: 0,
 }
 
 let _store: Store<PersistedShape> | null = null
@@ -102,6 +105,14 @@ export function saveMapping(layout: Layout, displayMap: DisplayMap): void {
   const mappings = store().get('mappings')
   mappings[key] = { layout, displayMap }
   store().set('mappings', mappings)
+}
+
+export function getLastLaunchAt(): number {
+  return store().get('lastLaunchAt')
+}
+
+export function setLastLaunchAt(ts: number): void {
+  store().set('lastLaunchAt', ts)
 }
 
 export function getLastPdfPath(): string | null {

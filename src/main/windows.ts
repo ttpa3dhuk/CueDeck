@@ -98,7 +98,20 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
   })
 
   store.registerWindow(role, win)
+  if (role === 'operator') operatorWindowHook?.(win)
   return win
+}
+
+/**
+ * Колбэк на каждое создание окна оператора (окно пересоздаётся при переезде на
+ * другой дисплей). Через него вешается перехват закрытия — quit-guard.ts;
+ * прямой импорт оттуда дал бы цикл windows ↔ ipc ↔ quit-guard, поэтому хук
+ * ставит index.ts.
+ */
+let operatorWindowHook: ((win: BrowserWindow) => void) | null = null
+
+export function setOperatorWindowHook(fn: (win: BrowserWindow) => void): void {
+  operatorWindowHook = fn
 }
 
 let activeWindows = new Map<Role, BrowserWindow>()

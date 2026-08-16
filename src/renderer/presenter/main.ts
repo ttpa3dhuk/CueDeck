@@ -1097,7 +1097,28 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   durSuffix.textContent = 'мин'
   durRow.append(durLabel, durInput, durSuffix)
 
-  li.append(row1, speakerInput, durRow)
+  // Строка пропавшего материала: видна только на записи с классом .missing
+  // (см. renderPlaylist). Показывается вместо разговора с ENOENT в эфире.
+  const missingRow = document.createElement('div')
+  missingRow.className = 'missing-row'
+  const missingLabel = document.createElement('span')
+  missingLabel.className = 'missing-label'
+  missingLabel.textContent = '⚠ файл не найден'
+  const relocateBtn = document.createElement('button')
+  relocateBtn.className = 'relocate'
+  relocateBtn.textContent = 'Указать файл…'
+  relocateBtn.title = 'Материал переехал — указать его новое место. Комментарий и таймер записи сохранятся'
+  relocateBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    window.api.playlist.relocate(entry.id).then((ok) => {
+      if (ok) showBanner(`Файл перепривязан: ${fresh().fileName}`, 3000)
+    })
+  })
+  relocateBtn.addEventListener('mousedown', (e) => e.stopPropagation())
+  relocateBtn.addEventListener('dblclick', (e) => e.stopPropagation())
+  missingRow.append(missingLabel, relocateBtn)
+
+  li.append(row1, speakerInput, durRow, missingRow)
 
   // Single click → stage into preview (safe). Double click → straight to air.
   let clickTimer: number | null = null
@@ -1209,12 +1230,29 @@ function renderPlaylist(state: AppState): void {
     if (at !== node) playlistList.insertBefore(node, at ?? null)
   })
 
+  const missing = new Set(state.missingIds)
   for (const [id, node] of playlistNodes) {
     node.classList.toggle('on-air', id === state.currentPlaylistId)
     node.classList.toggle('in-preview', id === state.preview.playlistId)
+    node.classList.toggle('missing', missing.has(id))
   }
 
   updateLibreOfficeNotice(state)
+  updateMissingNotice(state)
+}
+
+/**
+ * Плашка «файлы не найдены» над плейлистом: появляется только когда есть
+ * пропавшие материалы, и даёт починить их все разом (шаг 3) — по одному через
+ * «Указать файл…» на карточках чинить десять записей никто не станет.
+ */
+function updateMissingNotice(state: AppState): void {
+  const notice = document.getElementById('missing-notice')
+  const title = document.getElementById('missing-notice-title')
+  if (!notice || !title) return
+  const count = state.missingIds.length
+  notice.classList.toggle('hidden', count === 0)
+  if (count > 0) title.textContent = `Не найдено файлов: ${count} из ${state.playlist.length}`
 }
 
 // ── Монитор выхода под эфиром: живой снимок окна суфлёра (или зала) ───────
@@ -1381,10 +1419,36 @@ async function projectNew(): Promise<void> {
 async function projectOpen(): Promise<void> {
   const res = await window.api.project.open()
   if (res.ok && res.path) {
-    showBanner(`Открыт: ${baseName(res.path)}`, 3000)
+    // Пропавшие материалы — важнее факта открытия: держим баннер дольше и
+    // говорим прямо, сколько из скольких. Сами записи подсвечены красным.
+    if (res.missing) {
+      showBanner(
+        `⚠ Не найдено файлов: ${res.missing} из ${res.total ?? '—'}. Записи отмечены красным — нажми «Указать файл…»`,
+        12000,
+      )
+    } else {
+      showBanner(`Открыт: ${baseName(res.path)}`, 3000)
+    }
   } else if (!res.ok && res.error) {
     showBanner(`Ошибка: ${res.error}`, 6000)
   }
+}
+
+/**
+ * «Собрать проект в папку» (шаг 4): копирует все материалы рядом с проектом.
+ * На выходе самодостаточная папка под флешку — откроется на любой машине,
+ * потому что пути внутри проекта станут относительными.
+ */
+async function projectConsolidate(): Promise<void> {
+  showBanner('Собираю проект: копирую материалы…', 120000)
+  const res = await window.api.project.consolidate()
+  if (res.cancelled) return hideBanner()
+  if (!res.ok) {
+    showBanner(`Не удалось собрать: ${res.error ?? 'неизвестная ошибка'}`, 8000)
+    return
+  }
+  const skipped = res.skipped ? `, пропущено ненайденных: ${res.skipped}` : ''
+  showBanner(`Проект собран в ${baseName(res.path ?? '')}: скопировано файлов ${res.copied}${skipped}`, 10000)
 }
 
 async function projectSave(saveAs: boolean = false): Promise<void> {
@@ -1522,10 +1586,20 @@ function hideLoModal(): void {
   modal?.classList.add('hidden')
 }
 
+// Таймер один на баннер: без него длинный баннер («Ищу файлы…») гасился бы
+// таймаутом предыдущего, короткого.
+let bannerTimer: number | null = null
+
 function showBanner(text: string, ms: number = 4000): void {
   banner.textContent = text
   banner.classList.remove('hidden')
-  window.setTimeout(() => banner.classList.add('hidden'), ms)
+  if (bannerTimer) window.clearTimeout(bannerTimer)
+  bannerTimer = window.setTimeout(() => banner.classList.add('hidden'), ms)
+}
+
+function hideBanner(): void {
+  if (bannerTimer) window.clearTimeout(bannerTimer)
+  banner.classList.add('hidden')
 }
 
 // ── Custom hotkeys (operator) ──────────────────────────────────────────────
@@ -2172,6 +2246,21 @@ function setupOperatorControls(): void {
   window.api.menu.onProjectOpen(() => projectOpen())
   window.api.menu.onProjectSave(() => projectSave(false))
   window.api.menu.onProjectSaveAs(() => projectSave(true))
+  window.api.menu.onProjectConsolidate(() => projectConsolidate())
+
+  document.getElementById('relink-folder-btn')?.addEventListener('click', () => {
+    showBanner('Ищу файлы в папке…', 60000)
+    window.api.playlist.relinkFolder().then((res) => {
+      if (res.cancelled) return hideBanner()
+      if (res.fixed === 0) {
+        showBanner('В этой папке ничего не нашлось — попробуй папку уровнем выше', 8000)
+      } else if (res.remaining > 0) {
+        showBanner(`Найдено файлов: ${res.fixed}. Осталось ненайденных: ${res.remaining}`, 8000)
+      } else {
+        showBanner(`Все файлы найдены (${res.fixed}). Сохрани проект, чтобы запомнить пути`, 8000)
+      }
+    })
+  })
 
   // Update notification
   const updateBar = $('update-bar')
@@ -2758,6 +2847,15 @@ async function bootstrap(): Promise<void> {
       updatePreviewUI(s)
     }
   })
+
+  // Материалы могут пропасть и при открытом приложении — выдернули флешку,
+  // отвалилась сетевая шара. Перепроверяем на возврате фокуса: оператор
+  // подошёл к ноуту, воткнул флешку — метки сами обновились, кнопки не нужно.
+  if (isOperator) {
+    window.addEventListener('focus', () => {
+      if (getState().playlist.length > 0) window.api.playlist.checkFiles().catch(() => undefined)
+    })
+  }
 
   window.addEventListener('resize', () => {
     const kind = getState().fileKind

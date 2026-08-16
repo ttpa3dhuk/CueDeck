@@ -126,6 +126,9 @@ const api: PresenterApi = {
     activateLive: (id) => ipcRenderer.invoke('playlist:activate-live', id),
     setCompact: (value) => ipcRenderer.invoke('playlist:set-compact', value),
     setAutoAdvance: (value) => ipcRenderer.invoke('playlist:set-auto-advance', value),
+    checkFiles: () => ipcRenderer.invoke('playlist:check-files'),
+    relocate: (id) => ipcRenderer.invoke('playlist:relocate', id),
+    relinkFolder: () => ipcRenderer.invoke('playlist:relink-folder'),
   },
   keyvisual: {
     set: () => ipcRenderer.invoke('keyvisual:set'),
@@ -136,6 +139,7 @@ const api: PresenterApi = {
     create: () => ipcRenderer.invoke('project:new'),
     save: (saveAs) => ipcRenderer.invoke('project:save', { saveAs: Boolean(saveAs) }),
     open: () => ipcRenderer.invoke('project:open'),
+    consolidate: () => ipcRenderer.invoke('project:consolidate'),
   },
   menu: {
     onOpenPdf: (cb) => {
@@ -172,6 +176,11 @@ const api: PresenterApi = {
       const listener = () => cb()
       ipcRenderer.on('menu:project-save-as', listener)
       return () => ipcRenderer.removeListener('menu:project-save-as', listener)
+    },
+    onProjectConsolidate: (cb) => {
+      const listener = () => cb()
+      ipcRenderer.on('menu:project-consolidate', listener)
+      return () => ipcRenderer.removeListener('menu:project-consolidate', listener)
     },
     onHelp: (cb) => {
       const listener = () => cb()

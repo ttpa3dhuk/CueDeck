@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, protocol, screen, session, shell, systemPreferences } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, protocol, screen, session, shell, systemPreferences } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -6,8 +6,10 @@ import { Readable } from 'node:stream'
 import { DONATE_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
 import { askBootLayout } from './boot-dialog.js'
+import { showNagDialog } from './nag-dialog.js'
+import { attachOperatorCloseGuard, requestQuit } from './quit-guard.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
-import { applyLayout, getOperatorWindow } from './windows.js'
+import { applyLayout, getOperatorWindow, setOperatorWindowHook } from './windows.js'
 import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf, applyClickerShortcuts } from './ipc.js'
 import { mediaDirFor } from './pptx-media.js'
 import {
@@ -36,6 +38,8 @@ import {
   getTimerPresets,
   getOutputMonitorsEnabled,
   getUiTheme,
+  getLastLaunchAt,
+  setLastLaunchAt,
 } from './display-mapping.js'
 import { startOutputMonitor } from './output-monitor.js'
 import { store } from './state.js'
@@ -181,6 +185,10 @@ function buildMenu(): void {
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => sendToOperator('menu:project-save-as'),
         },
+        {
+          label: 'Собрать проект в папку…',
+          click: () => sendToOperator('menu:project-consolidate'),
+        },
         { type: 'separator' },
         {
           label: 'Открыть PDF / PPTX / видео…',
@@ -226,6 +234,23 @@ function sendToOperator(channel: string, ...args: unknown[]): void {
   if (op && !op.isDestroyed()) op.webContents.send(channel, ...args)
 }
 
+
+/** Аварийный перезапуск посреди мероприятия не должен упираться в плашку. */
+const QUIET_RESTART_MS = 10 * 60 * 1000
+
+/**
+ * Плашка поддержки (PLAN 2.12) — первым экраном при запуске, до выбора
+ * раскладки. Пропускаем в двух случаях: приложение уже запускалось меньше
+ * QUIET_RESTART_MS назад (значит это перезапуск в бою, не начало смены) и при
+ * CUEDECK_NO_NAG=1 (разработка).
+ */
+async function bootNag(): Promise<void> {
+  const previousLaunch = getLastLaunchAt()
+  setLastLaunchAt(Date.now())
+  if (process.env.CUEDECK_NO_NAG) return
+  if (previousLaunch && Date.now() - previousLaunch < QUIET_RESTART_MS) return
+  await showNagDialog()
+}
 
 async function bootLayout(): Promise<void> {
   const displays = screen.getAllDisplays()
@@ -338,6 +363,8 @@ app.whenReady().then(async () => {
     })(),
   })
 
+  setOperatorWindowHook(attachOperatorCloseGuard)
+  await bootNag()
   await bootLayout()
   watchDisplayChanges()
   startOutputMonitor()
@@ -361,9 +388,9 @@ app.on('window-all-closed', async () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', async (e) => {
+// Cmd+Q / Alt+F4 / меню → тот же путь, что и крестик окна оператора:
+// спросить, дописать файлы, выйти (quit-guard.ts).
+app.on('before-quit', (e) => {
   e.preventDefault()
-  globalShortcut.unregisterAll()
-  await flushPendingWrites()
-  app.exit(0)
+  void requestQuit()
 })

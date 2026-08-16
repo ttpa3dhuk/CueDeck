@@ -1,7 +1,7 @@
 import { dialog, globalShortcut, ipcMain, screen } from 'electron'
-import { readFile, rm } from 'node:fs/promises'
+import { access, copyFile, mkdir, readFile, rm } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { basename } from 'node:path'
+import { basename, join } from 'node:path'
 import type { DisplayMap, Layout } from './layout.js'
 import type {
   DeckState,
@@ -56,6 +56,7 @@ import {
   setOutputMonitorsEnabled,
   setUiTheme,
 } from './display-mapping.js'
+import { indexFolder, pickBestCandidate, uniqueName } from './project-files.js'
 import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
 import { preparePptxMedia } from './pptx-media.js'
@@ -181,6 +182,19 @@ async function inspectFile(filePath: string): Promise<InspectedFile> {
 }
 
 /** Load a file straight to the PROGRAM (audience) feed. */
+/**
+ * Человеческий текст вместо «ENOENT: no such file or directory». Узнать про
+ * переехавший материал в момент выдачи в зал — само по себе плохо, но хотя бы
+ * понятно, что случилось и куда нажимать. Заодно пересчитываем метки в
+ * плейлисте: раз файла нет — запись должна покраснеть.
+ */
+function openErrorMessage(err: unknown, filePath: string): string {
+  const e = err as NodeJS.ErrnoException
+  if (e?.code !== 'ENOENT') return (err as Error).message
+  void refreshMissingFiles()
+  return `Файл не найден: ${basename(filePath)} — материал переехал. Нажми «Указать файл…» на карточке`
+}
+
 async function openFile(
   filePath: string,
   opts: { playlistId?: string | null; durationMs?: number } = {},
@@ -229,7 +243,7 @@ async function openFile(
       kind: info.kind,
     }
   } catch (err) {
-    return { ok: false, error: (err as Error).message }
+    return { ok: false, error: openErrorMessage(err, filePath) }
   }
 }
 
@@ -260,7 +274,7 @@ async function loadPreview(
       kind: info.kind,
     }
   } catch (err) {
-    return { ok: false, error: (err as Error).message }
+    return { ok: false, error: openErrorMessage(err, filePath) }
   }
 }
 
@@ -395,6 +409,68 @@ export function applyClickerShortcuts(
 
 function persistPlaylist(): void {
   setPlaylist(store.get().playlist)
+}
+
+/**
+ * Проверка материалов плейлиста на диске. Живые входы пропускаем — это не
+ * файлы. Проверка идёт параллельно и не блокирует открытие проекта: на сетевой
+ * шаре `access` может подтормаживать.
+ * Возвращает число ненайденных, чтобы вызывающий показал баннер.
+ */
+export async function refreshMissingFiles(): Promise<number> {
+  const playlist = store.get().playlist
+  const checks = await Promise.all(
+    playlist.map(async (e) => {
+      if (e.kind === 'live' || isLiveUri(e.filePath)) return null
+      try {
+        await access(e.filePath)
+        return null
+      } catch {
+        return e.id
+      }
+    }),
+  )
+  const missingIds = checks.filter((id): id is string => id !== null)
+  const before = store.get().missingIds
+  // Патчим только при изменении — плейлист перерисовывается на каждый патч.
+  if (before.length !== missingIds.length || missingIds.some((id, i) => before[i] !== id)) {
+    store.patch({ missingIds })
+  }
+  return missingIds.length
+}
+
+/**
+ * Сохранение проекта (.pdpres). Вынесено из ipc-хендлера, потому что этим же
+ * путём ходит кнопка «Сохранить и закрыть» в подтверждении выхода
+ * (quit-guard.ts). `ok: false` без `error` = пользователь отменил выбор файла —
+ * в этом случае приложение закрывать нельзя.
+ */
+export async function saveProject(
+  saveAs = false,
+): Promise<{ ok: boolean; path?: string; error?: string }> {
+  const op = getOperatorWindow()
+  const state = store.get()
+  let target = state.projectPath
+  if (!target || saveAs) {
+    const res = await dialog.showSaveDialog(op!, {
+      title: 'Сохранить проект',
+      defaultPath: target ?? `presenter-project.${PROJECT_EXTENSION}`,
+      filters: [{ name: 'CueDeck project', extensions: [PROJECT_EXTENSION] }],
+    })
+    if (res.canceled || !res.filePath) return { ok: false }
+    target = res.filePath
+  }
+  try {
+    await saveProjectFile(target, {
+      playlist: state.playlist,
+      keyVisualPath: state.keyVisualPath,
+    })
+    store.patch({ projectPath: target })
+    setProjectPath(target)
+    return { ok: true, path: target }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
 }
 
 export function registerIpcHandlers(): void {
@@ -931,6 +1007,7 @@ export function registerIpcHandlers(): void {
     if (newEntries.length > 0) {
       store.patch({ playlist: [...existing, ...newEntries] })
       persistPlaylist()
+      void refreshMissingFiles()
     }
     return newEntries
   }
@@ -1012,6 +1089,8 @@ export function registerIpcHandlers(): void {
       store.patch({ preview: initialDeckState() })
     }
     persistPlaylist()
+    // Чистим id удалённой записи из списка ненайденных.
+    if (store.get().missingIds.includes(id)) void refreshMissingFiles()
   })
 
   ipcMain.handle('playlist:reorder', (_e, ids: string[]) => {
@@ -1184,6 +1263,8 @@ export function registerIpcHandlers(): void {
       projectPath: savedProjectPath,
     })
 
+    void refreshMissingFiles()
+
     if (!lastPath) {
       return { ok: true, hadSession: savedPlaylist.length > 0 }
     }
@@ -1220,36 +1301,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'project:save',
-    async (_e, payload: { saveAs?: boolean } = {}): Promise<{ ok: boolean; path?: string; error?: string }> => {
-      const op = getOperatorWindow()
-      const state = store.get()
-      let target = state.projectPath
-      if (!target || payload.saveAs) {
-        const res = await dialog.showSaveDialog(op!, {
-          title: 'Сохранить проект',
-          defaultPath: target ?? `presenter-project.${PROJECT_EXTENSION}`,
-          filters: [{ name: 'CueDeck project', extensions: [PROJECT_EXTENSION] }],
-        })
-        if (res.canceled || !res.filePath) return { ok: false }
-        target = res.filePath
-      }
-      try {
-        await saveProjectFile(target, {
-          playlist: state.playlist,
-          keyVisualPath: state.keyVisualPath,
-        })
-        store.patch({ projectPath: target })
-        setProjectPath(target)
-        return { ok: true, path: target }
-      } catch (err) {
-        return { ok: false, error: (err as Error).message }
-      }
-    },
+    async (_e, payload: { saveAs?: boolean } = {}) => saveProject(Boolean(payload.saveAs)),
   )
 
   ipcMain.handle(
     'project:open',
-    async (): Promise<{ ok: boolean; path?: string; error?: string }> => {
+    async (): Promise<{
+      ok: boolean
+      path?: string
+      error?: string
+      missing?: number
+      total?: number
+    }> => {
       const op = getOperatorWindow()
       const res = await dialog.showOpenDialog(op!, {
         title: 'Открыть проект',
@@ -1279,12 +1342,204 @@ export function registerIpcHandlers(): void {
         setCurrentPlaylistId(null)
         setProjectPath(path)
         setLastPdfPath(null)
-        return { ok: true, path }
+        // Проверяем материалы сразу: пропажу оператор должен увидеть при
+        // открытии проекта, а не когда нажмёт ЭФИР.
+        const missing = await refreshMissingFiles()
+        return { ok: true, path, missing, total: loaded.playlist.length }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
       }
     },
   )
+
+  /**
+   * Перепривязка одной папкой (шаг 3): оператор указывает, куда переехали
+   * материалы, мы сами ищем в ней пропавшие по имени файла. Сценарий «навёл
+   * порядок и скомпоновал всё в одно место» — десять записей чинятся одним
+   * действием, комментарии и таймеры остаются.
+   */
+  ipcMain.handle(
+    'playlist:relink-folder',
+    async (): Promise<{ fixed: number; remaining: number; cancelled?: boolean }> => {
+      const missingIds = new Set(store.get().missingIds)
+      if (missingIds.size === 0) return { fixed: 0, remaining: 0 }
+      const op = getOperatorWindow()
+      const res = await dialog.showOpenDialog(op!, {
+        title: 'Где теперь лежат материалы?',
+        message: 'Выбери папку — файлы найдутся в ней и во вложенных папках по именам',
+        properties: ['openDirectory'],
+      })
+      if (res.canceled || res.filePaths.length === 0) {
+        return { fixed: 0, remaining: missingIds.size, cancelled: true }
+      }
+
+      const index = await indexFolder(res.filePaths[0])
+      let fixed = 0
+      const playlist = store.get().playlist.map((e) => {
+        if (!missingIds.has(e.id) || e.kind === 'live') return e
+        const found = index.get(basename(e.filePath).toLowerCase())
+        if (!found || found.length === 0) return e
+        const picked = pickBestCandidate(found)
+        const kind = kindOf(picked)
+        if (!kind || kind === 'live') return e
+        fixed += 1
+        return { ...e, filePath: picked, fileName: basename(picked), kind }
+      })
+
+      if (fixed > 0) {
+        store.patch({ playlist })
+        persistPlaylist()
+      }
+      const remaining = await refreshMissingFiles()
+      return { fixed, remaining }
+    },
+  )
+
+  /**
+   * Собрать проект в папку (шаг 4): копируем все материалы в подпапку рядом с
+   * .pdpres и переписываем пути — на выходе самодостаточная папка под флешку,
+   * которая откроется на любой машине (пути станут относительными, см.
+   * project.ts). Пропавшие файлы копировать нечего — сообщаем сколько.
+   */
+  ipcMain.handle(
+    'project:consolidate',
+    async (): Promise<{
+      ok: boolean
+      copied?: number
+      skipped?: number
+      path?: string
+      error?: string
+      cancelled?: boolean
+    }> => {
+      const op = getOperatorWindow()
+      const state = store.get()
+      if (state.playlist.length === 0 && !state.keyVisualPath) {
+        return { ok: false, error: 'Проект пуст — нечего собирать' }
+      }
+      const res = await dialog.showOpenDialog(op!, {
+        title: 'Куда собрать проект',
+        message: 'Выбери папку — внутри появится папка проекта со всеми материалами',
+        properties: ['openDirectory', 'createDirectory'],
+      })
+      if (res.canceled || res.filePaths.length === 0) return { ok: false, cancelled: true }
+
+      const projectName = state.projectPath
+        ? basename(state.projectPath, `.${PROJECT_EXTENSION}`)
+        : 'CueDeck-проект'
+      const targetDir = join(res.filePaths[0], projectName)
+      const mediaDir = join(targetDir, 'материалы')
+
+      try {
+        await mkdir(mediaDir, { recursive: true })
+        const taken = new Set<string>()
+        let copied = 0
+        let skipped = 0
+
+        // Один и тот же файл может стоять в плейлисте дважды (тот же ролик у
+        // двух спикеров) — копируем его один раз, иначе двухгиговое видео
+        // ляжет в папку двумя копиями.
+        const copiedByPath = new Map<string, string>()
+
+        const copyMaterial = async (src: string): Promise<string | null> => {
+          const already = copiedByPath.get(src)
+          if (already) return already
+          try {
+            await access(src)
+          } catch {
+            skipped += 1
+            return null
+          }
+          const name = uniqueName(basename(src), taken)
+          const dest = join(mediaDir, name)
+          await copyFile(src, dest)
+          copiedByPath.set(src, dest)
+          copied += 1
+          return dest
+        }
+
+        const playlist: PlaylistEntry[] = []
+        for (const e of state.playlist) {
+          if (e.kind === 'live') {
+            playlist.push(e) // живой вход копировать нечего
+            continue
+          }
+          const dest = await copyMaterial(e.filePath)
+          playlist.push(dest ? { ...e, filePath: dest } : e)
+        }
+        const keyVisualPath = state.keyVisualPath
+          ? ((await copyMaterial(state.keyVisualPath)) ?? state.keyVisualPath)
+          : null
+
+        // Заметки-спутники живут рядом с исходником и ключуются по SHA1 —
+        // копия файла та же, поэтому переносим их следом, иначе заметки
+        // спикеров потеряются при переезде.
+        for (const e of playlist) {
+          if (e.kind === 'live') continue
+          const oldPath = state.playlist.find((x) => x.id === e.id)?.filePath
+          // Материал не скопировался (не найден) — путь остался прежним, и
+          // копирование заметок «само в себя» затёрло бы их.
+          if (!oldPath || oldPath === e.filePath) continue
+          const from = sidecarPathFor(oldPath)
+          const to = sidecarPathFor(e.filePath)
+          try {
+            await access(from)
+            await copyFile(from, to)
+          } catch {
+            /* заметок нет — нормально */
+          }
+        }
+
+        const projectPath = join(targetDir, `${projectName}.${PROJECT_EXTENSION}`)
+        await saveProjectFile(projectPath, { playlist, keyVisualPath })
+
+        store.patch({ playlist, keyVisualPath, projectPath })
+        persistPlaylist()
+        setKeyVisualPath(keyVisualPath)
+        setProjectPath(projectPath)
+        await refreshMissingFiles()
+        return { ok: true, copied, skipped, path: projectPath }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    },
+  )
+
+  /** Ручная перепроверка материалов — кнопка «Проверить файлы» у оператора. */
+  ipcMain.handle(
+    'playlist:check-files',
+    async (): Promise<{ missing: number; total: number }> => {
+      const missing = await refreshMissingFiles()
+      return { missing, total: store.get().playlist.length }
+    },
+  )
+
+  /**
+   * Указать файл заново для конкретной записи: материал переехал, но запись со
+   * всеми настройками (комментарий, имя, таймер) должна остаться. Меняем путь,
+   * имя файла и kind — вместо «удалить и завести заново».
+   */
+  ipcMain.handle('playlist:relocate', async (_e, id: string): Promise<boolean> => {
+    const entry = store.get().playlist.find((e) => e.id === id)
+    if (!entry || entry.kind === 'live') return false
+    const op = getOperatorWindow()
+    const res = await dialog.showOpenDialog(op!, {
+      title: `Указать файл для «${entry.displayName || entry.fileName}»`,
+      filters: OPEN_DIALOG_FILTERS,
+      properties: ['openFile'],
+    })
+    if (res.canceled || res.filePaths.length === 0) return false
+    const picked = res.filePaths[0]
+    const kind = kindOf(picked)
+    if (!kind || kind === 'live') return false
+    store.patch({
+      playlist: store.get().playlist.map((e) =>
+        e.id === id ? { ...e, filePath: picked, fileName: basename(picked), kind } : e,
+      ),
+    })
+    persistPlaylist()
+    await refreshMissingFiles()
+    return true
+  })
 }
 
 export async function flushPendingWrites(): Promise<void> {

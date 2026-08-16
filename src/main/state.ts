@@ -64,6 +64,7 @@ export function initialState(): AppState {
     layout: 'solo',
     displayMap: {},
     playlist: [],
+    missingIds: [],
     currentPlaylistId: null,
     playlistCompact: false,
     autoAdvance: false,

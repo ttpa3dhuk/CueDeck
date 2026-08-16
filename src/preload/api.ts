@@ -179,6 +179,12 @@ export interface PresenterApi {
     activateLive(id: string): Promise<OpenPdfResult>
     setCompact(value: boolean): Promise<void>
     setAutoAdvance(value: boolean): Promise<void>
+    /** Перепроверить материалы на диске; помечает пропавшие в state.missingIds. */
+    checkFiles(): Promise<{ missing: number; total: number }>
+    /** Указать файл заново для записи (материал переехал). true = путь заменён. */
+    relocate(id: string): Promise<boolean>
+    /** Найти все пропавшие материалы в указанной папке (по именам файлов). */
+    relinkFolder(): Promise<{ fixed: number; remaining: number; cancelled?: boolean }>
   }
   keyvisual: {
     set(): Promise<{ path: string | null }>
@@ -188,7 +194,17 @@ export interface PresenterApi {
   project: {
     create(): Promise<void>
     save(saveAs?: boolean): Promise<{ ok: boolean; path?: string; error?: string }>
-    open(): Promise<{ ok: boolean; path?: string; error?: string }>
+    /** `missing`/`total` — сколько материалов проекта не нашлось на диске. */
+    open(): Promise<{ ok: boolean; path?: string; error?: string; missing?: number; total?: number }>
+    /** Собрать проект и все материалы в одну папку (под флешку). */
+    consolidate(): Promise<{
+      ok: boolean
+      copied?: number
+      skipped?: number
+      path?: string
+      error?: string
+      cancelled?: boolean
+    }>
   }
   menu: {
     onOpenPdf(cb: () => void): Unsubscribe
@@ -198,6 +214,7 @@ export interface PresenterApi {
     onProjectOpen(cb: () => void): Unsubscribe
     onProjectSave(cb: () => void): Unsubscribe
     onProjectSaveAs(cb: () => void): Unsubscribe
+    onProjectConsolidate(cb: () => void): Unsubscribe
     onHelp(cb: () => void): Unsubscribe
   }
   update: {

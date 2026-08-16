@@ -160,6 +160,14 @@ export interface AppState {
   layout: Layout
   displayMap: DisplayMap
   playlist: PlaylistEntry[]
+  /**
+   * id записей плейлиста, чьи файлы сейчас не находятся на диске (материал
+   * переехал, флешка не та, проект приехал с другой машины). Пересчитывается
+   * при открытии проекта, восстановлении сессии, добавлении файлов и по кнопке
+   * «Проверить файлы». Оператор должен узнать о пропаже при подготовке, а не в
+   * момент выдачи в зал.
+   */
+  missingIds: string[]
   currentPlaylistId: string | null
   playlistCompact: boolean
   autoAdvance: boolean
