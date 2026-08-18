@@ -179,3 +179,60 @@ describe('относительные пути (schema v2)', () => {
     expect(loaded.keyVisualPath).toBe('/decks/kv.png')
   })
 })
+
+describe('необязательные поля записи', () => {
+  it('loop и liveFit переживают сохранение и загрузку проекта', async () => {
+    const path = join(dir, 'flags.pdpres')
+    await saveProjectFile(path, {
+      playlist: [
+        entry({ id: 'v1', kind: 'video', filePath: '/kv.mp4', fileName: 'kv.mp4', loop: true }),
+        entry({ id: 'l1', kind: 'live', filePath: 'live://device?v=Cam', fileName: 'Вход', liveFit: 'cover' }),
+        entry({ id: 'p1' }),
+      ],
+      keyVisualPath: null,
+    })
+    const loaded = await loadProjectFile(path)
+    expect(loaded.playlist[0].loop).toBe(true)
+    expect(loaded.playlist[1].liveFit).toBe('cover')
+    // Обычная запись флагов не получает — в файле не должно быть мусора.
+    expect(loaded.playlist[2].loop).toBeUndefined()
+    expect(loaded.playlist[2].liveFit).toBeUndefined()
+  })
+})
+
+describe('список (пачка фото и роликов)', () => {
+  it('материалы списка тоже становятся относительными и разворачиваются обратно', async () => {
+    const projectPath = join(dir, 'show.pdpres')
+    const photo = join(dir, 'фото', 'gala-01.jpg')
+    const clip = join(dir, 'фото', 'promo.mp4')
+    await saveProjectFile(projectPath, {
+      playlist: [
+        entry({
+          id: 'list-1',
+          kind: 'list',
+          filePath: '',
+          fileName: 'Список — 1 фото, 1 видео',
+          photoSec: 12,
+          loop: true,
+          items: [
+            { path: photo, fileName: 'gala-01.jpg', kind: 'image' },
+            { path: clip, fileName: 'promo.mp4', kind: 'video' },
+          ],
+        }),
+      ],
+      keyVisualPath: null,
+    })
+
+    const raw = JSON.parse(await readFile(projectPath, 'utf-8'))
+    expect(raw.playlist[0].items.map((i: { path: string }) => i.path)).toEqual([
+      'фото/gala-01.jpg',
+      'фото/promo.mp4',
+    ])
+
+    const loaded = await loadProjectFile(projectPath)
+    expect(loaded.playlist[0].items?.[0].path).toBe(photo)
+    expect(loaded.playlist[0].items?.[1].path).toBe(clip)
+    expect(loaded.playlist[0].photoSec).toBe(12)
+    expect(loaded.playlist[0].loop).toBe(true)
+  })
+})

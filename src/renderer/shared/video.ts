@@ -14,6 +14,67 @@ export function videoSrc(sha1: string, deck: MediaDeck = 'program'): string {
   return `${MEDIA_SCHEME}://stream/${deck}?v=${encodeURIComponent(sha1)}`
 }
 
+/**
+ * Заставка бывает картинкой и видео (анимированный KV). Расширение — самый
+ * дешёвый признак: kindOf живёт в main, а рендереру нужен ответ синхронно,
+ * до всякого IPC.
+ */
+export function isVideoPath(path: string | null | undefined): boolean {
+  return Boolean(path) && /\.(mp4|m4v|mov|webm)$/i.test(path as string)
+}
+
+/**
+ * Наплыв между фотографиями списка (FADE): уходящий кадр остаётся на нижнем
+ * слое, новый проявляется поверх него. Через чёрное не идём — на слайдшоу это
+ * читается как моргание.
+ *
+ * `under` — второй элемент картинки под основным; он держит старый кадр ровно
+ * на время перехода. Blob-ссылку старого кадра нельзя освобождать сразу —
+ * этим занимается вызывающий (см. отложенное освобождение в рендерерах).
+ */
+export async function crossfadeToImage(
+  img: HTMLImageElement,
+  under: HTMLImageElement | null,
+  src: string,
+  fadeMs: number,
+): Promise<void> {
+  const prev = img.getAttribute('src')
+  const canFade = fadeMs > 0 && Boolean(prev) && !img.classList.contains('hidden') && under
+
+  if (!canFade) {
+    img.style.transition = ''
+    img.style.opacity = '1'
+    img.src = src
+    return
+  }
+
+  // Старый кадр — вниз, новый готовим невидимым сверху.
+  under!.src = prev as string
+  under!.style.opacity = '1'
+  under!.classList.remove('hidden')
+
+  img.style.transition = 'none'
+  img.style.opacity = '0'
+  img.src = src
+  // Ждём декодирование: иначе проявится наполовину отрисованный кадр.
+  await img.decode?.().catch(() => undefined)
+
+  // Форсируем применение opacity:0 до включения перехода — иначе браузер
+  // склеит оба присваивания и наплыва не будет.
+  void img.offsetWidth
+  img.style.transition = `opacity ${fadeMs}ms linear`
+  img.style.opacity = '1'
+
+  await new Promise((r) => setTimeout(r, fadeMs + 40))
+  under!.classList.add('hidden')
+  under!.removeAttribute('src')
+}
+
+/** URL видео-заставки; путь в токене — чтобы элемент перезагрузился при смене файла. */
+export function keyVisualSrc(path: string): string {
+  return `${MEDIA_SCHEME}://stream/keyvisual?v=${encodeURIComponent(path)}`
+}
+
 /** URL ролика, извлечённого из PPTX данного деска (слайд-видео, 2.10). */
 export function slideVideoSrc(deck: MediaDeck, file: string, sha1: string): string {
   return `${MEDIA_SCHEME}://stream/slide/${deck}/${encodeURIComponent(file)}?v=${encodeURIComponent(sha1)}`

@@ -34,7 +34,23 @@ export type TimerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-r
 
 // 'live' — не файл, а внешний источник (USB-капчер/камера); путь у него
 // псевдо-URI `live://…`, см. src/shared/live.ts.
-export type FileKind = 'pdf' | 'image' | 'pptx' | 'video' | 'live'
+export type FileKind = 'pdf' | 'image' | 'pptx' | 'video' | 'live' | 'list'
+
+/**
+ * Элемент списка (kind='list'): фотография или ролик. Список — это пачка
+ * материалов, которую крутят по кругу на сборе гостей или в перерыве, а не
+ * отдельные записи плейлиста: иначе десять фотографий забивают весь список
+ * спикеров.
+ */
+export type ListMode = 'loop' | 'shuffle' | 'once'
+
+export const LIST_FADE_MAX_MS = 2000
+
+export interface ListItem {
+  path: string
+  fileName: string
+  kind: 'image' | 'video'
+}
 
 /** Тема интерфейса оператора. Суфлёр и зал всегда тёмные — это выходные экраны. */
 export type UiTheme = 'dark' | 'light'
@@ -46,7 +62,12 @@ export type MonitorRole = 'speaker' | 'audience'
  * What happens to a video clip when it is taken from preview to program:
  * always autoplay, either from 0 or resuming at the preview scrub position.
  */
-export type VideoTakeMode = 'play-start' | 'play-resume'
+/**
+ * Что делать с роликом при выдаче в эфир. `hold-first` — встать на первом
+ * кадре и ждать: первый кадр часто сам по себе заставка, а запускают ролик
+ * кликером, как видео на слайде презентации.
+ */
+export type VideoTakeMode = 'play-start' | 'play-resume' | 'hold-first'
 
 /**
  * С какого слайда презентация уходит в эфир по TAKE: с первого или с того,
@@ -115,6 +136,27 @@ export interface PlaylistEntry {
   durationMs: number
   /** Только для kind='live'. Отсутствует у старых сохранённых плейлистов. */
   liveFit?: LiveFit
+  /** Содержимое списка (kind='list'): фото и ролики по порядку. */
+  items?: ListItem[]
+  /** Сколько секунд держать одну фотографию (kind='list'). По умолчанию 8. */
+  photoSec?: number
+  /**
+   * Режим проигрывания списка: по кругу, вперемешку (тоже по кругу, но порядок
+   * тасуется на каждом проходе) или один проход с остановкой на последнем.
+   */
+  listMode?: ListMode
+  /**
+   * Плавный переход между фотографиями, мс. 0 — резкая смена. Ограничен сверху
+   * 2000 мс и половиной паузы между кадрами: затемнение длиннее самого показа
+   * превращает слайдшоу в мигание.
+   */
+  fadeMs?: number
+  /**
+   * Зациклить ролик этой записи: видео-заставка крутится, пока спикер на
+   * сцене, а обычный ролик доигрывает и встаёт. Настройка живёт у записи, а не
+   * глобально, — иначе забытая галка зациклила бы следующий ролик.
+   */
+  loop?: boolean
 }
 
 /**
@@ -194,6 +236,30 @@ export interface AppState {
   timerGongEnabled: boolean
   /** Loop mode: countdown restarts automatically on zero (15/30-second rounds etc.). */
   timerLoop: boolean
+  /**
+   * Зациклен ли ролик, который сейчас в эфире. Это **производная** от записи
+   * плейлиста (`PlaylistEntry.loop`) — состояние держит её для рендереров,
+   * источник истины и персист живут в записи. Файл, открытый мимо плейлиста
+   * (Cmd+O), хранит флаг только на время показа.
+   */
+  videoLoop: boolean
+  /**
+   * Какой элемент списка сейчас в эфире (kind='list'), −1 = список не играет.
+   * Проигрывателем списка рулит main: он же держит таймер фотографий и ловит
+   * конец ролика, а рендереры просто показывают текущий файл как обычно.
+   */
+  listIndex: number
+  /**
+   * Позиция в очереди обхода (в режиме «вперемешку» она не совпадает с
+   * listIndex). Нужна и оператору: «Список 3 из 12» считается по ней.
+   */
+  listPos: number
+  /**
+   * Какой элемент списка показан в превью (−1 — превью не держит список).
+   * Оператор листает пачку теми же ◀ ▶, что и слайды, — посмотреть с клиентом
+   * до выдачи в зал.
+   */
+  previewListIndex: number
   /** User-editable minutes of the four timer preset buttons (ПКМ по кнопке). */
   timerPresets: number[]
   /**

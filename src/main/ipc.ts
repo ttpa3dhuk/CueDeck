@@ -6,6 +6,8 @@ import type { DisplayMap, Layout } from './layout.js'
 import type {
   DeckState,
   FileKind,
+  ListItem,
+  ListMode,
   LiveFit,
   PlaylistEntry,
   SlideMedia,
@@ -181,6 +183,129 @@ async function inspectFile(filePath: string): Promise<InspectedFile> {
   return { kind, sha1, totalSlides, notes: loaded.notes, sha1Mismatch: loaded.sha1Mismatch, slideMedia }
 }
 
+/**
+ * ── Проигрыватель списка (kind='list') ──────────────────────────────────
+ * Список — пачка фото и роликов, которую крутят на сборе гостей или в
+ * перерыве. Реализован как сценарий поверх обычной загрузки файла: main по
+ * очереди открывает элементы в эфирный деск, а рендереры показывают их как
+ * любой другой файл — своей логики показа у списка нет вообще.
+ *
+ * Кто двигает очередь: фотографию — таймер здесь, ролик — событие `ended` от
+ * окна оператора (тот же авторитет, что и у одиночных роликов).
+ */
+let listTimer: NodeJS.Timeout | null = null
+let activeListId: string | null = null
+/** Порядок обхода: для 'shuffle' это перетасованные индексы, иначе 0..n-1. */
+let listOrder: number[] = []
+
+function shuffled(n: number): number[] {
+  const a = Array.from({ length: n }, (_, i) => i)
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+function buildListOrder(entry: PlaylistEntry): number[] {
+  const n = entry.items?.length ?? 0
+  return listModeOf(entry) === 'shuffle' ? shuffled(n) : Array.from({ length: n }, (_, i) => i)
+}
+
+/** Старый флаг `loop` = 'loop', его отсутствие у списка = один проход. */
+function listModeOf(entry: PlaylistEntry): ListMode {
+  return entry.listMode ?? (entry.loop ? 'loop' : 'once')
+}
+
+function clearListTimer(): void {
+  if (listTimer) clearTimeout(listTimer)
+  listTimer = null
+}
+
+/** Снять список с эфира: оператор выдал что-то другое, очистил проект и т.п. */
+export function stopListPlayback(): void {
+  clearListTimer()
+  if (activeListId === null) return
+  activeListId = null
+  listOrder = []
+  store.patch({ listIndex: -1, listPos: -1 })
+}
+
+const DEFAULT_PHOTO_SEC = 8
+
+function listEntryById(id: string | null): PlaylistEntry | undefined {
+  if (!id) return undefined
+  const e = store.get().playlist.find((x) => x.id === id)
+  return e?.kind === 'list' ? e : undefined
+}
+
+/** Показать элемент списка с индексом index; при выходе за край — цикл или стоп. */
+async function playListItem(entryId: string, pos: number): Promise<void> {
+  const entry = listEntryById(entryId)
+  const items = entry?.items ?? []
+  if (!entry || items.length === 0) {
+    stopListPlayback()
+    return
+  }
+  clearListTimer()
+  if (listOrder.length !== items.length || activeListId !== entryId) {
+    listOrder = buildListOrder(entry)
+  }
+
+  const mode = listModeOf(entry)
+  if (pos >= items.length || pos < 0) {
+    // Дошли до края: 'once' встаёт на последнем элементе (гасить зал по концу
+    // пачки — сюрприз для зала), остальные режимы идут по новой. Вперемешку
+    // на каждом проходе тасуется заново, иначе «случайный» порядок повторяется.
+    if (mode === 'once') {
+      activeListId = null
+      return
+    }
+    listOrder = buildListOrder(entry)
+    pos = pos < 0 ? items.length - 1 : 0
+  }
+
+  activeListId = entryId
+  const index = listOrder[pos] ?? pos
+  const item = items[index]
+  store.patch({ listIndex: index, listPos: pos })
+  const res = await openFile(item.path, { playlistId: entryId, fromList: true })
+  if (!res.ok) {
+    // Битый или пропавший файл не должен вешать всю пачку — идём дальше.
+    if (items.length > 1) scheduleListAdvance(entry, 0.5)
+    return
+  }
+  if (item.kind === 'video') {
+    // Ролик в списке стартует сам: пауза посреди перерыва никому не нужна.
+    store.patchVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
+  } else {
+    scheduleListAdvance(entry, entry.photoSec || DEFAULT_PHOTO_SEC)
+  }
+}
+
+function scheduleListAdvance(entry: PlaylistEntry, sec: number): void {
+  clearListTimer()
+  const id = entry.id
+  listTimer = setTimeout(() => {
+    void playListItem(id, store.get().listPos + 1)
+  }, Math.max(0.2, sec) * 1000)
+}
+
+/** Стартовать список с начала (выдача в эфир). */
+export async function startListPlayback(entryId: string): Promise<void> {
+  await playListItem(entryId, 0)
+}
+
+/** Шаг по списку кликером/клавишами; direction = ±1. */
+export async function stepList(direction: number): Promise<void> {
+  if (!activeListId) return
+  await playListItem(activeListId, store.get().listPos + direction)
+}
+
+export function isListPlaying(): boolean {
+  return activeListId !== null
+}
+
 /** Load a file straight to the PROGRAM (audience) feed. */
 /**
  * Человеческий текст вместо «ENOENT: no such file or directory». Узнать про
@@ -197,8 +322,11 @@ function openErrorMessage(err: unknown, filePath: string): string {
 
 async function openFile(
   filePath: string,
-  opts: { playlistId?: string | null; durationMs?: number } = {},
+  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean } = {},
 ): Promise<OpenPdfResult> {
+  // Любая загрузка в эфир мимо проигрывателя снимает список с эфира — иначе
+  // его таймер продолжил бы подменять картинку под уже другим материалом.
+  if (!opts.fromList) stopListPlayback()
   try {
     const info = await inspectFile(filePath)
     const playlistId = opts.playlistId ?? null
@@ -210,7 +338,14 @@ async function openFile(
     }
     if (typeof opts.durationMs === 'number') timerPatch.durationMs = opts.durationMs
 
+    // Цикл — свойство записи плейлиста: заряжаем эфир её настройкой. Файл,
+    // открытый мимо плейлиста, всегда стартует без цикла.
+    const entry = playlistId ? store.get().playlist.find((e) => e.id === playlistId) : undefined
+
     store.patch({
+      // У списка `loop` — про всю пачку, а не про отдельный ролик внутри неё:
+      // элемент доигрывает и уступает место следующему.
+      videoLoop: Boolean(entry?.loop) && entry?.kind !== 'list',
       pdfPath: filePath,
       pdfSha1: info.sha1,
       fileKind: info.kind,
@@ -298,6 +433,11 @@ function resetPreviewVideoOnSlideChange(): void {
 }
 
 async function programNext(): Promise<void> {
+  // Список в эфире: «далее» переключает элемент пачки, а не листает файл.
+  if (isListPlaying()) {
+    await stepList(1)
+    return
+  }
   const state = store.get()
   const { currentSlide, totalSlides, autoAdvance, playlist, currentPlaylistId } = state
 
@@ -342,6 +482,10 @@ async function programNext(): Promise<void> {
 }
 
 function programPrev(): void {
+  if (isListPlaying()) {
+    void stepList(-1)
+    return
+  }
   const state = store.get()
   if (state.fileKind === 'live') return
   if (state.fileKind === 'video') {
@@ -422,12 +566,18 @@ export async function refreshMissingFiles(): Promise<number> {
   const checks = await Promise.all(
     playlist.map(async (e) => {
       if (e.kind === 'live' || isLiveUri(e.filePath)) return null
-      try {
-        await access(e.filePath)
-        return null
-      } catch {
-        return e.id
+      // Список помечаем пропавшим, если нет хотя бы одного его материала:
+      // дыра в пачке на сборе гостей так же заметна, как пропавший доклад.
+      const paths = e.kind === 'list' ? (e.items ?? []).map((i) => i.path) : [e.filePath]
+      if (paths.length === 0) return null
+      for (const path of paths) {
+        try {
+          await access(path)
+        } catch {
+          return e.id
+        }
       }
+      return null
     }),
   )
   const missingIds = checks.filter((id): id is string => id !== null)
@@ -601,7 +751,24 @@ export function registerIpcHandlers(): void {
     resetPreviewVideoOnSlideChange()
   })
 
-  ipcMain.handle('preview:next', () => {
+  /** Пролистать пачку в превью; direction = ±1. Возвращает false, если превью не список. */
+  async function stepPreviewList(direction: number): Promise<boolean> {
+    const state = store.get()
+    const entry = state.preview.playlistId
+      ? state.playlist.find((e) => e.id === state.preview.playlistId && e.kind === 'list')
+      : undefined
+    const items = entry?.items ?? []
+    if (!entry || items.length === 0) return false
+    const cur = state.previewListIndex < 0 ? 0 : state.previewListIndex
+    // По краям заворачиваем всегда: в превью это просто просмотр пачки.
+    const next = (((cur + direction) % items.length) + items.length) % items.length
+    store.patch({ previewListIndex: next })
+    await loadPreview(items[next].path, { playlistId: entry.id })
+    return true
+  }
+
+  ipcMain.handle('preview:next', async () => {
+    if (await stepPreviewList(1)) return
     const { currentSlide, totalSlides } = store.get().preview
     if (currentSlide < totalSlides) {
       store.patchPreview({ currentSlide: currentSlide + 1 })
@@ -609,7 +776,8 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle('preview:prev', () => {
+  ipcMain.handle('preview:prev', async () => {
+    if (await stepPreviewList(-1)) return
     const { currentSlide } = store.get().preview
     if (currentSlide > 1) {
       store.patchPreview({ currentSlide: currentSlide - 1 })
@@ -630,16 +798,39 @@ export function registerIpcHandlers(): void {
     const p = state.preview
     if (!p.path) return
 
+    // В превью лежит первый элемент списка — в эфир уходит весь список,
+    // с его циклом и таймингом фотографий.
+    const previewList = p.playlistId
+      ? state.playlist.find((e) => e.id === p.playlistId && e.kind === 'list')
+      : undefined
+    if (previewList) {
+      store.patch({ previewListIndex: -1 })
+      store.patchPreview(initialDeckState())
+      void startListPlayback(previewList.id)
+      store.patchTimer({
+        durationMs: previewList.durationMs,
+        startedAt: null,
+        elapsedMs: 0,
+        running: false,
+        cycles: 0,
+      })
+      return
+    }
+
     // New program video: always autoplayed on take; mode only picks start point.
     // Слайд-видео в PPTX на эфир не автоплеится — оператор запускает вручную.
     let video: import('./state.js').VideoState
     if (p.kind === 'video') {
-      const resume = state.videoTakeMode === 'play-resume'
-      const startSec = resume ? store.previewVideoPositionSec() : 0
+      const mode = state.videoTakeMode
+      // «Стоп на первом кадре»: ролик уходит в эфир замороженным на нулевой
+      // позиции — первый кадр работает заставкой, а запускает его кликер
+      // спикера первым «далее» (та же механика, что у видео на слайде).
+      const hold = mode === 'hold-first'
+      const startSec = mode === 'play-resume' ? store.previewVideoPositionSec() : 0
       video = {
-        playing: true,
-        anchorSec: startSec,
-        anchorAt: Date.now(),
+        playing: !hold,
+        anchorSec: hold ? 0 : startSec,
+        anchorAt: hold ? null : Date.now(),
         durationSec: p.video.durationSec,
         muted: state.video.muted,
       }
@@ -682,6 +873,11 @@ export function registerIpcHandlers(): void {
       currentPlaylistId: p.playlistId,
       slideMedia: p.slideMedia,
       video,
+      // Цикл берём у выдаваемой записи: ролик-заставка должен уйти в эфир
+      // зациклённым сразу, без второго действия оператора.
+      videoLoop: Boolean(
+        p.playlistId ? state.playlist.find((e) => e.id === p.playlistId)?.loop : false,
+      ),
       preview: newPreview,
     })
     setLastPdfPath(p.path)
@@ -744,7 +940,17 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('preview:video:ended', () => {
-    const v = store.get().preview.video
+    const state = store.get()
+    const v = state.preview.video
+    // Превью показывает то же поведение, что будет в эфире: зациклённая запись
+    // и в превью крутится по кругу — иначе значок включён, а ролик встал.
+    const entry = state.preview.playlistId
+      ? state.playlist.find((e) => e.id === state.preview.playlistId)
+      : undefined
+    if (entry?.loop) {
+      store.patchPreviewVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
+      return
+    }
     store.patchPreviewVideo({ playing: false, anchorSec: v.durationSec || v.anchorSec, anchorAt: null })
   })
 
@@ -918,8 +1124,40 @@ export function registerIpcHandlers(): void {
 
   // Fired by the operator window when its <video> reaches the end.
   ipcMain.handle('video:ended', () => {
+    if (isListPlaying()) {
+      void stepList(1)
+      return
+    }
     const v = store.get().video
+    // Цикл: ролик-заставка крутится, пока спикер на сцене — вместо паузы на
+    // последнем кадре перезапускаем часы с нуля, и все окна следуют за ними.
+    if (store.get().videoLoop) {
+      store.patchVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
+      return
+    }
     store.patchVideo({ playing: false, anchorSec: v.durationSec || v.anchorSec, anchorAt: null })
+  })
+
+  ipcMain.handle('video:set-loop', (_e, enabled: boolean) => {
+    const value = Boolean(enabled)
+    const { currentPlaylistId } = store.get()
+    store.patch({ videoLoop: value })
+    // Источник истины — запись плейлиста: настройка переживает переключения
+    // эфира, перезапуск и уезжает в .pdpres вместе с проектом.
+    if (currentPlaylistId) {
+      store.patch({
+        playlist: store.get().playlist.map((e) =>
+          e.id === currentPlaylistId ? { ...e, loop: value } : e,
+        ),
+      })
+      persistPlaylist()
+    }
+    // Включили цикл на уже доигравшем ролике — стартуем его сразу, иначе
+    // пришлось бы жать play руками, а это делается ради заставки в эфире.
+    const v = store.get().video
+    if (value && !v.playing && v.durationSec > 0 && v.anchorSec >= v.durationSec - 0.3) {
+      store.patchVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
+    }
   })
 
   ipcMain.handle('video:set-muted', (_e, muted: boolean) => {
@@ -985,6 +1223,47 @@ export function registerIpcHandlers(): void {
   })
 
   /** Append supported files to the playlist; unsupported paths are skipped. */
+  function toListItems(paths: string[]): ListItem[] {
+    const out: ListItem[] = []
+    for (const p of paths) {
+      const kind = kindOf(p)
+      if (kind !== 'image' && kind !== 'video') continue
+      out.push({ path: p, fileName: basename(p), kind })
+    }
+    return out
+  }
+
+  function listDisplayName(items: ListItem[]): string {
+    const photos = items.filter((i) => i.kind === 'image').length
+    const videos = items.length - photos
+    const parts: string[] = []
+    if (photos) parts.push(`${photos} фото`)
+    if (videos) parts.push(`${videos} видео`)
+    return `Список — ${parts.join(', ') || 'пусто'}`
+  }
+
+  function appendListEntry(paths: string[]): PlaylistEntry[] {
+    const items = toListItems(paths)
+    if (items.length === 0) return []
+    const entry: PlaylistEntry = {
+      id: randomUUID(),
+      kind: 'list',
+      // Своего файла у списка нет — материалы лежат в items.
+      filePath: '',
+      fileName: listDisplayName(items),
+      displayName: '',
+      speakerName: '',
+      durationMs: store.get().timer.durationMs,
+      items,
+      photoSec: DEFAULT_PHOTO_SEC,
+      // Списки заводят ради «крутится по кругу» — цикл по умолчанию включён.
+      loop: true,
+    }
+    store.patch({ playlist: [...store.get().playlist, entry] })
+    persistPlaylist()
+    return [entry]
+  }
+
   function appendToPlaylist(paths: string[]): PlaylistEntry[] {
     const existing = store.get().playlist
     const defaultDur = store.get().timer.durationMs
@@ -1021,6 +1300,83 @@ export function registerIpcHandlers(): void {
     })
     if (res.canceled || res.filePaths.length === 0) return []
     return appendToPlaylist(res.filePaths)
+  })
+
+  /**
+   * Список: пачка фото и/или роликов одной записью плейлиста. Клиент принёс
+   * 40 фотографий на сбор гостей — они не должны разъезжаться сорока строками
+   * по списку спикеров.
+   */
+  ipcMain.handle('playlist:add-list', async (): Promise<PlaylistEntry[]> => {
+    const op = getOperatorWindow()
+    const res = await dialog.showOpenDialog(op!, {
+      title: 'Файлы для списка',
+      message: 'Фотографии и ролики, которые пойдут по кругу',
+      filters: [
+        { name: 'Фото и видео', extensions: [...IMAGE_EXTS_ARR, ...VIDEO_EXTS_ARR] },
+        { name: 'Изображения', extensions: IMAGE_EXTS_ARR },
+        { name: 'Видео', extensions: VIDEO_EXTS_ARR },
+      ],
+      properties: ['openFile', 'multiSelections'],
+    })
+    if (res.canceled || res.filePaths.length === 0) return []
+    return appendListEntry(res.filePaths)
+  })
+
+  /** Правка содержимого списка: порядок, удаление, добавление, секунды на фото. */
+  ipcMain.handle(
+    'playlist:update-list',
+    (
+      _e,
+      payload: {
+        id: string
+        items?: ListItem[]
+        photoSec?: number
+        listMode?: ListMode
+        fadeMs?: number
+      },
+    ) => {
+      const entry = store.get().playlist.find((x) => x.id === payload.id)
+      if (!entry || entry.kind !== 'list') return
+      const next = store.get().playlist.map((x) =>
+        x.id === payload.id
+          ? {
+              ...x,
+              items: payload.items ?? x.items,
+              photoSec:
+                typeof payload.photoSec === 'number' ? payload.photoSec : x.photoSec,
+              listMode: payload.listMode ?? x.listMode,
+              fadeMs: typeof payload.fadeMs === 'number' ? payload.fadeMs : x.fadeMs,
+              fileName: listDisplayName(payload.items ?? x.items ?? []),
+            }
+          : x,
+      )
+      store.patch({ playlist: next })
+      persistPlaylist()
+      void refreshMissingFiles()
+    },
+  )
+
+  /** Добавить файлы в существующий список. */
+  ipcMain.handle('playlist:add-to-list', async (_e, id: string): Promise<boolean> => {
+    const entry = store.get().playlist.find((x) => x.id === id)
+    if (!entry || entry.kind !== 'list') return false
+    const op = getOperatorWindow()
+    const res = await dialog.showOpenDialog(op!, {
+      title: 'Добавить в список',
+      filters: [{ name: 'Фото и видео', extensions: [...IMAGE_EXTS_ARR, ...VIDEO_EXTS_ARR] }],
+      properties: ['openFile', 'multiSelections'],
+    })
+    if (res.canceled || res.filePaths.length === 0) return false
+    const items = [...(entry.items ?? []), ...toListItems(res.filePaths)]
+    store.patch({
+      playlist: store.get().playlist.map((x) =>
+        x.id === id ? { ...x, items, fileName: listDisplayName(items) } : x,
+      ),
+    })
+    persistPlaylist()
+    void refreshMissingFiles()
+    return true
   })
 
   /**
@@ -1088,6 +1444,9 @@ export function registerIpcHandlers(): void {
     if (removed?.kind === 'live' && store.get().preview.path === removed.filePath) {
       store.patch({ preview: initialDeckState() })
     }
+    // Удалили запись, которая крутится в эфире, — останавливаем проигрыватель,
+    // иначе его таймер продолжит менять картинки от несуществующего списка.
+    if (removed?.kind === 'list' && store.get().currentPlaylistId === id) stopListPlayback()
     persistPlaylist()
     // Чистим id удалённой записи из списка ненайденных.
     if (store.get().missingIds.includes(id)) void refreshMissingFiles()
@@ -1110,6 +1469,7 @@ export function registerIpcHandlers(): void {
         speakerName?: string
         durationMs?: number
         liveFit?: LiveFit
+        loop?: boolean
       },
     ) => {
       const next = store.get().playlist.map((e) =>
@@ -1121,11 +1481,18 @@ export function registerIpcHandlers(): void {
               durationMs:
                 typeof payload.durationMs === 'number' ? payload.durationMs : e.durationMs,
               liveFit: payload.liveFit ?? e.liveFit,
+              loop: typeof payload.loop === 'boolean' ? payload.loop : e.loop,
             }
           : e,
       )
       store.patch({ playlist: next })
       persistPlaylist()
+
+      // Запись сейчас в эфире — цикл должен примениться немедленно, не дожидаясь
+      // следующей выдачи: оператор жмёт значок как раз по играющему ролику.
+      if (typeof payload.loop === 'boolean' && store.get().currentPlaylistId === payload.id) {
+        store.patch({ videoLoop: payload.loop })
+      }
 
       // If the updated entry is the active one and duration changed, apply it
       if (
@@ -1142,6 +1509,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('playlist:activate', async (_e, id: string): Promise<OpenPdfResult> => {
     const entry = store.get().playlist.find((e) => e.id === id)
     if (!entry) return { ok: false, error: 'Entry not found' }
+    // Список в превью показывает первый элемент — посмотреть, что за пачка.
+    // Крутить её в превью незачем: это подготовка, а не эфир.
+    if (entry.kind === 'list') {
+      const first = entry.items?.[0]
+      if (!first) return { ok: false, error: 'Список пуст — добавь фото или ролики' }
+      store.patch({ previewListIndex: 0 })
+      return loadPreview(first.path, { playlistId: id })
+    }
+    store.patch({ previewListIndex: -1 })
     return loadPreview(entry.filePath, { playlistId: id })
   })
 
@@ -1149,6 +1525,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('playlist:activate-live', async (_e, id: string): Promise<OpenPdfResult> => {
     const entry = store.get().playlist.find((e) => e.id === id)
     if (!entry) return { ok: false, error: 'Entry not found' }
+    if (entry.kind === 'list') {
+      if (!entry.items || entry.items.length === 0) {
+        return { ok: false, error: 'Список пуст — добавь фото или ролики' }
+      }
+      await startListPlayback(id)
+      return { ok: true, path: entry.items[0].path }
+    }
     return openFile(entry.filePath, { playlistId: id, durationMs: entry.durationMs })
   })
 
@@ -1168,7 +1551,11 @@ export function registerIpcHandlers(): void {
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
       title: 'Выбрать заставку (key visual)',
-      filters: [{ name: 'Изображения', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+      filters: [
+        { name: 'Картинка или видео', extensions: [...IMAGE_EXTS_ARR, 'gif', ...VIDEO_EXTS_ARR] },
+        { name: 'Изображения', extensions: [...IMAGE_EXTS_ARR, 'gif'] },
+        { name: 'Видео', extensions: VIDEO_EXTS_ARR },
+      ],
       properties: ['openFile'],
     })
     if (res.canceled || res.filePaths.length === 0) return { path: store.get().keyVisualPath }
@@ -1186,6 +1573,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('keyvisual:read', async (): Promise<{ bytes: Uint8Array; mime: string } | null> => {
     const path = store.get().keyVisualPath
     if (!path) return null
+    // Видео-заставка отдаётся потоком через cuedeck-media://stream/keyvisual —
+    // читать многогигабайтный файл в память нельзя.
+    if (kindOf(path) === 'video') return null
     try {
       const buf = await readFile(path)
       const ext = path.toLowerCase().split('.').pop() ?? ''
@@ -1278,6 +1668,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('project:new', () => {
+    stopListPlayback()
     // Intentionally do NOT clear persistent storage (lastPdfPath, playlist,
     // keyVisualPath, projectPath) — this keeps session:has-last returning true
     // so the user can restore the previous session via "Последний" after reset.
@@ -1377,6 +1768,19 @@ export function registerIpcHandlers(): void {
       let fixed = 0
       const playlist = store.get().playlist.map((e) => {
         if (!missingIds.has(e.id) || e.kind === 'live') return e
+        if (e.kind === 'list') {
+          let touched = false
+          const items = (e.items ?? []).map((it) => {
+            const hit = index.get(basename(it.path).toLowerCase())
+            if (!hit || hit.length === 0) return it
+            const p = pickBestCandidate(hit)
+            if (p === it.path) return it
+            touched = true
+            return { ...it, path: p, fileName: basename(p) }
+          })
+          if (touched) fixed += 1
+          return touched ? { ...e, items } : e
+        }
         const found = index.get(basename(e.filePath).toLowerCase())
         if (!found || found.length === 0) return e
         const picked = pickBestCandidate(found)
@@ -1463,6 +1867,15 @@ export function registerIpcHandlers(): void {
             playlist.push(e) // живой вход копировать нечего
             continue
           }
+          if (e.kind === 'list') {
+            const items = []
+            for (const it of e.items ?? []) {
+              const dest = await copyMaterial(it.path)
+              items.push(dest ? { ...it, path: dest } : it)
+            }
+            playlist.push({ ...e, items })
+            continue
+          }
           const dest = await copyMaterial(e.filePath)
           playlist.push(dest ? { ...e, filePath: dest } : e)
         }
@@ -1474,7 +1887,7 @@ export function registerIpcHandlers(): void {
         // копия файла та же, поэтому переносим их следом, иначе заметки
         // спикеров потеряются при переезде.
         for (const e of playlist) {
-          if (e.kind === 'live') continue
+          if (e.kind === 'live' || e.kind === 'list') continue
           const oldPath = state.playlist.find((x) => x.id === e.id)?.filePath
           // Материал не скопировался (не найден) — путь остался прежним, и
           // копирование заметок «само в себя» затёрло бы их.
@@ -1520,7 +1933,8 @@ export function registerIpcHandlers(): void {
    */
   ipcMain.handle('playlist:relocate', async (_e, id: string): Promise<boolean> => {
     const entry = store.get().playlist.find((e) => e.id === id)
-    if (!entry || entry.kind === 'live') return false
+    // У списка материалов много — их чинит «Найти в папке…» или правка списка.
+    if (!entry || entry.kind === 'live' || entry.kind === 'list') return false
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
       title: `Указать файл для «${entry.displayName || entry.fileName}»`,

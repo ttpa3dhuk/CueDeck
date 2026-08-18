@@ -3,7 +3,9 @@ import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '..
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
 import {
   applySinkId,
+  crossfadeToImage,
   formatClock,
+  isVideoPath,
   placeSlideOverlay,
   shouldMute,
   slideMediaAt,
@@ -14,6 +16,8 @@ import {
 } from '../shared/video'
 import { elementAudioStream, LiveMeter, LivePool, LiveView, listMediaDevices } from '../shared/live-stream'
 import { liveDisplayName, liveFitFor, parseLiveUri } from '../../shared/live'
+import { LIST_FADE_MAX_MS } from '../../shared/types'
+import type { ListMode } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
 import type {
   AppState,
@@ -51,7 +55,7 @@ const modeSelect = role === 'operator' ? $<HTMLSelectElement>('mode-select') : n
 const playlistList = role === 'operator' ? $<HTMLOListElement>('playlist-list') : null
 const playlistEmpty = role === 'operator' ? $('playlist-empty') : null
 const playlistAddBtn = role === 'operator' ? $<HTMLButtonElement>('playlist-add') : null
-const playlistAddLiveBtn = role === 'operator' ? $<HTMLButtonElement>('playlist-add-live') : null
+const addMenu = role === 'operator' ? $('add-menu') : null
 const playlistCompactToggle = role === 'operator' ? $<HTMLInputElement>('playlist-compact-toggle') : null
 const playlistAutoAdvanceToggle = role === 'operator' ? $<HTMLInputElement>('playlist-auto-advance-toggle') : null
 const kvPreview = role === 'operator' ? $('kv-preview') : null
@@ -90,6 +94,17 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
     kvPreview.style.backgroundImage = ''
     return
   }
+
+  // Видео-заставку в мини-превью не показываем: тянуть ролик в память ради
+  // 57×32 нельзя, а кадр из него взять нечем. Помечаем текстом и рамкой.
+  if (isVideoPath(path)) {
+    kvPreview.classList.remove('kv-empty')
+    kvPreview.classList.add('kv-video')
+    kvPreview.title = `Видео-заставка: ${baseName(path)} — крутится в цикле, пока включён Blackout`
+    kvPreview.style.backgroundImage = ''
+    return
+  }
+  kvPreview.classList.remove('kv-video')
 
   const data = await window.api.keyvisual.read()
   if (!data) {
@@ -130,6 +145,7 @@ const setupModal = $('setup-modal')
 let docLoaded = false
 let lastRenderedSlide = -1
 let currentImageBlobUrl: string | null = null
+const currentImageUnder = role === 'operator' ? $<HTMLImageElement>('current-image-under') : null
 let lastSinkId: string | null | undefined = undefined
 
 // ── Preview deck (operator only) ───────────────────────────────────────────
@@ -180,11 +196,13 @@ function clearCanvas(canvas: HTMLCanvasElement): void {
   }
 }
 
-function disposeCurrentImage(): void {
-  if (currentImageBlobUrl) {
-    URL.revokeObjectURL(currentImageBlobUrl)
-    currentImageBlobUrl = null
-  }
+/** Во время наплыва старый кадр ещё висит нижним слоем — освобождаем позже. */
+function disposeCurrentImage(afterMs = 0): void {
+  if (!currentImageBlobUrl) return
+  const url = currentImageBlobUrl
+  currentImageBlobUrl = null
+  if (afterMs > 0) setTimeout(() => URL.revokeObjectURL(url), afterMs)
+  else URL.revokeObjectURL(url)
 }
 
 function unloadCurrentVideo(): void {
@@ -300,7 +318,7 @@ function applyPreviewMonitoring(el: HTMLMediaElement | null, state: AppState): v
 }
 
 function statusText(s: { status: string; message: string | null }): string {
-  return s.status === 'error' ? (s.message ?? '') : 'Подключаю внешний вход…'
+  return s.status === 'error' ? (s.message ?? '') : 'Подключаю захват…'
 }
 
 /**
@@ -457,7 +475,12 @@ function applyPreviewLive(state: AppState): void {
 
 async function loadCurrentFile(): Promise<void> {
   const state = getState()
-  disposeCurrentImage()
+  {
+    // Внутри списка с наплывом уходящий кадр ещё нужен нижнему слою.
+    const listEntry = state.playlist.find((e) => e.id === state.currentPlaylistId)
+    const fade = state.listIndex >= 0 ? (listEntry?.fadeMs ?? 0) : 0
+    disposeCurrentImage(fade > 0 ? fade + 500 : 0)
+  }
   docLoaded = false
   lastRenderedSlide = -1
   videoError.classList.add('hidden')
@@ -505,7 +528,10 @@ async function loadCurrentFile(): Promise<void> {
   if (state.fileKind === 'image') {
     const blob = new Blob([data.bytes as BlobPart], { type: data.mime })
     currentImageBlobUrl = URL.createObjectURL(blob)
-    currentImage.src = currentImageBlobUrl
+    // Оператор должен видеть ровно то же, что зал, — включая наплыв.
+    const entry = state.playlist.find((e) => e.id === state.currentPlaylistId)
+    const fade = state.listIndex >= 0 ? (entry?.fadeMs ?? 0) : 0
+    await crossfadeToImage(currentImage, currentImageUnder, currentImageBlobUrl, fade)
     currentImage.classList.remove('hidden')
     currentCanvas.classList.add('hidden')
     clearCanvas(nextCanvas)
@@ -559,6 +585,8 @@ function updateVideoUI(state: AppState): void {
 
   const v = state.video
   if (videoPlayBtn) videoPlayBtn.textContent = v.playing ? '⏸' : '▶'
+  // Индикатор-кнопка LOOP: нажата = залита, отжата = полупрозрачная.
+  document.getElementById('video-loop-btn')?.classList.toggle('on', state.videoLoop)
   if (videoMuteBtn) {
     videoMuteBtn.textContent = v.muted ? '🔇' : '🔊'
     videoControls?.classList.toggle('muted', v.muted)
@@ -707,7 +735,7 @@ function updatePreviewUI(state: AppState): void {
       ? p.kind === 'video'
         ? 'видео'
         : p.kind === 'live'
-          ? 'внешний вход'
+          ? 'захват'
           : `${p.currentSlide} / ${p.totalSlides || '—'}`
       : '— / —'
   }
@@ -733,6 +761,20 @@ function updatePreviewUI(state: AppState): void {
       previewVideoScrub.value = String(dur > 0 ? Math.min(pos, dur) : pos)
     }
     if (previewVideoTime) previewVideoTime.textContent = `${formatClock(pos)} / ${formatClock(dur)}`
+
+    // Цикл виден и правится прямо в превью: заряжаешь ролик кликом по записи —
+    // и сразу видно, зациклен он или нет, не разворачивая компактный плейлист.
+    const loopBtn = document.getElementById('preview-loop-btn')
+    if (loopBtn) {
+      const entry = p.playlistId ? state.playlist.find((e) => e.id === p.playlistId) : undefined
+      loopBtn.classList.toggle('on', Boolean(entry?.loop))
+      // Файл, открытый мимо плейлиста, флаг сохранить некуда — записи нет.
+      const orphan = !entry
+      loopBtn.classList.toggle('disabled', orphan)
+      loopBtn.title = orphan
+        ? 'Цикл сохраняется у записи плейлиста — добавь ролик в плейлист, чтобы включить'
+        : 'Зациклить этот ролик: доиграв, начинается заново. Настройка сохраняется у записи плейлиста'
+    }
   }
 }
 
@@ -978,6 +1020,10 @@ function startRename(li: HTMLLIElement, entry: PlaylistEntry): void {
   input.select()
 }
 
+/** Две стрелки по кругу — общий значок цикла для транспорта и карточки. */
+const LOOP_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>'
+
 function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   // Узел живёт дольше объекта entry (стейт иммутабельный) — обработчики берут
   // свежую версию записи из стейта, иначе rename/confirm видят устаревшие поля.
@@ -1008,6 +1054,22 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
             ? 'ВХОД'
             : 'PDF'
 
+  // Цикл включается прямо в плейлисте, не выводя запись в эфир: у видео-заставки
+  // это настройка «на подготовке», а не операция в бою. Значок один и тот же с
+  // транспортом: нажат — залит, отжат — полупрозрачный.
+  const loopBadge = document.createElement('button')
+  loopBadge.className = 'loop-btn card'
+  loopBadge.innerHTML = LOOP_ICON
+  loopBadge.classList.toggle('on', Boolean(entry.loop))
+  loopBadge.classList.toggle('hidden', entry.kind !== 'video' && entry.kind !== 'list')
+  loopBadge.title = 'Зациклить ролик: доиграв, начинается заново'
+  loopBadge.addEventListener('click', (e) => {
+    e.stopPropagation()
+    window.api.playlist.update(entry.id, { loop: !fresh().loop })
+  })
+  loopBadge.addEventListener('mousedown', (e) => e.stopPropagation())
+  loopBadge.addEventListener('dblclick', (e) => e.stopPropagation())
+
   const name = document.createElement('span')
   name.className = 'pdf-name'
   name.textContent = entry.displayName || entry.fileName
@@ -1033,7 +1095,22 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   })
   removeBtn.addEventListener('dblclick', (e) => e.stopPropagation())
 
-  row1.append(handle, kindBadge, name)
+  row1.append(handle, kindBadge, loopBadge, name)
+
+  // Список правится на месте: порядок, удаление, добавление, секунды на фото.
+  if (entry.kind === 'list') {
+    const listBtn = document.createElement('button')
+    listBtn.className = 'rename'
+    listBtn.textContent = '⚙'
+    listBtn.title = 'Содержимое списка: порядок, удаление, секунды на фото'
+    listBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      openListModal(fresh())
+    })
+    listBtn.addEventListener('mousedown', (e) => e.stopPropagation())
+    listBtn.addEventListener('dblclick', (e) => e.stopPropagation())
+    row1.append(listBtn)
+  }
 
   // У живого входа устройство и аудиовход можно переназначить на месте —
   // иначе смена звука требовала бы удалить запись и завести заново.
@@ -1041,7 +1118,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
     const setupBtn = document.createElement('button')
     setupBtn.className = 'rename'
     setupBtn.textContent = '⚙'
-    setupBtn.title = 'Настроить внешний вход: устройство картинки и звука'
+    setupBtn.title = 'Настроить захват: устройство картинки и звука'
     setupBtn.addEventListener('click', (e) => {
       e.stopPropagation()
       openLiveModal(fresh()).catch(() => showBanner('Не удалось получить список устройств'))
@@ -1182,6 +1259,11 @@ function updatePlaylistItem(node: HTMLLIElement, entry: PlaylistEntry): void {
   if (durInput && document.activeElement !== durInput) {
     durInput.value = String(Math.round(entry.durationMs / 60000))
   }
+  const loopBtn = node.querySelector<HTMLButtonElement>('.loop-btn')
+  if (loopBtn) {
+    loopBtn.classList.toggle('on', Boolean(entry.loop))
+    loopBtn.classList.toggle('hidden', entry.kind !== 'video' && entry.kind !== 'list')
+  }
 }
 
 function reorderAroundTarget(draggedId: string, targetId: string): void {
@@ -1291,8 +1373,15 @@ function applyState(state: AppState): void {
     if (state.fileKind === 'live') {
       // Листать нечего — вместо счётчика слайдов показываем, что в эфире вход.
       slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
-      slideCounter.textContent = 'Внешний вход'
+      slideCounter.textContent = 'Захват'
       slideRemaining.textContent = ''
+    } else if (state.listIndex >= 0) {
+      // Список в эфире: важно не «слайд 1 из 1» текущего файла, а место в пачке.
+      const list = state.playlist.find((e) => e.id === state.currentPlaylistId)
+      const total = list?.items?.length ?? 0
+      slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
+      slideCounter.textContent = `Список ${state.listPos + 1} из ${total || '—'}`
+      slideRemaining.textContent = state.fileKind === 'video' ? 'ролик' : 'фото'
     } else if (state.fileKind === 'video') {
       updateVideoHeader(state)
     } else {
@@ -1385,6 +1474,9 @@ function applyState(state: AppState): void {
   }
 
   renderPlaylist(state)
+  // Открытый редактор списка должен показывать актуальный порядок и то, какой
+  // элемент сейчас в эфире.
+  if (listEditingId) renderListItems()
   updateSpeakerMessage(state)
   updateNextSpeaker(state)
   refreshKeyVisualPreview(state).catch(() => undefined)
@@ -2010,14 +2102,21 @@ function setupOperatorControls(): void {
     window.api.note.setFontSize(getState().notesFontSize + 2)
   })
 
-  // Playlist add button
-  playlistAddBtn!.addEventListener('click', () => {
-    window.api.playlist.add()
+  // «+» с меню: разновидностей добавления больше, чем влезает кнопками в шапку.
+  playlistAddBtn!.addEventListener('click', (e) => {
+    e.stopPropagation()
+    addMenu?.classList.toggle('hidden')
   })
-
-  playlistAddLiveBtn!.addEventListener('click', () => {
-    openLiveModal().catch(() => showBanner('Не удалось получить список устройств'))
+  addMenu?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('button[data-add]') as HTMLButtonElement | null
+    if (!btn) return
+    addMenu.classList.add('hidden')
+    if (btn.dataset.add === 'files') window.api.playlist.add()
+    else if (btn.dataset.add === 'list') window.api.playlist.addList()
+    else openLiveModal().catch(() => showBanner('Не удалось получить список устройств'))
   })
+  // Клик мимо меню закрывает его — обычное поведение выпадашки.
+  document.addEventListener('click', () => addMenu?.classList.add('hidden'))
 
   // Режим вписывания правится прямо на шине — просьбу «заполните весь экран»
   // отрабатываем, не уходя в настройки и не снимая источник с эфира.
@@ -2032,7 +2131,7 @@ function setupOperatorControls(): void {
 
   $('live-cancel').addEventListener('click', () => $('live-modal').classList.add('hidden'))
   $('live-add').addEventListener('click', () => {
-    confirmLiveModal().catch(() => showBanner('Не удалось добавить внешний вход'))
+    confirmLiveModal().catch(() => showBanner('Не удалось добавить захват'))
   })
 
   // Compact toggle
@@ -2248,6 +2347,69 @@ function setupOperatorControls(): void {
   window.api.menu.onProjectSaveAs(() => projectSave(true))
   window.api.menu.onProjectConsolidate(() => projectConsolidate())
 
+  document.getElementById('video-loop-btn')?.addEventListener('click', () => {
+    window.api.video.setLoop(!getState().videoLoop)
+  })
+
+  // Клавиши работают только при открытой модалке и выбранной строке. Гасим
+  // всплытие: те же стрелки в операторе листают эфир.
+  document.getElementById('list-modal')?.addEventListener('keydown', (e) => {
+    if (!listEditingId || listSelectedIndex < 0) return
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+    e.preventDefault()
+    e.stopPropagation()
+    reorderListItems(listSelectedIndex, listSelectedIndex + (e.key === 'ArrowUp' ? -1 : 1))
+  })
+
+  document.getElementById('list-close')?.addEventListener('click', () => {
+    document.getElementById('list-modal')?.classList.add('hidden')
+    listEditingId = null
+  })
+  document.getElementById('list-add-files')?.addEventListener('click', () => {
+    if (listEditingId) window.api.playlist.addToList(listEditingId)
+  })
+  const listSecInput = document.getElementById('list-photo-sec') as HTMLInputElement | null
+  const listFadeInput = document.getElementById('list-fade-ms') as HTMLInputElement | null
+  const listModeSelect = document.getElementById('list-mode') as HTMLSelectElement | null
+
+  /** FADE не длиннее 2000 мс и половины паузы между кадрами. */
+  function clampFade(fadeMs: number, photoSec: number): number {
+    return Math.max(0, Math.min(LIST_FADE_MAX_MS, Math.round(photoSec * 500), Math.round(fadeMs)))
+  }
+
+  listSecInput?.addEventListener('change', () => {
+    const v = Math.max(1, Math.min(600, Math.round(Number(listSecInput.value) || 8)))
+    listSecInput.value = String(v)
+    if (!listEditingId) return
+    // Уменьшили паузу — длинный FADE может стать больше допустимого: поджимаем.
+    const fade = clampFade(Number(listFadeInput?.value) || 0, v)
+    if (listFadeInput) listFadeInput.value = String(fade)
+    window.api.playlist.updateList(listEditingId, { photoSec: v, fadeMs: fade })
+  })
+
+  listFadeInput?.addEventListener('change', () => {
+    const sec = Math.max(1, Number(listSecInput?.value) || 8)
+    const v = clampFade(Number(listFadeInput.value) || 0, sec)
+    listFadeInput.value = String(v)
+    if (listEditingId) window.api.playlist.updateList(listEditingId, { fadeMs: v })
+  })
+
+  listModeSelect?.addEventListener('change', () => {
+    if (!listEditingId) return
+    const mode = listModeSelect.value as ListMode
+    // Значок цикла на карточке отражает тот же смысл — держим их согласованными.
+    window.api.playlist.updateList(listEditingId, { listMode: mode })
+    window.api.playlist.update(listEditingId, { loop: mode !== 'once' })
+  })
+
+  document.getElementById('preview-loop-btn')?.addEventListener('click', () => {
+    const s = getState()
+    const id = s.preview.playlistId
+    if (!id) return
+    const entry = s.playlist.find((e) => e.id === id)
+    if (entry) window.api.playlist.update(id, { loop: !entry.loop })
+  })
+
   document.getElementById('relink-folder-btn')?.addEventListener('click', () => {
     showBanner('Ищу файлы в папке…', 60000)
     window.api.playlist.relinkFolder().then((res) => {
@@ -2341,6 +2503,118 @@ let liveChosenVideo: string | null = null
 let liveEditingId: string | null = null
 
 /** Без аргумента — добавление нового входа, с записью — правка существующей. */
+/**
+ * Редактор списка: порядок, удаление, добавление файлов, секунды на фото.
+ * Работает по свежей копии записи из состояния — модалка живёт долго, а
+ * плейлист за это время может измениться (например, кликер листает эфир).
+ */
+let listEditingId: string | null = null
+/** Кто перетаскивается сейчас и какая строка выбрана (её двигают ↑/↓). */
+let listDragFrom: number | null = null
+let listSelectedIndex = -1
+
+function renderListItems(): void {
+  const box = document.getElementById('list-items')
+  if (!box || !listEditingId) return
+  const state = getState()
+  const entry = state.playlist.find((e) => e.id === listEditingId)
+  const items = entry?.items ?? []
+  const playingIdx = state.currentPlaylistId === listEditingId ? state.listIndex : -1
+
+  if (items.length === 0) {
+    box.innerHTML = '<div class="list-empty">Пусто — добавь фотографии или ролики.</div>'
+    return
+  }
+  box.innerHTML = ''
+  items.forEach((item, i) => {
+    const row = document.createElement('div')
+    row.className = 'list-row'
+    row.draggable = true
+    row.dataset.index = String(i)
+    row.tabIndex = 0
+    row.classList.toggle('playing', i === playingIdx)
+    row.classList.toggle('selected', i === listSelectedIndex)
+
+    const idx = document.createElement('span')
+    idx.className = 'idx'
+    idx.textContent = String(i + 1)
+
+    const tag = document.createElement('span')
+    tag.className = 'tag'
+    tag.textContent = item.kind === 'video' ? 'ВИДЕО' : 'ФОТО'
+
+    const nm = document.createElement('span')
+    nm.className = 'nm'
+    nm.textContent = item.fileName
+    nm.title = item.path
+
+    const del = document.createElement('button')
+    del.textContent = '✕'
+    del.title = 'Убрать из списка'
+    del.addEventListener('click', (e) => {
+      e.stopPropagation()
+      window.api.playlist.updateList(listEditingId!, { items: items.filter((_, k) => k !== i) })
+    })
+
+    // Выделение строки: дальше её двигают ↑/↓ с клавиатуры, значков не нужно.
+    row.addEventListener('mousedown', () => {
+      listSelectedIndex = i
+      box.querySelectorAll('.list-row').forEach((r, k) => r.classList.toggle('selected', k === i))
+    })
+
+    row.addEventListener('dragstart', (e) => {
+      listDragFrom = i
+      row.classList.add('dragging')
+      e.dataTransfer?.setData('text/plain', String(i))
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+    })
+    row.addEventListener('dragend', () => {
+      listDragFrom = null
+      box.querySelectorAll('.list-row').forEach((r) => r.classList.remove('dragging', 'drop-target'))
+    })
+    row.addEventListener('dragover', (e) => {
+      if (listDragFrom === null) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+      row.classList.add('drop-target')
+    })
+    row.addEventListener('dragleave', () => row.classList.remove('drop-target'))
+    row.addEventListener('drop', (e) => {
+      e.preventDefault()
+      row.classList.remove('drop-target')
+      if (listDragFrom === null || listDragFrom === i) return
+      reorderListItems(listDragFrom, i)
+    })
+
+    row.append(idx, tag, nm, del)
+    box.append(row)
+  })
+}
+
+/** Перенос элемента списка на новое место (мышью или клавишами). */
+function reorderListItems(from: number, to: number): void {
+  const entry = getState().playlist.find((e) => e.id === listEditingId)
+  const items = [...(entry?.items ?? [])]
+  if (from < 0 || from >= items.length || to < 0 || to >= items.length) return
+  const [moved] = items.splice(from, 1)
+  items.splice(to, 0, moved)
+  listSelectedIndex = to
+  window.api.playlist.updateList(listEditingId!, { items })
+}
+
+function openListModal(entry: PlaylistEntry): void {
+  listEditingId = entry.id
+  listSelectedIndex = -1
+  const sec = document.getElementById('list-photo-sec') as HTMLInputElement | null
+  if (sec) sec.value = String(entry.photoSec ?? 8)
+  const mode = document.getElementById('list-mode') as HTMLSelectElement | null
+  if (mode) mode.value = entry.listMode ?? (entry.loop ? 'loop' : 'once')
+  const fade = document.getElementById('list-fade-ms') as HTMLInputElement | null
+  if (fade) fade.value = String(entry.fadeMs ?? 0)
+  document.getElementById('list-modal')?.classList.remove('hidden')
+  renderListItems()
+}
+
 async function openLiveModal(entry?: PlaylistEntry): Promise<void> {
   const modal = $('live-modal')
   const list = $('live-video-list')

@@ -191,6 +191,12 @@ export function getPlaylist(): PlaylistEntry[] {
       displayName: String(v.displayName ?? ''),
       speakerName: String(v.speakerName ?? ''),
       durationMs: Number(v.durationMs ?? 30 * 60 * 1000),
+      // Необязательные поля переносим как есть: раньше они здесь терялись —
+      // после перезапуска у живого входа сбрасывался режим вписывания.
+      ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
+      ...(v.loop ? { loop: true } : {}),
+      ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
+      ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),
     }
   })
 }

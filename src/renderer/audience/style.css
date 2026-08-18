@@ -71,3 +71,8 @@ canvas, .slide-image, .slide-video {
   max-width: none;
   max-height: none;
 }
+
+/* Нижний слой наплыва: держит уходящий кадр ровно на время перехода.
+   Геометрия та же, что у основного слоя, — иначе кадры «прыгнут». */
+.slide-image.fade-under { z-index: 0; }
+.slide-image.fade-under.hidden { display: none; }

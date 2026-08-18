@@ -117,8 +117,14 @@
         <aside class="playlist op-only">
           <div class="playlist-header">
             <span class="label">Спикеры</span>
-            <button id="playlist-add" title="Добавить PDF / PPTX / видео / изображение">+ Добавить</button>
-            <button id="playlist-add-live" title="Добавить внешний вход: USB-капчер HDMI, камера (ноутбук ведущего или диджея)">+ Вход</button>
+            <div class="add-wrap">
+              <button id="playlist-add" class="add-btn" title="Добавить в плейлист">+</button>
+              <div id="add-menu" class="add-menu hidden">
+                <button data-add="files">Файлы… <span>PDF, PPTX, видео, картинка</span></button>
+                <button data-add="list">Список… <span>пачка фото или роликов по кругу</span></button>
+                <button data-add="live">Захват… <span>карта захвата HDMI, камера</span></button>
+              </div>
+            </div>
           </div>
           <div class="playlist-toggles">
             <label class="toggle" title="Скрыть имя и таймер у каждого спикера">
@@ -154,18 +160,19 @@
         <section id="current-slide" class="current-slide">
           <div class="deck-label program op-only">
             <span>● ЭФИР</span>
-            <select id="current-live-fit" class="video-take-mode hidden" title="Как вписать внешний вход в экран зала">
+            <select id="current-live-fit" class="video-take-mode hidden" title="Как вписать захват в экран зала">
               <option value="contain">⬛ вписать (поля)</option>
               <option value="cover">⛶ заполнить (обрезать)</option>
               <option value="fill">↔ растянуть</option>
             </select>
           </div>
           <canvas id="current-canvas" class="hidden"></canvas>
+          <img id="current-image-under" class="slide-image fade-under hidden" alt="" />
           <img id="current-image" class="slide-image hidden" alt="" />
           <video id="current-video" class="slide-video hidden" playsinline></video>
           <video id="current-live" class="slide-video hidden" playsinline></video>
           <div id="current-live-status" class="live-status hidden"></div>
-          <div id="current-live-info" class="live-info op-only hidden" title="Что реально отдаёт внешний вход: разрешение и измеренная частота кадров"></div>
+          <div id="current-live-info" class="live-info op-only hidden" title="Что реально отдаёт захват: разрешение и измеренная частота кадров"></div>
           <div id="current-meter" class="audio-meter op-only hidden" title="Уровень звука, приходящего с внешнего входа"><i></i></div>
           <video id="media-overlay" class="media-overlay hidden" playsinline></video>
           <div id="video-controls" class="video-controls op-only hidden">
@@ -173,6 +180,7 @@
             <button id="video-restart" title="В начало">⏮</button>
             <input id="video-scrub" class="video-scrub" type="range" min="0" max="100" step="0.1" value="0" />
             <span id="video-time" class="video-time">00:00 / 00:00</span>
+            <button id="video-loop-btn" class="loop-btn" title="Зациклить ЭТОТ ролик: доиграл — начинается заново. Настройка запоминается у записи плейлиста и уезжает в проект"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button>
             <button id="video-mute" title="Звук зала вкл/выкл">🔊</button>
           </div>
           <div id="video-error" class="video-error hidden">
@@ -200,12 +208,13 @@
             <select id="video-take-mode" class="video-take-mode hidden" title="Что делать с видео при выдаче в эфир">
               <option value="play-start">▶ играть с начала</option>
               <option value="play-resume">▶ играть с этой точки</option>
+              <option value="hold-first">⏸ стоп на первом кадре</option>
             </select>
             <select id="slide-take-mode" class="video-take-mode hidden" title="С какого слайда выдавать презентацию в эфир">
               <option value="from-start">▶ с первого слайда</option>
               <option value="from-current">▶ с этого слайда</option>
             </select>
-            <select id="preview-live-fit" class="video-take-mode hidden" title="Как вписать внешний вход в экран зала">
+            <select id="preview-live-fit" class="video-take-mode hidden" title="Как вписать захват в экран зала">
               <option value="contain">⬛ вписать (поля)</option>
               <option value="cover">⛶ заполнить (обрезать)</option>
               <option value="fill">↔ растянуть</option>
@@ -217,13 +226,14 @@
           <video id="preview-video" class="slide-video hidden" playsinline muted></video>
           <video id="preview-live" class="slide-video hidden" playsinline muted></video>
           <div id="preview-live-status" class="live-status hidden"></div>
-          <div id="preview-live-info" class="live-info op-only hidden" title="Что реально отдаёт внешний вход: разрешение и измеренная частота кадров"></div>
+          <div id="preview-live-info" class="live-info op-only hidden" title="Что реально отдаёт захват: разрешение и измеренная частота кадров"></div>
           <div id="preview-meter" class="audio-meter op-only hidden" title="Уровень звука, приходящего с внешнего входа — превью немое, на слух не проверить"><i></i></div>
           <div id="preview-video-controls" class="video-controls preview-controls hidden">
             <button id="preview-video-play" title="Play / Pause превью">▶</button>
             <button id="preview-video-restart" title="В начало">⏮</button>
             <input id="preview-video-scrub" class="video-scrub" type="range" min="0" max="100" step="0.1" value="0" />
             <span id="preview-video-time" class="video-time">00:00 / 00:00</span>
+            <button id="preview-loop-btn" class="loop-btn" title="Зациклить этот ролик: доиграв, начинается заново. Настройка сохраняется у записи плейлиста"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button>
           </div>
           <div id="preview-video-error" class="video-error hidden">
             <div class="ve-icon">🎞️</div>
@@ -330,7 +340,7 @@
         </div>
         <div class="live-field">
           <span class="live-field-label">Предпрослушка (SOLO, наушники)</span>
-          <p class="audio-hint compact">Отдельный выход, чтобы послушать принесённый ролик или внешний вход в превью до выдачи в зал. Пока выключено — превью немое.</p>
+          <p class="audio-hint compact">Отдельный выход, чтобы послушать принесённый ролик или захват в превью до выдачи в зал. Пока выключено — превью немое.</p>
           <div id="audio-preview-list" class="audio-device-list"></div>
         </div>
         <div class="modal-actions">
@@ -339,9 +349,40 @@
       </div>
     </div>
 
+    <div id="list-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Список</h2>
+        <p class="audio-hint">
+          Пачка фото и роликов, которую крутят на сборе гостей или в перерыве. Ролик играет целиком,
+          фотография держится заданное время. <b>Порядок меняется перетаскиванием</b>; выбранную строку
+          двигают клавиши ↑/↓.
+        </p>
+        <div class="list-controls">
+          <label class="list-sec">Режим
+            <select id="list-mode">
+              <option value="loop">По кругу</option>
+              <option value="shuffle">Вперемешку</option>
+              <option value="once">Один проход</option>
+            </select>
+          </label>
+          <label class="list-sec">Секунд на фото
+            <input id="list-photo-sec" type="number" min="1" max="600" step="1" value="8" />
+          </label>
+          <label class="list-sec" title="Плавный переход между фотографиями. 0 — резкая смена. Не длиннее 2000 мс и половины паузы между кадрами">FADE, мс
+            <input id="list-fade-ms" type="number" min="0" max="2000" step="100" value="0" />
+          </label>
+          <button id="list-add-files">+ Добавить файлы…</button>
+        </div>
+        <div id="list-items" class="list-items"></div>
+        <div class="modal-actions">
+          <button id="list-close" class="primary">Готово</button>
+        </div>
+      </div>
+    </div>
+
     <div id="live-modal" class="modal hidden">
       <div class="modal-content">
-        <h2 id="live-modal-title">Внешний вход</h2>
+        <h2 id="live-modal-title">Захват</h2>
         <p class="audio-hint">
           Картинка с USB-капчера HDMI или камеры — ноутбук ведущего или диджея, который крутит контент только у себя.
           Источник встанет в плейлист наравне с презентациями: клик — в превью, ЭФИР — в зал.

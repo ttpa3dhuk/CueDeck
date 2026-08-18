@@ -555,9 +555,108 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   accent-color: var(--accent);
   cursor: pointer;
 }
-/* Compact mode: hide speaker name and duration row in playlist items */
+/* Compact mode: hide speaker name and duration row in playlist items.
+   Значок цикла тоже прячем — компакт для того и включают, чтобы в списке
+   остались только имена; сам цикл при этом продолжает работать, а переключить
+   его можно в обычном режиме или из транспорта. */
 .playlist-list.compact .playlist-item .speaker-name,
-.playlist-list.compact .playlist-item .duration-row {
+.playlist-list.compact .playlist-item .duration-row,
+.playlist-list.compact .list-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+.list-sec { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.list-sec input {
+  width: 64px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+  text-align: right;
+}
+/* Порядок меняется перетаскиванием; выбранную строку двигают ↑/↓ —
+   стрелок-кнопок в каждой строке нет, интерфейс и так плотный. */
+.list-items {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 12px;
+}
+.list-row .idx { color: var(--muted); min-width: 20px; font-variant-numeric: tabular-nums; }
+.list-row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-row .tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--border);
+  color: var(--text);
+}
+.list-row button { padding: 2px 7px; font-size: 12px; }
+.list-row.playing { border-color: var(--danger); }
+.list-row { cursor: grab; user-select: none; }
+.list-row.dragging { opacity: 0.4; }
+.list-row.drop-target { border-color: var(--accent); border-style: dashed; }
+.list-row.selected { border-color: var(--accent); }
+.list-row:focus { outline: none; }
+.list-empty { color: var(--muted); font-size: 12px; padding: 8px 0; }
+
+/* Одна кнопка «+» вместо ряда: разновидностей добавления стало больше, чем
+   помещается в шапку списка. */
+.add-wrap { position: relative; margin-left: auto; }
+.add-btn {
+  padding: 2px 9px;
+  font-size: 15px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+.add-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.add-menu.hidden { display: none; }
+.add-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  padding: 7px 9px;
+  font-size: 13px;
+}
+.add-menu button span { color: var(--muted); font-size: 11px; }
+.add-menu button:hover { background: var(--panel-2); }
+
+.playlist-item .loop-btn {
   display: none;
 }
 .playlist-list {
@@ -695,6 +794,7 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 .playlist-item .kind-badge.kind-image { background: #b9e9b6; }
 .playlist-item .kind-badge.kind-video { background: #e0b3ff; }
 .playlist-item .kind-badge.kind-live { background: #ff9d9d; }
+.playlist-item .kind-badge.kind-list { background: #c9a7f5; }
 
 .playlist-item .pdf-name {
   flex: 1;
@@ -974,6 +1074,25 @@ body[data-role="speaker"] .playlist { display: none !important; }
   background-color: #000;
   border-style: solid;
 }
+/* Видео-заставка: кадр не покажешь (ролик в память не тянем) — рисуем метку. */
+.kv-preview.kv-video {
+  background-color: #000;
+  border-style: solid;
+  border-color: var(--accent);
+  position: relative;
+}
+.kv-preview.kv-video::after {
+  content: '▶ ВИДЕО';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
 .keyvisual-section button {
   font-size: 12px;
   padding: 4px 8px;
@@ -1151,6 +1270,38 @@ body[data-role="operator"] #current-slide {
 }
 
 /* Video transport — overlay bar pinned to the bottom of the current slide */
+/* Значок цикла — две стрелки по кругу. Один стиль для транспорта и карточки
+   плейлиста: нажат — залит акцентом, отжат — полупрозрачный контур. Иконкой,
+   а не словом LOOP: в карточке плейлиста место дорогое. */
+.loop-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  opacity: 0.4;
+  flex: none;
+  cursor: pointer;
+}
+.loop-btn svg { width: 14px; height: 14px; display: block; }
+.loop-btn:hover { opacity: 0.75; background: rgba(255, 255, 255, 0.08); }
+.loop-btn.on {
+  opacity: 1;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.loop-btn.on:hover { background: #5a96ff; }
+/* Ролик открыт мимо плейлиста — сохранять флаг некуда. */
+.loop-btn.disabled { opacity: 0.18; cursor: default; }
+.loop-btn.disabled:hover { background: none; opacity: 0.18; }
+/* В карточке плейлиста — ещё компактнее. */
+.loop-btn.card { padding: 2px; }
+.loop-btn.card svg { width: 11px; height: 11px; }
+
 .video-controls {
   position: absolute;
   left: 50%;
@@ -1693,6 +1844,7 @@ body[data-theme="light"] button.primary:hover { background: #4681e0; }
 body[data-theme="light"] .timer.neutral { color: var(--text); }
 body[data-theme="light"] .playlist-item.missing { background: rgba(214, 64, 69, 0.10); }
 body[data-theme="light"] .playlist-item .relocate:hover { background: rgba(214, 64, 69, 0.14); }
+body[data-theme="light"] .loop-btn:hover { background: rgba(0, 0, 0, 0.06); }
 body[data-theme="light"] .slide-placeholder .placeholder-title { color: #4a5262; }
 body[data-theme="light"] .position-btn:hover { border-color: #9aa4b5; }
 body[data-theme="light"] .hk-row { background: var(--panel-2); }
@@ -1721,3 +1873,8 @@ body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--a
   0%, 34%, 68% { opacity: 0.9; }
   17%, 51%, 100% { opacity: 0; }
 }
+
+/* Нижний слой наплыва: держит уходящий кадр ровно на время перехода.
+   Геометрия та же, что у основного слоя, — иначе кадры «прыгнут». */
+.slide-image.fade-under { z-index: 0; }
+.slide-image.fade-under.hidden { display: none; }

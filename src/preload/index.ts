@@ -84,6 +84,7 @@ const api: PresenterApi = {
     setDuration: (sec) => ipcRenderer.invoke('video:set-duration', sec),
     ended: () => ipcRenderer.invoke('video:ended'),
     setMuted: (muted) => ipcRenderer.invoke('video:set-muted', muted),
+    setLoop: (enabled) => ipcRenderer.invoke('video:set-loop', Boolean(enabled)),
     toggleMuted: () => ipcRenderer.invoke('video:toggle-muted'),
   },
   audio: {
@@ -129,6 +130,9 @@ const api: PresenterApi = {
     checkFiles: () => ipcRenderer.invoke('playlist:check-files'),
     relocate: (id) => ipcRenderer.invoke('playlist:relocate', id),
     relinkFolder: () => ipcRenderer.invoke('playlist:relink-folder'),
+    addList: () => ipcRenderer.invoke('playlist:add-list'),
+    updateList: (id, payload) => ipcRenderer.invoke('playlist:update-list', { id, ...payload }),
+    addToList: (id) => ipcRenderer.invoke('playlist:add-to-list', id),
   },
   keyvisual: {
     set: () => ipcRenderer.invoke('keyvisual:set'),

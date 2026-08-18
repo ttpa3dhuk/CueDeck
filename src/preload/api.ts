@@ -5,6 +5,8 @@ import type {
   DisplayInfo,
   DisplayMap,
   Layout,
+  ListItem,
+  ListMode,
   LiveFit,
   MonitorRole,
   OpenPdfResult,
@@ -27,6 +29,8 @@ export type {
   DisplayMap,
   FileKind,
   Layout,
+  ListItem,
+  ListMode,
   LiveFit,
   MonitorRole,
   OpenPdfResult,
@@ -133,6 +137,8 @@ export interface PresenterApi {
     setDuration(sec: number): Promise<void>
     ended(): Promise<void>
     setMuted(muted: boolean): Promise<void>
+    /** Зациклить эфирный ролик (видео-заставка крутится, пока спикер на сцене). */
+    setLoop(enabled: boolean): Promise<void>
     toggleMuted(): Promise<void>
   }
   audio: {
@@ -172,7 +178,7 @@ export interface PresenterApi {
     updateLive(id: string, src: LiveSource): Promise<void>
     remove(id: string): Promise<void>
     reorder(ids: string[]): Promise<void>
-    update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number; liveFit?: LiveFit }): Promise<void>
+    update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number; liveFit?: LiveFit; loop?: boolean }): Promise<void>
     /** Load entry into the off-air preview deck (safe; does not touch the audience feed). */
     activate(id: string): Promise<OpenPdfResult>
     /** Load entry straight to the program/audience feed (double-click / Take-now). */
@@ -185,6 +191,12 @@ export interface PresenterApi {
     relocate(id: string): Promise<boolean>
     /** Найти все пропавшие материалы в указанной папке (по именам файлов). */
     relinkFolder(): Promise<{ fixed: number; remaining: number; cancelled?: boolean }>
+    /** Список: пачка фото/роликов одной записью (сбор гостей, перерыв). */
+    addList(): Promise<PlaylistEntry[]>
+    /** Правка содержимого списка: порядок, удаление, секунды на фото. */
+    updateList(id: string, payload: { items?: ListItem[]; photoSec?: number; listMode?: ListMode; fadeMs?: number }): Promise<void>
+    /** Дозалить файлы в существующий список. */
+    addToList(id: string): Promise<boolean>
   }
   keyvisual: {
     set(): Promise<{ path: string | null }>

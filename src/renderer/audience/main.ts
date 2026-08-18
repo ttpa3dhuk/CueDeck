@@ -2,6 +2,9 @@ import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender } from '../shared/pdf-loader'
 import {
   applySinkId,
+  crossfadeToImage,
+  isVideoPath,
+  keyVisualSrc,
   placeSlideOverlay,
   shouldMute,
   slideMediaAt,
@@ -10,6 +13,13 @@ import {
   videoSrc,
 } from '../shared/video'
 import { elementAudioStream, LiveMeter, LivePool, LiveView } from '../shared/live-stream'
+
+/** Длительность перехода между кадрами списка; 0 — вне списка и без FADE. */
+function listFadeMs(state: AppState): number {
+  if (state.listIndex < 0) return 0
+  const entry = state.playlist.find((e) => e.id === state.currentPlaylistId)
+  return entry?.fadeMs ?? 0
+}
 import { liveFitFor } from '../../shared/live'
 import type { AppState } from '../../preload/api'
 
@@ -21,6 +31,8 @@ const liveStatus = document.getElementById('live-status') as HTMLDivElement
 const mediaOverlay = document.getElementById('media-overlay') as HTMLVideoElement
 const blackout = document.getElementById('blackout') as HTMLDivElement
 const kvImage = document.getElementById('keyvisual') as HTMLImageElement
+const kvVideo = document.getElementById('keyvisual-video') as HTMLVideoElement
+const slideImageUnder = document.getElementById('slide-image-under') as HTMLImageElement
 
 let docLoaded = false
 let lastRenderedSlide = -1
@@ -30,11 +42,17 @@ let slideImageBlobUrl: string | null = null
 let kvBlobUrl: string | null = null
 let kvLoadedForPath: string | null | undefined = undefined
 
-function disposeSlideImage(): void {
-  if (slideImageBlobUrl) {
-    URL.revokeObjectURL(slideImageBlobUrl)
-    slideImageBlobUrl = null
-  }
+/**
+ * Старый кадр во время наплыва ещё показывается нижним слоем, поэтому его
+ * blob-ссылку освобождаем не сразу, а после перехода. Ссылка живёт лишние
+ * секунды — это дешевле, чем моргнувший кадр на экране зала.
+ */
+function disposeSlideImage(afterMs = 0): void {
+  if (!slideImageBlobUrl) return
+  const url = slideImageBlobUrl
+  slideImageBlobUrl = null
+  if (afterMs > 0) setTimeout(() => URL.revokeObjectURL(url), afterMs)
+  else URL.revokeObjectURL(url)
 }
 
 // ── Живой вход (2.13) ────────────────────────────────────────────────────────
@@ -150,7 +168,8 @@ function updateMediaOverlay(state: AppState): void {
 }
 
 async function loadFile(): Promise<void> {
-  disposeSlideImage()
+  // Внутри списка с наплывом уходящий кадр ещё нужен нижнему слою.
+  disposeSlideImage(listFadeMs(getState()) + 500)
   docLoaded = false
   lastRenderedSlide = -1
   const state = getState()
@@ -186,9 +205,10 @@ async function loadFile(): Promise<void> {
   if (state.fileKind === 'image') {
     const blob = new Blob([data.bytes as BlobPart], { type: data.mime })
     slideImageBlobUrl = URL.createObjectURL(blob)
-    slideImage.src = slideImageBlobUrl
-    slideImage.classList.remove('hidden')
     canvas.classList.add('hidden')
+    // Фотографии списка перетекают друг в друга, если оператор задал FADE.
+    await crossfadeToImage(slideImage, slideImageUnder, slideImageBlobUrl, listFadeMs(state))
+    slideImage.classList.remove('hidden')
     return
   }
 
@@ -225,8 +245,22 @@ async function refreshKeyVisual(state: AppState): Promise<void> {
   }
   if (!path) {
     kvImage.removeAttribute('src')
+    kvVideo.removeAttribute('src')
+    kvVideo.load()
     return
   }
+
+  // Видео-заставка (анимированный KV): не читаем файл в память, а вешаем
+  // Range-поток. Элемент зациклен и нем — это фон зала, звук идёт с пульта.
+  if (isVideoPath(path)) {
+    kvImage.removeAttribute('src')
+    kvVideo.src = keyVisualSrc(path)
+    kvVideo.load()
+    return
+  }
+
+  kvVideo.removeAttribute('src')
+  kvVideo.load()
   const data = await window.api.keyvisual.read()
   if (!data) {
     kvImage.removeAttribute('src')
@@ -238,10 +272,24 @@ async function refreshKeyVisual(state: AppState): Promise<void> {
 }
 
 function applyOverlay(state: AppState): void {
-  const showImage = state.blackout && Boolean(state.keyVisualPath) && Boolean(kvBlobUrl)
-  const showBlack = state.blackout && !showImage
+  const isVideoKv = isVideoPath(state.keyVisualPath)
+  const showVideo = state.blackout && isVideoKv && Boolean(kvVideo.getAttribute('src'))
+  const showImage = state.blackout && !isVideoKv && Boolean(state.keyVisualPath) && Boolean(kvBlobUrl)
+  const showBlack = state.blackout && !showImage && !showVideo
+
   kvImage.classList.toggle('hidden', !showImage)
+  kvVideo.classList.toggle('hidden', !showVideo)
   blackout.classList.toggle('hidden', !showBlack)
+
+  // Играем только пока заставка на экране: скрытый ролик крутить незачем.
+  // play() на display:none элементе Chromium приостанавливает (грабля 2.13),
+  // поэтому порядок строгий — сначала снять hidden, потом play().
+  if (showVideo) {
+    if (kvVideo.paused) kvVideo.play().catch(() => undefined)
+  } else if (!kvVideo.paused) {
+    kvVideo.pause()
+    kvVideo.currentTime = 0
+  }
 }
 
 async function applyState(state: AppState): Promise<void> {

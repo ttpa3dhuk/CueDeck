@@ -48,15 +48,22 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
   if (!raw || typeof raw !== 'object') return null
   const v = raw as Record<string, unknown>
   const filePath = String(v.filePath ?? v.pdfPath ?? '')
-  if (!filePath) return null
+  // У списка своего файла нет — материалы лежат в items, и пустой путь для
+  // него нормален. Для остальных записей пустой путь по-прежнему брак.
+  const hasItems = Array.isArray(v.items) && v.items.length > 0
+  if (!filePath && !hasItems) return null
   return {
     id: String(v.id ?? cryptoRandomId()),
     kind: (v.kind as PlaylistEntry['kind']) ?? 'pdf',
     filePath,
-    fileName: String(v.fileName ?? v.pdfName ?? basename(filePath)),
+    fileName: String(v.fileName ?? v.pdfName ?? (filePath ? basename(filePath) : 'Список')),
     displayName: String(v.displayName ?? ''),
     speakerName: String(v.speakerName ?? ''),
     durationMs: Number(v.durationMs ?? 30 * 60 * 1000),
+    ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
+    ...(v.loop ? { loop: true } : {}),
+    ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
+    ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),
   }
 }
 
@@ -73,7 +80,13 @@ export async function loadProjectFile(path: string): Promise<LoadedProject> {
     ? (parsed.playlist
         .map(migrateEntry)
         .filter((e): e is PlaylistEntry => e !== null)
-        .map((e) => ({ ...e, filePath: fromStoredPath(e.filePath, path) })))
+        .map((e) => ({
+          ...e,
+          filePath: fromStoredPath(e.filePath, path),
+          ...(e.items
+            ? { items: e.items.map((it) => ({ ...it, path: fromStoredPath(it.path, path) })) }
+            : {}),
+        })))
     : []
   const keyVisual =
     typeof parsed.keyVisualPath === 'string' ? parsed.keyVisualPath : null
@@ -94,6 +107,9 @@ export async function saveProjectFile(
     playlist: data.playlist.map((e) => ({
       ...e,
       filePath: toStoredPath(e.filePath, path),
+      // У списка материалы лежат в items — им нужны те же относительные пути,
+      // иначе папка проекта на флешке приедет с мёртвой пачкой фотографий.
+      ...(e.items ? { items: e.items.map((it) => ({ ...it, path: toStoredPath(it.path, path) })) } : {}),
     })),
     keyVisualPath: data.keyVisualPath
       ? toStoredPath(data.keyVisualPath, path)

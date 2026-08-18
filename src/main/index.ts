@@ -70,7 +70,12 @@ async function handleMediaRequest(request: Request): Promise<Response> {
   const segments = new URL(request.url).pathname.split('/').filter(Boolean)
 
   let filePath: string | null = null
-  if (segments[0] === 'slide') {
+  if (segments[0] === 'keyvisual') {
+    // Видео-заставка (анимированный KV): отдаём тем же Range-потоком, что и
+    // ролики плейлиста — файл может быть тяжёлым, в память его не тянем.
+    const kv = state.keyVisualPath
+    if (kv && kindOf(kv) === 'video') filePath = kv
+  } else if (segments[0] === 'slide') {
     // Слайд-видео из PPTX: имя файла строго из manifest'а активного деска.
     const deck = segments[1]
     const file = decodeURIComponent(segments[2] ?? '')
