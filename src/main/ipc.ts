@@ -563,6 +563,7 @@ function persistPlaylist(): void {
  */
 export async function refreshMissingFiles(): Promise<number> {
   const playlist = store.get().playlist
+  const missingPaths: string[] = []
   const checks = await Promise.all(
     playlist.map(async (e) => {
       if (e.kind === 'live' || isLiveUri(e.filePath)) return null
@@ -570,21 +571,25 @@ export async function refreshMissingFiles(): Promise<number> {
       // дыра в пачке на сборе гостей так же заметна, как пропавший доклад.
       const paths = e.kind === 'list' ? (e.items ?? []).map((i) => i.path) : [e.filePath]
       if (paths.length === 0) return null
+      let ok = true
       for (const path of paths) {
         try {
           await access(path)
         } catch {
-          return e.id
+          missingPaths.push(path)
+          ok = false
         }
       }
-      return null
+      return ok ? null : e.id
     }),
   )
   const missingIds = checks.filter((id): id is string => id !== null)
   const before = store.get().missingIds
   // Патчим только при изменении — плейлист перерисовывается на каждый патч.
   if (before.length !== missingIds.length || missingIds.some((id, i) => before[i] !== id)) {
-    store.patch({ missingIds })
+    store.patch({ missingIds, missingPaths })
+  } else if (store.get().missingPaths.length !== missingPaths.length) {
+    store.patch({ missingPaths })
   }
   return missingIds.length
 }
@@ -1354,6 +1359,38 @@ export function registerIpcHandlers(): void {
       store.patch({ playlist: next })
       persistPlaylist()
       void refreshMissingFiles()
+    },
+  )
+
+  /**
+   * Заменить один материал списка: фотография переехала — меняем путь у
+   * элемента, не трогая порядок и остальную пачку.
+   */
+  ipcMain.handle(
+    'playlist:relocate-item',
+    async (_e, payload: { id: string; index: number }): Promise<boolean> => {
+      const entry = store.get().playlist.find((x) => x.id === payload.id)
+      if (!entry || entry.kind !== 'list') return false
+      const items = [...(entry.items ?? [])]
+      const old = items[payload.index]
+      if (!old) return false
+      const op = getOperatorWindow()
+      const res = await dialog.showOpenDialog(op!, {
+        title: `Указать файл вместо «${old.fileName}»`,
+        filters: [{ name: 'Фото и видео', extensions: [...IMAGE_EXTS_ARR, ...VIDEO_EXTS_ARR] }],
+        properties: ['openFile'],
+      })
+      if (res.canceled || res.filePaths.length === 0) return false
+      const picked = res.filePaths[0]
+      const kind = kindOf(picked)
+      if (kind !== 'image' && kind !== 'video') return false
+      items[payload.index] = { path: picked, fileName: basename(picked), kind }
+      store.patch({
+        playlist: store.get().playlist.map((x) => (x.id === payload.id ? { ...x, items } : x)),
+      })
+      persistPlaylist()
+      await refreshMissingFiles()
+      return true
     },
   )
 

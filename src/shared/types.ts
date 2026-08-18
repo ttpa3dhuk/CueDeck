@@ -210,6 +210,12 @@ export interface AppState {
    * момент выдачи в зал.
    */
   missingIds: string[]
+  /**
+   * Пути материалов, которых нет на диске, — включая элементы списков.
+   * По ним редактор списка помечает конкретную пропавшую фотографию: id
+   * записи для пачки из сорока файлов ничего не говорит оператору.
+   */
+  missingPaths: string[]
   currentPlaylistId: string | null
   playlistCompact: boolean
   autoAdvance: boolean

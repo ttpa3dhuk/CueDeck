@@ -613,6 +613,13 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 .list-row.dragging { opacity: 0.4; }
 .list-row.drop-target { border-color: var(--accent); border-style: dashed; }
 .list-row.selected { border-color: var(--accent); }
+.list-row.missing {
+  border-color: var(--danger);
+  border-style: dashed;
+  background: rgba(214, 64, 69, 0.10);
+}
+.list-row.missing .nm { text-decoration: line-through; opacity: 0.75; }
+.list-row .fix { border-color: var(--danger); color: var(--danger); background: none; }
 .list-row:focus { outline: none; }
 .list-empty { color: var(--muted); font-size: 12px; padding: 8px 0; }
 

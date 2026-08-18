@@ -195,6 +195,8 @@ export interface PresenterApi {
     addList(): Promise<PlaylistEntry[]>
     /** Правка содержимого списка: порядок, удаление, секунды на фото. */
     updateList(id: string, payload: { items?: ListItem[]; photoSec?: number; listMode?: ListMode; fadeMs?: number }): Promise<void>
+    /** Заменить один материал списка (фото переехало). */
+    relocateItem(id: string, index: number): Promise<boolean>
     /** Дозалить файлы в существующий список. */
     addToList(id: string): Promise<boolean>
   }

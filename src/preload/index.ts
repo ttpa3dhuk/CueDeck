@@ -133,6 +133,7 @@ const api: PresenterApi = {
     addList: () => ipcRenderer.invoke('playlist:add-list'),
     updateList: (id, payload) => ipcRenderer.invoke('playlist:update-list', { id, ...payload }),
     addToList: (id) => ipcRenderer.invoke('playlist:add-to-list', id),
+    relocateItem: (id, index) => ipcRenderer.invoke('playlist:relocate-item', { id, index }),
   },
   keyvisual: {
     set: () => ipcRenderer.invoke('keyvisual:set'),

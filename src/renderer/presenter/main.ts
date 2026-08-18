@@ -1183,10 +1183,16 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   missingLabel.textContent = '⚠ файл не найден'
   const relocateBtn = document.createElement('button')
   relocateBtn.className = 'relocate'
-  relocateBtn.textContent = 'Указать файл…'
+  relocateBtn.textContent = entry.kind === 'list' ? 'Открыть список…' : 'Указать файл…'
   relocateBtn.title = 'Материал переехал — указать его новое место. Комментарий и таймер записи сохранятся'
   relocateBtn.addEventListener('click', (e) => {
     e.stopPropagation()
+    // У списка пропасть может любой из элементов — чинить надо поимённо,
+    // поэтому открываем редактор, а не один диалог выбора файла.
+    if (fresh().kind === 'list') {
+      openListModal(fresh())
+      return
+    }
     window.api.playlist.relocate(entry.id).then((ok) => {
       if (ok) showBanner(`Файл перепривязан: ${fresh().fileName}`, 3000)
     })
@@ -2548,6 +2554,23 @@ function renderListItems(): void {
     nm.textContent = item.fileName
     nm.title = item.path
 
+    // Пропавший материал видно поимённо: в пачке из сорока фотографий «где-то
+    // чего-то нет» бесполезно.
+    const missing = state.missingPaths.includes(item.path)
+    row.classList.toggle('missing', missing)
+    let fix: HTMLButtonElement | null = null
+    if (missing) {
+      nm.title = `${item.path}\nФайл не найден — переехал или удалён`
+      fix = document.createElement('button')
+      fix.className = 'fix'
+      fix.textContent = 'Заменить…'
+      fix.title = 'Указать, где теперь лежит этот файл'
+      fix.addEventListener('click', (e) => {
+        e.stopPropagation()
+        window.api.playlist.relocateItem(listEditingId!, i)
+      })
+    }
+
     const del = document.createElement('button')
     del.textContent = '✕'
     del.title = 'Убрать из списка'
@@ -2586,7 +2609,9 @@ function renderListItems(): void {
       reorderListItems(listDragFrom, i)
     })
 
-    row.append(idx, tag, nm, del)
+    row.append(idx, tag, nm)
+    if (fix) row.append(fix)
+    row.append(del)
     box.append(row)
   })
 }

@@ -71,6 +71,7 @@ export function initialState(): AppState {
     previewListIndex: -1,
     playlist: [],
     missingIds: [],
+    missingPaths: [],
     currentPlaylistId: null,
     playlistCompact: false,
     autoAdvance: false,
