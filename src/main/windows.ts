@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import type { DisplayMap, Layout, Role } from './layout.js'
 import { rolesForLayout } from './layout.js'
 import { store } from './state.js'
+import { WINDOW_TITLES } from '../shared/window-titles.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -77,7 +78,7 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
     show: false,
     fullscreen: fullscreen && !DEV_TILE && !windowed,
     backgroundColor: role === 'audience' ? '#000000' : '#1a1a1a',
-    title: `CueDeck — ${role}`,
+    title: WINDOW_TITLES[role],
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
@@ -187,7 +188,7 @@ export function createHiddenSpeakerWindow(): BrowserWindow {
     height: 1080,
     show: false,
     backgroundColor: '#1a1a1a',
-    title: 'CueDeck — speaker (hidden)',
+    title: 'CueDeck (monitor)',
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,

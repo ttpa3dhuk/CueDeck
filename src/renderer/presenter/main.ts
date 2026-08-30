@@ -16,6 +16,7 @@ import {
 } from '../shared/video'
 import { elementAudioStream, LiveMeter, LivePool, LiveView, listMediaDevices } from '../shared/live-stream'
 import { liveDisplayName, liveFitFor, parseLiveUri } from '../../shared/live'
+import { WINDOW_TITLES } from '../../shared/window-titles'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
 import type { ListMode } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
@@ -35,6 +36,9 @@ import type {
 
 const role: Role = (new URL(location.href).searchParams.get('role') as Role) ?? 'operator'
 document.body.dataset.role = role
+// Одна страница на две роли, поэтому имя окна (по нему окно ищут в NDI/OBS/vMix)
+// ставится тут, а не в <title>: статический заголовок перебил бы title окна.
+document.title = WINDOW_TITLES[role]
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
 
@@ -563,6 +567,12 @@ async function renderCurrent(): Promise<void> {
 
   const slideEl = currentCanvas.parentElement!
   const currentWidth = slideEl.clientWidth
+  // Слайд спрятан (суфлёр в режиме «только таймер») — ширина 0, рисовать нечего.
+  // Метку сбрасываем, чтобы страница отрисовалась, когда слайд снова покажут.
+  if (currentWidth === 0) {
+    lastRenderedSlide = -1
+    return
+  }
   await renderPageTo(slide, currentCanvas, currentWidth)
 
   const nextWidth = nextCanvas.parentElement!.clientWidth
@@ -855,7 +865,9 @@ let lastCycles: number | null = null
 function fireTimerEndCues(state: AppState): void {
   if (isOperator && state.timerGongEnabled) playGong()
   // Таймер скрыт (суфлёр через vMix, у режиссёра свой) — вспышка тоже лишняя.
-  if (role === 'speaker' && state.timerPosition !== 'hidden') flashTimerEnd()
+  // 'full-noflash' — чистый таймер в микшер, где вспышка залила бы весь кадр.
+  const noFlash = state.timerPosition === 'hidden' || state.timerPosition === 'full-noflash'
+  if (role === 'speaker' && !noFlash) flashTimerEnd()
 }
 
 // Вызывается из общего 250мс-тика: границы секунд ловим сравнением ceil(remaining).
@@ -952,6 +964,12 @@ function applyTimerView(view: TimerView): void {
   if (view.overtime) cls += ' overtime'
   timerDisplay.className = cls
   timerDisplay.textContent = view.text
+  // Длина строки нужна режиму «только таймер» (timerPosition='full'): кегль там
+  // считается от ширины экрана, а строка гуляет от «00:00» до «−01:02:33».
+  const chars = String(view.text.length)
+  if (timerDisplay.style.getPropertyValue('--timer-chars') !== chars) {
+    timerDisplay.style.setProperty('--timer-chars', chars)
+  }
 }
 
 const playlistNodes = new Map<string, HTMLLIElement>()
@@ -1353,6 +1371,14 @@ function activeMonitorRole(layout: Layout): 'speaker' | 'audience' {
   return layout === 'presenter-audience' ? 'audience' : 'speaker'
 }
 
+let lastTimerPosition: TimerPosition | null = null
+
+// Два полноэкранных состояния таймера различаются только вспышкой на нуле;
+// вёрстка, перерисовка суфлёра и подсветка кнопки смотрят на них одинаково.
+function isFullTimer(pos: TimerPosition): boolean {
+  return pos === 'full' || pos === 'full-noflash'
+}
+
 function updateOutputMonitors(state: AppState): void {
   if (!outputMonitors) return
   const mon = activeMonitorRole(state.layout)
@@ -1443,6 +1469,17 @@ function applyState(state: AppState): void {
       }
     })
   }
+  // Вход и выход из «только таймера» прячет/показывает слайд без ресайза окна —
+  // перерисовать вручную, иначе суфлёр вернётся к пустому канвасу.
+  if (
+    role === 'speaker' &&
+    lastTimerPosition !== null &&
+    isFullTimer(lastTimerPosition) !== isFullTimer(state.timerPosition)
+  ) {
+    lastRenderedSlide = -1
+    renderCurrent().catch(() => undefined)
+  }
+  lastTimerPosition = state.timerPosition
   document.body.dataset.timerPosition = state.timerPosition
   document.documentElement.style.setProperty(
     '--notes-font-size',
@@ -1460,7 +1497,10 @@ function applyState(state: AppState): void {
     document
       .querySelectorAll<HTMLButtonElement>('button.position-btn')
       .forEach((btn) => {
-        btn.classList.toggle('active', btn.dataset.pos === state.timerPosition)
+        const full = btn.dataset.pos === 'full' && isFullTimer(state.timerPosition)
+        btn.classList.toggle('active', full || btn.dataset.pos === state.timerPosition)
+        // Зелёная = «то же самое, но без вспышки на нуле».
+        btn.classList.toggle('noflash', full && state.timerPosition === 'full-noflash')
       })
   }
 
@@ -2094,7 +2134,16 @@ function setupOperatorControls(): void {
   document.querySelectorAll<HTMLButtonElement>('button.position-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const pos = btn.dataset.pos as TimerPosition | undefined
-      if (pos) window.api.timer.setPosition(pos)
+      if (!pos) return
+      // ⛶ — не позиция, а тумблер: первое нажатие включает полный экран со
+      // вспышкой (синяя), следующее гасит вспышку (зелёная), дальше по кругу.
+      // Выход из режима — любой другой кнопкой группы.
+      if (pos === 'full') {
+        const cur = getState().timerPosition
+        window.api.timer.setPosition(cur === 'full' ? 'full-noflash' : 'full')
+        return
+      }
+      window.api.timer.setPosition(pos)
     })
   })
 

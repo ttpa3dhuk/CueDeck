@@ -21,7 +21,10 @@ function listFadeMs(state: AppState): number {
   return entry?.fadeMs ?? 0
 }
 import { liveFitFor } from '../../shared/live'
+import { WINDOW_TITLES } from '../../shared/window-titles'
 import type { AppState } from '../../preload/api'
+
+document.title = WINDOW_TITLES.audience
 
 const canvas = document.getElementById('slide-canvas') as HTMLCanvasElement
 const slideImage = document.getElementById('slide-image') as HTMLImageElement

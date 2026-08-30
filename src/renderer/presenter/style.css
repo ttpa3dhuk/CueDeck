@@ -199,6 +199,12 @@ body[data-role="speaker"] .slide-placeholder { display: none; }
   border-color: var(--accent);
   color: white;
 }
+/* ⛶ во втором состоянии — «полный экран без вспышки»: зелёная вместо синей */
+.position-btn.active.noflash {
+  background: var(--timer-green);
+  border-color: var(--timer-green);
+  color: #0f1115;
+}
 
 .topbar-left { justify-self: start; }
 .topbar-center { display: flex; align-items: center; gap: 14px; }
@@ -1709,6 +1715,38 @@ body[data-role="speaker"][data-timer-position="bottom-left"] .timer { bottom: 24
 body[data-role="speaker"][data-timer-position="bottom-right"] .timer { bottom: 24px; right: 24px; }
 /* Суфлёр через vMix — режиссёр накладывает свой таймер, наш убираем */
 body[data-role="speaker"][data-timer-position="hidden"] .timer { display: none; }
+
+/* «Только таймер» (⛶): весь экран суфлёра — чистый таймер на чёрном. Этот выход
+   уходит по HDMI/NDI в микшер (Resolume/vMix), там его кадрируют и накладывают
+   поверх своей картинки. Поэтому фон именно чёрный (под аддитив/люма-кей) и на
+   экране нет ничего, кроме цифр: ни слайда, ни заметок, ни сообщений спикеру. */
+/* ^= ловит оба состояния: 'full' (со вспышкой) и 'full-noflash' (без неё) —
+   картинка у них одинаковая, разница только в вспышке на нуле. */
+body[data-role="speaker"][data-timer-position^="full"],
+body[data-role="speaker"][data-timer-position^="full"] .app,
+body[data-role="speaker"][data-timer-position^="full"] .topbar { background: #000; }
+body[data-role="speaker"][data-timer-position^="full"] .topbar-left,
+body[data-role="speaker"][data-timer-position^="full"] .topbar-center,
+body[data-role="speaker"][data-timer-position^="full"] .grid,
+body[data-role="speaker"][data-timer-position^="full"] .speaker-message { display: none !important; }
+body[data-role="speaker"][data-timer-position^="full"] .timer {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  white-space: nowrap;
+  /* Кегль тянется к высоте экрана, но строка бывает от «00:00» до «−01:02:33» —
+     число символов приносит JS в --timer-chars, и ширина зажата в 92vw, чтобы
+     цифры не уехали за край ни при каком масштабе (A+/A−). */
+  font-size: min(
+    calc(46vh * var(--timer-scale, 1)),
+    80vh,
+    calc(92vw / var(--timer-chars, 5) * 1.75)
+  );
+}
 
 body[data-role="operator"] .speaker-only { display: none !important; }
 
