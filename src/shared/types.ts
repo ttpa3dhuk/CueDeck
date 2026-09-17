@@ -339,3 +339,21 @@ export interface OpenPdfResult {
   error?: string
   kind?: FileKind
 }
+
+// ── Диагностика (diag.ts): журнал, маркеры, отчёт о проблеме ────────────────
+
+/** Момент, отмеченный оператором по хоткею/меню: «здесь было что-то не то». */
+export interface DiagMarker {
+  n: number
+  /** Локальное время «HH:MM:SS» — так же, как в журнале. */
+  at: string
+}
+
+export interface DiagInfo {
+  /** Прошлая сессия завершилась не через штатный выход (краш, kill, питание). */
+  abnormalPrevious: boolean
+  markers: DiagMarker[]
+  logPath: string
+}
+
+export type ReportResult = { ok: true; path: string } | { ok: false; error: string }

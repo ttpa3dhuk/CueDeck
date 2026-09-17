@@ -2,6 +2,7 @@
 // process). Renderers keep importing them from this module.
 import type {
   AppState,
+  DiagInfo,
   DisplayInfo,
   DisplayMap,
   Layout,
@@ -11,6 +12,7 @@ import type {
   MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
+  ReportResult,
   SlideTakeMode,
   TimerMode,
   TimerPosition,
@@ -25,6 +27,8 @@ export type { LiveSource } from '../shared/live.js'
 export type {
   AppState,
   DeckState,
+  DiagInfo,
+  DiagMarker,
   DisplayInfo,
   DisplayMap,
   FileKind,
@@ -35,6 +39,7 @@ export type {
   MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
+  ReportResult,
   Role,
   SlideMedia,
   SlideMediaRect,
@@ -230,6 +235,8 @@ export interface PresenterApi {
     onProjectSaveAs(cb: () => void): Unsubscribe
     onProjectConsolidate(cb: () => void): Unsubscribe
     onHelp(cb: () => void): Unsubscribe
+    /** Help → «Сообщить о проблеме…» (только оператор). */
+    onReport(cb: () => void): Unsubscribe
   }
   update: {
     onAvailable(cb: (info: { newerVersion: string; url: string }) => void): Unsubscribe
@@ -264,6 +271,20 @@ export interface PresenterApi {
     report(level: number): void
     /** Только у оператора: уровень звука, реально уходящего в зал. */
     onProgramLevel(cb: (level: number) => void): Unsubscribe
+  }
+  /** Журнал и отчёт о проблеме (main/diag.ts). */
+  diag: {
+    /** Строка в общий журнал от имени этого окна. Для мест, где ошибка иначе глотается. */
+    log(level: 'info' | 'warn' | 'error', message: string, data?: unknown): void
+    /** ⚑ «здесь что-то не то». Номер маркера; null — дубль в пределах 400 мс. */
+    mark(): Promise<number | null>
+    info(): Promise<DiagInfo>
+    /** Собрать zip на рабочий стол. Комментарий оператора уходит в report.txt. */
+    buildReport(comment: string): Promise<ReportResult>
+    showInFolder(path: string): Promise<void>
+    openLogFolder(): Promise<void>
+    /** Только у оператора: маркер поставлен (хоткеем или из меню). */
+    onMarked(cb: (n: number) => void): Unsubscribe
   }
 }
 

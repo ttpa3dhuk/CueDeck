@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { DONATE_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
+import { initDiag, instrumentIpc, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
 import { askBootLayout } from './boot-dialog.js'
 import { showNagDialog } from './nag-dialog.js'
 import { attachOperatorCloseGuard, requestQuit } from './quit-guard.js'
@@ -45,6 +46,10 @@ import { startOutputMonitor } from './output-monitor.js'
 import { store } from './state.js'
 
 export const MEDIA_SCHEME = 'cuedeck-media'
+
+// Журнал и перехват ошибок — раньше всего остального, чтобы падение на старте
+// тоже оставило след (diag.ts).
+initDiag()
 
 // Must be called before app `ready`. Lets the renderer load the active video
 // over a streaming, Range-capable scheme without pulling the whole file into
@@ -219,6 +224,18 @@ function buildMenu(): void {
           accelerator: 'Shift+/',
           click: () => sendToOperator('menu:help'),
         },
+        { type: 'separator' },
+        {
+          // Тот же хоткей ловит и окно оператора по e.code (любая раскладка);
+          // двойное срабатывание глушит markMoment.
+          label: '⚑ Отметить момент в журнале',
+          accelerator: 'CmdOrCtrl+Shift+M',
+          click: () => markMoment('menu'),
+        },
+        {
+          label: 'Сообщить о проблеме…',
+          click: () => openReportDialog(),
+        },
         ...(DONATE_URL
           ? ([
               { type: 'separator' },
@@ -302,7 +319,9 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, cb) => cb(true))
   session.defaultSession.setPermissionCheckHandler(() => true)
 
+  instrumentIpc()
   registerIpcHandlers()
+  registerDiagIpc()
   buildMenu()
 
   /**

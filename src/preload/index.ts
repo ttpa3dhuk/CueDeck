@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { PresenterApi } from './api'
 
+// Роль окна — метка строк журнала, которые шлёт этот рендерер.
+const ROLE = new URLSearchParams(location.search).get('role') ?? 'unknown'
+
 const api: PresenterApi = {
   state: {
     get: () => ipcRenderer.invoke('state:get'),
@@ -192,6 +195,11 @@ const api: PresenterApi = {
       ipcRenderer.on('menu:help', listener)
       return () => ipcRenderer.removeListener('menu:help', listener)
     },
+    onReport: (cb) => {
+      const listener = () => cb()
+      ipcRenderer.on('menu:report', listener)
+      return () => ipcRenderer.removeListener('menu:report', listener)
+    },
   },
   update: {
     onAvailable: (cb) => {
@@ -225,6 +233,19 @@ const api: PresenterApi = {
   platform: process.platform,
   external: {
     open: (url) => ipcRenderer.invoke('external:open', url),
+  },
+  diag: {
+    log: (level, message, data) => ipcRenderer.send('diag:log', ROLE, level, message, data),
+    mark: () => ipcRenderer.invoke('diag:mark'),
+    info: () => ipcRenderer.invoke('diag:info'),
+    buildReport: (comment) => ipcRenderer.invoke('diag:build-report', comment),
+    showInFolder: (path) => ipcRenderer.invoke('diag:show-in-folder', path),
+    openLogFolder: () => ipcRenderer.invoke('diag:open-log-folder'),
+    onMarked: (cb) => {
+      const listener = (_e: Electron.IpcRendererEvent, n: number) => cb(n)
+      ipcRenderer.on('diag:marked', listener)
+      return () => ipcRenderer.removeListener('diag:marked', listener)
+    },
   },
 }
 

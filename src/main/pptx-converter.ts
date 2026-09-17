@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { log } from './diag.js'
 import { mkdir, rename, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, parse } from 'node:path'
@@ -174,6 +175,8 @@ export async function convertPptxToPdf(pptxPath: string, sourceSha1: string): Pr
   const tmpDir = join(cacheDir(), `tmp-${sourceSha1}-${Date.now()}`)
   await mkdir(tmpDir, { recursive: true })
 
+  const t0 = performance.now()
+  log.info(`soffice: конвертация ${pptxPath} (${soffice})`)
   try {
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(soffice, [
@@ -202,7 +205,11 @@ export async function convertPptxToPdf(pptxPath: string, sourceSha1: string): Pr
       throw new Error('LibreOffice не создал PDF (возможно, файл повреждён)')
     }
     await rename(generated, target)
+    log.info(`soffice: готово за ${Math.round(performance.now() - t0)} мс → ${target}`)
     return target
+  } catch (err) {
+    log.error(`soffice: не сконвертировал ${pptxPath}:`, err)
+    throw err
   } finally {
     rm(tmpDir, { recursive: true, force: true }).catch(() => undefined)
   }

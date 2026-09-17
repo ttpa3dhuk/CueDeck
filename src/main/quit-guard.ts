@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, globalShortcut } from 'electron'
 import { flushPendingWrites, saveProject } from './ipc.js'
+import { markCleanExit } from './diag.js'
 
 /**
  * Подтверждение при закрытии (PLAN «🛡 ОТКРЫТО: подтверждение при закрытии»).
@@ -61,6 +62,7 @@ export async function requestQuit(): Promise<void> {
   }
   globalShortcut.unregisterAll()
   await flushPendingWrites()
+  markCleanExit()
   app.exit(0)
 }
 

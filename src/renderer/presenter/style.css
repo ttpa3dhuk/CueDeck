@@ -1554,6 +1554,26 @@ body[data-role="operator"] #current-slide {
   flex: 1;
 }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.modal-actions-spacer { flex: 1; }
+
+/* Отчёт о проблеме (Help → Сообщить о проблеме…) */
+.report-modal-content { width: 560px; gap: 12px; }
+.report-label { color: var(--muted); font-size: 13px; }
+#report-comment {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 90px;
+}
+.report-result { margin: 0; font-size: 13px; line-height: 1.5; word-break: break-all; }
+.report-result.ok { color: var(--timer-green); }
+.report-result.err { color: var(--danger); }
 
 /* Audio output picker (🔊 Аудиовыход…) */
 .audio-hint { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 14px; }

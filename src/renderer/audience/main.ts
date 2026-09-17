@@ -176,6 +176,11 @@ async function loadFile(): Promise<void> {
   docLoaded = false
   lastRenderedSlide = -1
   const state = getState()
+  const t0 = performance.now()
+  // В журнал: сколько зал грузил файл до первого кадра — по этим цифрам ищем
+  // промаргивание/задержки (diag.ts).
+  const done = (what: string): void =>
+    window.api.diag.log('info', `${what} за ${Math.round(performance.now() - t0)} мс`)
 
   if (state.fileKind === 'live') {
     // Поток поднимает applyLive() — здесь только убираем со сцены файловые слои.
@@ -197,13 +202,17 @@ async function loadFile(): Promise<void> {
     lastSinkId = state.audioOutputId
     applySinkId(slideVideo, state.audioOutputId)
     syncVideoElement(slideVideo, state.video)
+    done('видео подвешено')
     return
   }
 
   unloadVideo()
 
   const data = await window.api.pdf.read()
-  if (!data) return
+  if (!data) {
+    window.api.diag.log('warn', `pdf:read вернул null для ${state.fileKind} ${state.pdfPath}`)
+    return
+  }
 
   if (state.fileKind === 'image') {
     const blob = new Blob([data.bytes as BlobPart], { type: data.mime })
@@ -212,6 +221,7 @@ async function loadFile(): Promise<void> {
     // Фотографии списка перетекают друг в друга, если оператор задал FADE.
     await crossfadeToImage(slideImage, slideImageUnder, slideImageBlobUrl, listFadeMs(state))
     slideImage.classList.remove('hidden')
+    done('картинка показана')
     return
   }
 
@@ -222,6 +232,7 @@ async function loadFile(): Promise<void> {
   await loadDocument(data.bytes)
   docLoaded = true
   await renderSlide()
+  done(`${state.fileKind} открыт (${Math.round(data.bytes.byteLength / 1024)} КБ), первый слайд отрисован`)
 }
 
 async function renderSlide(): Promise<void> {
@@ -231,7 +242,9 @@ async function renderSlide(): Promise<void> {
   if (state.currentSlide === lastRenderedSlide) return
   lastRenderedSlide = state.currentSlide
   const width = window.innerWidth
+  const t0 = performance.now()
   await renderPageTo(state.currentSlide, canvas, width)
+  window.api.diag.log('info', `слайд ${state.currentSlide} отрисован за ${Math.round(performance.now() - t0)} мс`)
   if (state.currentSlide + 1 <= state.totalSlides) {
     prerender(state.currentSlide + 1, width).catch(() => undefined)
   }
@@ -339,18 +352,20 @@ async function bootstrap(): Promise<void> {
   // Unsupported codec → keep the projector black instead of showing a broken element.
   slideVideo.addEventListener('error', () => {
     if (getState().fileKind === 'video' && slideVideo.getAttribute('src')) {
+      window.api.diag.log('error', `видео не воспроизвелось: ${getState().pdfPath}`, mediaErrorInfo(slideVideo))
       slideVideo.classList.add('hidden')
     }
   })
   // Слайд-видео не воспроизвелось → зал остаётся с постером из PDF.
   mediaOverlay.addEventListener('error', () => {
     if (!mediaOverlay.getAttribute('src')) return
+    window.api.diag.log('error', `слайд-видео не воспроизвелось: ${overlaySrc}`, mediaErrorInfo(mediaOverlay))
     overlayFailedSrc = overlaySrc
     unloadMediaOverlay()
   })
 
   subscribe((state) => {
-    applyState(state).catch(() => undefined)
+    applyState(state).catch((err) => window.api.diag.log('error', 'applyState упал', String(err?.stack ?? err)))
   })
 
   const initial = getState()
@@ -388,4 +403,9 @@ async function bootstrap(): Promise<void> {
   })
 }
 
-bootstrap().catch(() => undefined)
+/** Код и текст MediaError — без них «видео не играет» в журнале бесполезно. */
+function mediaErrorInfo(el: HTMLVideoElement): { code: number | null; message: string | null } {
+  return { code: el.error?.code ?? null, message: el.error?.message ?? null }
+}
+
+bootstrap().catch((err) => window.api.diag.log('error', 'bootstrap зала упал', String(err?.stack ?? err)))

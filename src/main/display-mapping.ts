@@ -42,6 +42,11 @@ interface PersistedShape {
   uiTheme: UiTheme
   /** Время прошлого запуска — по нему пропускаем плашку при быстром рестарте. */
   lastLaunchAt: number
+  /**
+   * Штатно ли завершилась прошлая сессия (diag.ts): false на старте, true перед
+   * app.exit. Запустились с false — значит в прошлый раз упали или убили.
+   */
+  cleanExit: boolean
 }
 
 const STORE_DEFAULTS: PersistedShape = {
@@ -75,6 +80,7 @@ const STORE_DEFAULTS: PersistedShape = {
   outputMonitorsEnabled: true,
   uiTheme: 'dark',
   lastLaunchAt: 0,
+  cleanExit: true,
 }
 
 let _store: Store<PersistedShape> | null = null
@@ -113,6 +119,19 @@ export function getLastLaunchAt(): number {
 
 export function setLastLaunchAt(ts: number): void {
   store().set('lastLaunchAt', ts)
+}
+
+export function getCleanExit(): boolean {
+  return store().get('cleanExit')
+}
+
+export function setCleanExit(value: boolean): void {
+  store().set('cleanExit', value)
+}
+
+/** Все сохранённые настройки целиком — для отчёта о проблеме (diag.ts). */
+export function dumpPrefs(): PersistedShape {
+  return store().store
 }
 
 export function getLastPdfPath(): string | null {

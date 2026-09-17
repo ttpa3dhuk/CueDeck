@@ -486,6 +486,7 @@
             <tr class="help-section"><td colspan="2">Прочее</td></tr>
             <tr><td><kbd>⌘</kbd> <kbd>,</kbd></td><td>Настройка экранов</td></tr>
             <tr><td><kbd>?</kbd></td><td>Эта справка</td></tr>
+            <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>M</kbd></td><td>⚑ Отметить момент в журнале («здесь что-то не то») — после шоу Help → Сообщить о проблеме</td></tr>
           </tbody>
         </table>
         <p class="help-note">Клавиши B и T работают на любой раскладке (рус / eng).</p>
@@ -494,6 +495,24 @@
         </p>
         <div class="modal-actions">
           <button id="help-modal-close" class="primary">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="report-modal" class="modal hidden">
+      <div class="modal-content report-modal-content">
+        <h2>Сообщить о проблеме</h2>
+        <p class="audio-hint">Отчёт собирается в zip на рабочем столе: журнал действий, состояние программы, скриншоты окон, версия и ОС. Содержимого презентаций и текста заметок в нём нет — только имена файлов. Файл пришли Азату в Telegram.</p>
+        <label class="report-label" for="report-comment">Что делал, что ожидал, что получил</label>
+        <textarea id="report-comment" rows="5" placeholder="Например: нажал TAKE на втором спикере, зал остался на первом слайде предыдущего."></textarea>
+        <p id="report-markers" class="audio-hint compact hidden"></p>
+        <p id="report-result" class="report-result hidden"></p>
+        <div class="modal-actions">
+          <button id="report-logs">Открыть папку журналов</button>
+          <span class="modal-actions-spacer"></span>
+          <button id="report-close">Закрыть</button>
+          <button id="report-reveal" class="hidden">Показать файл</button>
+          <button id="report-save" class="primary">Сохранить отчёт</button>
         </div>
       </div>
     </div>

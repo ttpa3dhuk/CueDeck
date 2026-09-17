@@ -1644,6 +1644,54 @@ function hideHelpModal(): void {
   document.getElementById('help-modal')?.classList.add('hidden')
 }
 
+// ── Отчёт о проблеме (Help → Сообщить о проблеме…, main/diag.ts) ────────────
+
+async function openReportModal(): Promise<void> {
+  const modal = document.getElementById('report-modal')
+  if (!modal) return
+  const result = $('report-result')
+  result.classList.add('hidden')
+  result.textContent = ''
+  $('report-reveal').classList.add('hidden')
+  $<HTMLButtonElement>('report-save').disabled = false
+
+  const markersEl = $('report-markers')
+  const info = await window.api.diag.info().catch(() => null)
+  if (info && info.markers.length) {
+    markersEl.textContent = `⚑ Отмеченные моменты: ${info.markers.map((m) => `#${m.n} ${m.at}`).join(', ')} — они есть в журнале, опиши, что было в эти моменты.`
+    markersEl.classList.remove('hidden')
+  } else {
+    markersEl.classList.add('hidden')
+  }
+  modal.classList.remove('hidden')
+  $<HTMLTextAreaElement>('report-comment').focus()
+}
+
+function hideReportModal(): void {
+  document.getElementById('report-modal')?.classList.add('hidden')
+}
+
+async function saveReport(): Promise<void> {
+  const btn = $<HTMLButtonElement>('report-save')
+  const result = $('report-result')
+  btn.disabled = true
+  result.className = 'report-result'
+  result.textContent = 'Собираю отчёт…'
+  result.classList.remove('hidden')
+  const res = await window.api.diag.buildReport($<HTMLTextAreaElement>('report-comment').value)
+  btn.disabled = false
+  if (res.ok) {
+    result.classList.add('ok')
+    result.textContent = `Сохранено на рабочий стол: ${baseName(res.path)}. Пришли этот файл Азату в Telegram.`
+    const reveal = $<HTMLButtonElement>('report-reveal')
+    reveal.classList.remove('hidden')
+    reveal.onclick = () => window.api.diag.showInFolder(res.path)
+  } else {
+    result.classList.add('err')
+    result.textContent = `Не удалось собрать отчёт: ${res.error}`
+  }
+}
+
 /**
  * Команда установки зависит от платформы. Раньше здесь жёстко висела
  * macOS-строка с `brew`, и на Windows оператор копировал её в PowerShell
@@ -1870,6 +1918,15 @@ function setupKeyboard(): void {
   })
 
   window.addEventListener('keydown', (e) => {
+    // ⚑ Маркер в журнале — Ctrl/Cmd+Shift+M по физической клавише (e.code), чтобы
+    // срабатывало и на русской раскладке; работает даже из текстового поля.
+    // Пункт меню с тем же акселератором может сработать параллельно — дубль
+    // глушит main (diag.ts markMoment).
+    if (isOperator && e.code === 'KeyM' && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
+      e.preventDefault()
+      void window.api.diag.mark()
+      return
+    }
     if (isTypingTarget(e.target)) return
     // Remappable actions fire on a bare keypress (no modifiers); modifier combos
     // below (Shift+T, Shift/Ctrl+digits) and clicker keys fall through to the switch.
@@ -2290,6 +2347,7 @@ function setupOperatorControls(): void {
   previewVideo!.addEventListener('ended', () => window.api.preview.video.ended())
   previewVideo!.addEventListener('error', () => {
     if (getState().preview.kind !== 'video' || !previewVideo!.getAttribute('src')) return
+    window.api.diag.log('error', `превью-видео не воспроизвелось: ${getState().preview.path}`, mediaErrorInfo(previewVideo!))
     previewVideo!.classList.add('hidden')
     previewVideoError?.classList.remove('hidden')
   })
@@ -2373,6 +2431,24 @@ function setupOperatorControls(): void {
   $<HTMLButtonElement>('help-btn').addEventListener('click', showHelpModal)
   document.getElementById('help-modal-close')?.addEventListener('click', hideHelpModal)
   window.api.menu.onHelp(() => showHelpModal())
+
+  // Отчёт о проблеме + маркеры (diag)
+  window.api.menu.onReport(() => void openReportModal())
+  $('report-close').addEventListener('click', hideReportModal)
+  $('report-save').addEventListener('click', () => void saveReport())
+  // Из текстового поля: Cmd/Ctrl+Enter — сохранить, Esc — закрыть.
+  $('report-comment').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      void saveReport()
+    } else if (e.key === 'Escape') {
+      hideReportModal()
+    }
+  })
+  $('report-logs').addEventListener('click', () => void window.api.diag.openLogFolder())
+  window.api.diag.onMarked((n) =>
+    showBanner(`⚑ Момент #${n} отмечен в журнале. После шоу: Help → Сообщить о проблеме`, 3000),
+  )
   if (DONATE_URL) {
     document.getElementById('donate-note')?.classList.remove('hidden')
     document.getElementById('donate-link')?.addEventListener('click', (e) => {
@@ -3102,6 +3178,12 @@ async function bootstrap(): Promise<void> {
 
   // Pre-check LibreOffice so the notice shows immediately if needed
   if (role === 'operator') {
+    window.api.diag.info().then((info) => {
+      if (info.abnormalPrevious) {
+        showBanner('В прошлый раз CueDeck закрылся аварийно. Help → Сообщить о проблеме — соберёт журнал в zip', 12000)
+      }
+    }).catch(() => undefined)
+
     checkSoffice().then((has) => {
       if (!has) updateLibreOfficeNotice(getState())
     }).catch(() => undefined)
@@ -3121,6 +3203,7 @@ async function bootstrap(): Promise<void> {
   // Operator sees the "transcode to H.264" message; other roles just stay black.
   currentVideo.addEventListener('error', () => {
     if (getState().fileKind !== 'video' || !currentVideo.getAttribute('src')) return
+    window.api.diag.log('error', `видео не воспроизвелось: ${getState().pdfPath}`, mediaErrorInfo(currentVideo))
     currentVideo.classList.add('hidden')
     if (role === 'operator') videoError.classList.remove('hidden')
   })
@@ -3129,6 +3212,7 @@ async function bootstrap(): Promise<void> {
   // из PDF; оператору показываем ту же подсказку про перекодирование.
   mediaOverlay.addEventListener('error', () => {
     if (!mediaOverlay.getAttribute('src')) return
+    window.api.diag.log('error', `слайд-видео не воспроизвелось: ${overlaySrc}`, mediaErrorInfo(mediaOverlay))
     overlayFailedSrc = overlaySrc
     unloadMediaOverlay()
     if (role === 'operator') videoError.classList.remove('hidden')
@@ -3221,6 +3305,12 @@ async function bootstrap(): Promise<void> {
   })
 }
 
+/** Код и текст MediaError — без них «видео не играет» в журнале бесполезно. */
+function mediaErrorInfo(el: HTMLVideoElement): { code: number | null; message: string | null } {
+  return { code: el.error?.code ?? null, message: el.error?.message ?? null }
+}
+
 bootstrap().catch((err) => {
+  window.api.diag.log('error', 'bootstrap упал', String(err?.stack ?? err))
   showBanner(`Не удалось запустить: ${err.message}`)
 })
