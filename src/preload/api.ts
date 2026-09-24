@@ -12,6 +12,8 @@ import type {
   MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
+  RemoteSettings,
+  RemoteStatus,
   ReportResult,
   SlideTakeMode,
   TimerMode,
@@ -39,6 +41,8 @@ export type {
   MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
+  RemoteSettings,
+  RemoteStatus,
   ReportResult,
   Role,
   SlideMedia,
@@ -115,6 +119,12 @@ export interface PresenterApi {
     setMode(mode: TimerMode): Promise<void>
     setPosition(pos: TimerPosition): Promise<void>
     setScale(scale: number): Promise<void>
+    /** Свободное положение таймера на суфлёре: центр в долях экрана (0..1). */
+    setFree(x: number, y: number): Promise<void>
+    /** Свой цвет цифр на суфлёре (#rrggbb) или null — стандартный. */
+    setColor(color: string | null): Promise<void>
+    /** Жёлтый/красный в конце отсчёта поверх своего цвета. */
+    setWarnColors(on: boolean): Promise<void>
     /** Sound cue on the operator: ticks in the last 10s of a countdown. */
     setTickSound(enabled: boolean): Promise<void>
     /** Sound cue on the operator: gong at zero / on every loop wrap. */
@@ -128,6 +138,8 @@ export interface PresenterApi {
     toggle(): Promise<void>
   }
   speakerMessage: {
+    /** Положение (центр в долях экрана; null — сверху по центру) и масштаб плашки. */
+    setLayout(layout: { pos: { x: number; y: number } | null; scale: number }): Promise<void>
     /** Show a blinking message on the speaker monitor; null/'' clears it. */
     set(text: string | null): Promise<void>
     /** Replace the texts of the three preset buttons (user-editable, persisted). */
@@ -168,6 +180,24 @@ export interface PresenterApi {
   ui: {
     /** Тема окна оператора (персистится). */
     setTheme(theme: UiTheme): Promise<void>
+  }
+  /** Раскладка экрана суфлёра (колонки «Дальше/Заметки»). */
+  prompter: {
+    setLayout(layout: { sidebarPct: number; nextPct: number | null }): Promise<void>
+  }
+  /** MIDI-входы, которые слушает CueDeck (по имени устройства; персистится). */
+  midi: {
+    getEnabled(): Promise<string[]>
+    setEnabled(names: string[]): Promise<void>
+  }
+  /** Внешнее управление: Stream Deck / Companion / OSC (main/remote/). */
+  remote: {
+    /** Сохранить настройки и перезапустить слушатели; статус приходит и в state.remote. */
+    configure(settings: RemoteSettings): Promise<{ ok: true; status: RemoteStatus } | { ok: false; error: string }>
+    /** Справочная страница со списком команд — в браузере по умолчанию. */
+    openHelp(): Promise<{ ok: boolean; error?: string }>
+    /** Сохранить готовую страницу Companion (.companionconfig) — диалог «Сохранить». */
+    saveCompanionPage(): Promise<{ ok: boolean; path?: string; cancelled?: boolean }>
   }
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */
@@ -228,6 +258,8 @@ export interface PresenterApi {
   menu: {
     onOpenPdf(cb: () => void): Unsubscribe
     onOpenDisplaySetup(cb: () => void): Unsubscribe
+    /** Меню → «Настройки…» (внешнее управление, MIDI). */
+    onOpenSettings(cb: () => void): Unsubscribe
     onTopologyChanged(cb: () => void): Unsubscribe
     onProjectNew(cb: () => void): Unsubscribe
     onProjectOpen(cb: () => void): Unsubscribe
@@ -247,6 +279,8 @@ export interface PresenterApi {
   }
   soffice: {
     check(): Promise<boolean>
+    /** Путь к используемому soffice или null. */
+    current(): Promise<string | null>
     /** Перепроверить после установки: сбрасывает закэшированный путь. */
     recheck(): Promise<boolean>
     /** Пути, по которым искали — для подсказки «не нашли». */

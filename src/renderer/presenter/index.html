@@ -24,19 +24,6 @@
             <span id="next-speaker" class="next-speaker hidden"></span>
           </div>
           <div class="topbar-right">
-            <div class="group op-only">
-              <button id="timer-scale-down" title="Меньше">A−</button>
-              <span id="timer-scale-value" class="scale-value">100%</span>
-              <button id="timer-scale-up" title="Больше">A+</button>
-            </div>
-            <div class="group position-group op-only">
-              <button class="position-btn" data-pos="top-left" title="Верхний левый">↖</button>
-              <button class="position-btn" data-pos="top-right" title="Верхний правый">↗</button>
-              <button class="position-btn" data-pos="bottom-left" title="Нижний левый">↙</button>
-              <button class="position-btn" data-pos="bottom-right" title="Нижний правый">↘</button>
-              <button class="position-btn" data-pos="hidden" title="Без таймера на суфлёре (свой таймер в vMix)">✕</button>
-              <button class="position-btn" data-pos="full" title="Только таймер: весь экран суфлёра — чистый таймер на чёрном (под захват в Resolume/vMix). Нажать ещё раз — зелёная: то же самое, но без белой вспышки на нуле">⛶</button>
-            </div>
             <span id="timer-display" class="timer font-system green">00:00</span>
             <button id="timer-toggle" class="op-only" title="Start/Pause (T)">▶</button>
             <button id="timer-reset" class="op-only" title="Reset (R или Shift+T)">⟲</button>
@@ -98,17 +85,6 @@
             <label class="toggle" title="Отсчёт перезапускается сам: 30с → гонг → снова 30с. Для кругов по 15/30 секунд.">
               <input id="timer-loop-toggle" type="checkbox" />
               <span>🔁 Повтор</span>
-            </label>
-          </div>
-          <div class="group">
-            <label class="group-label">Кликер</label>
-            <label class="toggle" title="PgUp/PgDn листают эфир, даже когда CueDeck не в фокусе (оператор качает файлы в браузере — спикер продолжает кликать). Пока включено, PgUp/PgDn забраны у других приложений. Blank (точка) и Take остаются локальными.">
-              <input id="clicker-global-toggle" type="checkbox" />
-              <span>🌐 Глобально</span>
-            </label>
-            <label class="toggle" title="Для кликеров, шлющих стрелки вместо PgUp/PgDn (Logitech Spotlight, DSan MicroCue на маке): ←/→ тоже листают глобально. Пока включено, стрелки недоступны другим приложениям — включай на время выступления.">
-              <input id="clicker-arrows-toggle" type="checkbox" />
-              <span>⬅➡ Стрелки</span>
             </label>
           </div>
         </div>
@@ -313,13 +289,10 @@
 
       <footer class="bottombar op-only">
         <div class="bottombar-left">
-          <button id="hotkeys-btn" title="Настроить горячие клавиши">⌨ Клавиши…</button>
         </div>
         <div class="bottombar-right">
-          <button id="theme-toggle" title="Переключить тему оператора">☀️ Светлая</button>
-          <button id="audio-setup" title="Выход звука эфира и предпрослушка в наушники">🔊 Звук…</button>
-          <button id="display-setup">Настройка экранов…</button>
-          <button id="help-btn" title="Горячие клавиши (?)">?</button>
+          <button id="settings-btn" class="icon-btn" title="Настройки: экраны, звук, клавиши, тема, LibreOffice, внешнее управление, MIDI (Cmd+,)" aria-label="Настройки">⚙️</button>
+          <button id="help-btn" class="icon-btn" title="Справка по клавишам (?)" aria-label="Справка">?</button>
         </div>
       </footer>
 
@@ -328,25 +301,6 @@
         <span id="update-text"></span>
         <button id="update-download">Скачать</button>
         <button id="update-dismiss" title="Скрыть до следующего запуска">✕</button>
-      </div>
-    </div>
-
-    <div id="audio-modal" class="modal hidden">
-      <div class="modal-content">
-        <h2>Звук: эфир и предпрослушка</h2>
-        <div class="live-field">
-          <span class="live-field-label">Эфир (MAIN)</span>
-          <p class="audio-hint compact">Куда отдавать звук роликов и внешних входов: звуковая карта, миниджек ноута, HDMI на vMix-машину. Идёт на выход того окна, что озвучивает зал.</p>
-          <div id="audio-device-list" class="audio-device-list"></div>
-        </div>
-        <div class="live-field">
-          <span class="live-field-label">Предпрослушка (SOLO, наушники)</span>
-          <p class="audio-hint compact">Отдельный выход, чтобы послушать принесённый ролик или захват в превью до выдачи в зал. Пока выключено — превью немое.</p>
-          <div id="audio-preview-list" class="audio-device-list"></div>
-        </div>
-        <div class="modal-actions">
-          <button id="audio-close" class="primary">Закрыть</button>
-        </div>
       </div>
     </div>
 
@@ -407,52 +361,6 @@
       </div>
     </div>
 
-    <div id="hotkeys-modal" class="modal hidden">
-      <div class="modal-content">
-        <h2>Горячие клавиши</h2>
-        <p class="audio-hint">Нажми на клавишу справа от действия, затем нажми нужную кнопку на клавиатуре. Клавиши кликера (PgUp / PgDn / точка) и комбинации с Shift/Ctrl работают всегда.</p>
-        <div id="hotkeys-list" class="hotkeys-list"></div>
-        <div class="modal-actions">
-          <button id="hotkeys-reset">Сбросить по умолчанию</button>
-          <button id="hotkeys-close" class="primary">Закрыть</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="setup-modal" class="modal hidden">
-      <div class="modal-content">
-        <h2>Настройка экранов</h2>
-        <div class="layout-picker">
-          <label><input type="radio" name="layout" value="solo" /> 1 экран (только я)</label>
-          <label><input type="radio" name="layout" value="presenter-audience" /> 2 экрана (ноут + проектор)</label>
-          <label><input type="radio" name="layout" value="operator-speaker-audience" /> 3 экрана (+ суфлёр клиента)</label>
-        </div>
-        <div id="role-mapping" class="role-mapping"></div>
-        <div id="audience-windowed-section" class="windowed-section hidden">
-          <label class="windowed-label">
-            <input id="audience-windowed-toggle" type="checkbox" />
-            <span>Аудитория в окне <span class="windowed-hint">(для захвата в Zoom / OBS)</span></span>
-          </label>
-        </div>
-        <div id="output-monitors-section" class="windowed-section">
-          <label class="windowed-label">
-            <input id="output-monitors-toggle" type="checkbox" />
-            <span>Монитор суфлёра под эфиром <span class="windowed-hint">(живой снимок; в 1-экранном режиме — скрытый суфлёр, в 2-экранном — зал)</span></span>
-          </label>
-        </div>
-        <div class="windowed-section">
-          <label class="windowed-label">
-            <input id="ask-layout-toggle" type="checkbox" />
-            <span>Спрашивать режим при запуске <span class="windowed-hint">(диалог выбора раскладки)</span></span>
-          </label>
-        </div>
-        <div class="modal-actions">
-          <button id="setup-cancel">Отмена</button>
-          <button id="setup-apply" class="primary">Применить</button>
-        </div>
-      </div>
-    </div>
-
     <div id="help-modal" class="modal hidden">
       <div class="modal-content help-modal-content">
         <h2>Горячие клавиши</h2>
@@ -465,7 +373,7 @@
             <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Превью: предыдущий / следующий слайд</td></tr>
             <tr><td><kbd>Tab</kbd></td><td>ЭФИР (take) — выдать превью в эфир</td></tr>
             <tr><td>Клик / двойной клик по спикеру</td><td>Загрузить в превью / сразу в эфир</td></tr>
-            <tr><td colspan="2" style="color:var(--muted);font-size:12px;">Клавиши можно переназначить — кнопка «⌨ Клавиши…» внизу</td></tr>
+            <tr><td colspan="2" style="color:var(--muted);font-size:12px;">Клавиши можно переназначить — ⚙️ Настройки → Горячие клавиши</td></tr>
             <tr class="help-section"><td colspan="2">Таймер</td></tr>
             <tr><td><kbd>T</kbd></td><td>Старт / Пауза таймера</td></tr>
             <tr><td><kbd>R</kbd> <kbd>Shift</kbd>+<kbd>T</kbd></td><td>Сбросить таймер</td></tr>
@@ -484,7 +392,7 @@
             <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>S</kbd></td><td>Сохранить как…</td></tr>
             <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>O</kbd></td><td>Открыть проект…</td></tr>
             <tr class="help-section"><td colspan="2">Прочее</td></tr>
-            <tr><td><kbd>⌘</kbd> <kbd>,</kbd></td><td>Настройка экранов</td></tr>
+            <tr><td><kbd>⌘</kbd> <kbd>,</kbd></td><td>Настройки</td></tr>
             <tr><td><kbd>?</kbd></td><td>Эта справка</td></tr>
             <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>M</kbd></td><td>⚑ Отметить момент в журнале («здесь что-то не то») — после шоу Help → Сообщить о проблеме</td></tr>
           </tbody>
@@ -495,6 +403,208 @@
         </p>
         <div class="modal-actions">
           <button id="help-modal-close" class="primary">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-content settings-modal-content">
+        <h2>Настройки</h2>
+        <div class="settings-layout">
+          <nav class="settings-nav">
+            <button data-section="screens" class="active">Экраны</button>
+            <button data-section="prompter">Суфлёр</button>
+            <button data-section="clicker">Кликер</button>
+            <button data-section="audio">Звук</button>
+            <button data-section="hotkeys">Горячие клавиши</button>
+            <button data-section="ui">Интерфейс</button>
+            <button data-section="lo">PPTX / LibreOffice</button>
+            <button data-section="remote">Внешнее управление</button>
+            <button data-section="midi">MIDI</button>
+          </nav>
+          <div class="settings-body">
+            <section id="setup-section" class="settings-section" data-section="screens">
+              <p class="audio-hint">Раскладка окон и экраны. Применяется кнопкой ниже: окна зала и суфлёра при этом пересоздаются.</p>
+              <div class="layout-picker">
+                <label><input type="radio" name="layout" value="solo" /> 1 экран (только я)</label>
+                <label><input type="radio" name="layout" value="presenter-audience" /> 2 экрана (ноут + проектор)</label>
+                <label><input type="radio" name="layout" value="operator-speaker-audience" /> 3 экрана (+ суфлёр клиента)</label>
+              </div>
+              <div id="role-mapping" class="role-mapping"></div>
+              <div id="audience-windowed-section" class="windowed-section hidden">
+                <label class="windowed-label">
+                  <input id="audience-windowed-toggle" type="checkbox" />
+                  <span>Аудитория в окне <span class="windowed-hint">(для захвата в Zoom / OBS)</span></span>
+                </label>
+              </div>
+              <div id="output-monitors-section" class="windowed-section">
+                <label class="windowed-label">
+                  <input id="output-monitors-toggle" type="checkbox" />
+                  <span>Монитор суфлёра под эфиром <span class="windowed-hint">(живой снимок; в 1-экранном режиме — скрытый суфлёр, в 2-экранном — зал)</span></span>
+                </label>
+              </div>
+              <div class="windowed-section">
+                <label class="windowed-label">
+                  <input id="ask-layout-toggle" type="checkbox" />
+                  <span>Спрашивать режим при запуске <span class="windowed-hint">(диалог выбора раскладки)</span></span>
+                </label>
+              </div>
+              <div class="modal-actions">
+                <button id="setup-cancel">Отмена</button>
+                <button id="setup-apply" class="primary">Применить</button>
+              </div>
+            </section>
+            <section class="settings-section hidden" data-section="prompter">
+              <p class="audio-hint">Экран суфлёра в его пропорциях. Таймер и красную плашку сообщения спикеру можно двигать мышкой, размер — за уголок или колёсиком над ними; границы колонок тоже тянутся. Суфлёр повторяет вживую.</p>
+              <div id="prompter-stage" class="prompter-stage">
+                <div class="ps-zone ps-slide">слайд</div>
+                <div class="ps-zone ps-next">дальше</div>
+                <div class="ps-zone ps-notes">заметки</div>
+                <div class="ps-vdiv" title="Ширина колонки «Дальше / Заметки»"></div>
+                <div class="ps-hdiv" title="Высота «Дальше» / «Заметки»"></div>
+                <div id="prompter-msg" class="prompter-msg">Сообщение<span class="pt-handle" title="Потяни — размер"></span></div>
+                <div id="prompter-timer" class="prompter-timer">00:00<span class="pt-handle" title="Потяни — размер"></span></div>
+              </div>
+              <div class="remote-row">
+                <span class="live-field-label">Положение</span>
+                <div class="group position-group">
+                  <button class="position-btn" data-pos="top-left" title="Верхний левый">↖</button>
+                  <button class="position-btn" data-pos="top-right" title="Верхний правый">↗</button>
+                  <button class="position-btn" data-pos="bottom-left" title="Нижний левый">↙</button>
+                  <button class="position-btn" data-pos="bottom-right" title="Нижний правый">↘</button>
+                  <button class="position-btn" data-pos="free" title="Свободно — туда, куда перетащил мышкой">✥</button>
+                  <button class="position-btn" data-pos="hidden" title="Без таймера на суфлёре (свой таймер в vMix)">✕</button>
+                  <button class="position-btn" data-pos="full" title="Только таймер: весь экран суфлёра — чистый таймер на чёрном (под захват в Resolume/vMix). Нажать ещё раз — зелёная: то же самое, но без белой вспышки на нуле">⛶</button>
+                </div>
+              </div>
+              <div class="remote-row">
+                <span class="live-field-label">Цвет таймера</span>
+                <div id="timer-color-swatches" class="color-swatches">
+                  <button class="color-swatch auto" data-color="" title="Стандартный: зелёный → жёлтый → красный"></button>
+                  <button class="color-swatch" data-color="#ffffff" style="background:#ffffff" title="Белый"></button>
+                  <button class="color-swatch" data-color="#ffd23f" style="background:#ffd23f" title="Жёлтый"></button>
+                  <button class="color-swatch" data-color="#ff8c42" style="background:#ff8c42" title="Оранжевый"></button>
+                  <button class="color-swatch" data-color="#4cc9f0" style="background:#4cc9f0" title="Голубой"></button>
+                  <button class="color-swatch" data-color="#7bdff2" style="background:#7bdff2" title="Бирюзовый"></button>
+                  <button class="color-swatch" data-color="#ff5ca8" style="background:#ff5ca8" title="Розовый"></button>
+                  <button class="color-swatch" data-color="#b388ff" style="background:#b388ff" title="Фиолетовый"></button>
+                  <button id="timer-color-custom" title="Свой цвет — палитра с кругом оттенков">🎨 Свой…</button>
+                  <input id="timer-color-input" type="color" value="#3fce7c" />
+                </div>
+              </div>
+              <div class="remote-row">
+                <label class="windowed-label"><input id="timer-warn-colors" type="checkbox" /> <span>Жёлтый и красный в конце отсчёта <span class="windowed-hint">(поверх своего цвета)</span></span></label>
+              </div>
+              <div class="remote-row">
+                <span class="live-field-label">Сообщение спикеру</span>
+                <button id="prompter-msg-reset" title="Вернуть сверху по центру, обычный размер">Сверху по центру</button>
+                <span class="live-field-label">Колонки</span>
+                <button id="prompter-layout-reset" title="Слайд / «Дальше» / «Заметки» — как по умолчанию">По умолчанию</button>
+              </div>
+              <div class="remote-row">
+                <span class="live-field-label">Размер</span>
+                <div class="group">
+                  <button id="timer-scale-down" title="Меньше">A−</button>
+                  <span id="timer-scale-value" class="scale-value">100%</span>
+                  <button id="timer-scale-up" title="Больше">A+</button>
+                </div>
+              </div>
+            </section>
+            <section class="settings-section hidden" data-section="clicker">
+              <p class="audio-hint">Кликер спикера (Logitech R400, Spotlight, DSan MicroCue…) шлёт PgUp/PgDn или стрелки. Пока CueDeck в фокусе, он работает всегда. Галки ниже — чтобы кликер листал эфир, даже когда оператор сидит в браузере или Finder.</p>
+              <div class="live-field">
+                <label class="windowed-label" title="PgUp/PgDn листают эфир, даже когда CueDeck не в фокусе (оператор качает файлы в браузере — спикер продолжает кликать). Пока включено, PgUp/PgDn забраны у других приложений. Blank (точка) и Take остаются локальными.">
+                    <input id="clicker-global-toggle" type="checkbox" />
+                    <span>🌐 Глобально</span>
+                  </label>
+                  <label class="windowed-label" title="Для кликеров, шлющих стрелки вместо PgUp/PgDn (Logitech Spotlight, DSan MicroCue на маке): ←/→ тоже листают глобально. Пока включено, стрелки недоступны другим приложениям — включай на время выступления.">
+                    <input id="clicker-arrows-toggle" type="checkbox" />
+                    <span>⬅➡ Стрелки</span>
+                  </label>
+              </div>
+            </section>
+            <section class="settings-section hidden" data-section="audio">
+              <div class="live-field">
+                <span class="live-field-label">Эфир (MAIN)</span>
+                <p class="audio-hint compact">Куда отдавать звук роликов и внешних входов: звуковая карта, миниджек ноута, HDMI на vMix-машину. Идёт на выход того окна, что озвучивает зал.</p>
+                <div id="audio-device-list" class="audio-device-list"></div>
+              </div>
+              <div class="live-field">
+                <span class="live-field-label">Предпрослушка (SOLO, наушники)</span>
+                <p class="audio-hint compact">Отдельный выход, чтобы послушать принесённый ролик или захват в превью до выдачи в зал. Пока выключено — превью немое.</p>
+                <div id="audio-preview-list" class="audio-device-list"></div>
+              </div>
+            </section>
+            <section class="settings-section hidden" data-section="hotkeys">
+              <p class="audio-hint">Нажми на клавишу справа от действия, затем нажми нужную кнопку на клавиатуре. Клавиши кликера (PgUp / PgDn / точка) и комбинации с Shift/Ctrl работают всегда.</p>
+              <div id="hotkeys-list" class="hotkeys-list"></div>
+              <div class="modal-actions">
+                <button id="hotkeys-reset">Сбросить по умолчанию</button>
+              </div>
+            </section>
+            <section class="settings-section hidden" data-section="ui">
+              <div class="live-field">
+                <span class="live-field-label">Тема окна оператора</span>
+                <p class="audio-hint compact">Суфлёр и зал всегда тёмные — это выходы, их тема не меняет.</p>
+                <label class="windowed-label"><input type="radio" name="ui-theme" value="dark" /> <span>Тёмная</span></label>
+                <label class="windowed-label"><input type="radio" name="ui-theme" value="light" /> <span>Светлая</span></label>
+              </div>
+            </section>
+            <section class="settings-section hidden" data-section="lo">
+              <p class="audio-hint">LibreOffice превращает PPTX, PPT, ODP и KEY в PDF. Без него открываются только PDF, картинки и видео.</p>
+              <div class="live-field">
+                <span class="live-field-label">Сейчас</span>
+                <p id="lo-settings-status" class="audio-hint compact">…</p>
+              </div>
+              <div class="remote-row">
+                <button id="lo-settings-recheck">Проверить снова</button>
+                <button id="lo-settings-pick">Указать папку вручную…</button>
+              </div>
+              <p id="lo-settings-paths" class="audio-hint compact hidden"></p>
+            </section>
+            <section class="settings-section hidden" data-section="remote">
+              <p class="audio-hint">Stream Deck, Bitfocus Companion, OSC-пульты — команды доходят при любом активном окне. Всё применяется сразу.</p>
+    <div id="remote-section" class="remote-section">
+      <label class="windowed-label">
+        <input id="remote-toggle" type="checkbox" />
+        <span>Включить</span>
+      </label>
+      <div class="remote-row">
+        <label class="remote-port">HTTP <input id="remote-http-port" type="number" min="1024" max="65535" /></label>
+        <label class="remote-port">OSC (UDP) <input id="remote-osc-port" type="number" min="1024" max="65535" /></label>
+        <label class="windowed-label">
+          <input id="remote-lan" type="checkbox" />
+          <span>Из сети <span class="windowed-hint">(Companion на другом компьютере)</span></span>
+        </label>
+      </div>
+      <div class="remote-row">
+        <label class="windowed-label">
+          <input id="remote-companion" type="checkbox" />
+          <span>Companion: состояние на кнопках <span class="windowed-hint">(таймер, слайды, ролик)</span></span>
+        </label>
+        <label class="remote-port">адрес <input id="remote-companion-host" type="text" class="remote-host" spellcheck="false" /></label>
+        <button id="remote-companion-page" title="Файл для Companion → Import / Export: кнопки, таймер с миганием, переменные">Страница Companion…</button>
+      </div>
+      <div class="remote-row remote-status-row">
+        <span class="remote-status-lines">
+          <span id="remote-status" class="remote-status"></span>
+          <span id="remote-companion-status" class="remote-status"></span>
+        </span>
+        <span class="modal-actions-spacer"></span>
+        <button id="remote-help">Список команд…</button>
+      </div>
+    </div>
+            </section>
+            <section class="settings-section hidden" data-section="midi">
+              <p class="audio-hint">MIDI-устройства, подключённые к этому компьютеру. Галка — CueDeck слушает устройство; можно несколько. Лампочка мигает, когда с устройства приходит сигнал. Назначение кнопок и фейдеров на команды — следующий шаг.</p>
+              <div id="midi-list" class="midi-list"></div>
+              <p id="midi-status" class="audio-hint compact"></p>
+            </section>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <span class="modal-actions-spacer"></span>
+          <button id="settings-close" class="primary">Готово</button>
         </div>
       </div>
     </div>

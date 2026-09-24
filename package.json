@@ -1,6 +1,6 @@
 {
   "name": "cue-deck",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "Presentation operator tool for live events — speaker playlist, per-speaker timers, confidence monitor, blackout",
   "author": "Azat Khusaenov",
   "main": "out/main/index.js",
@@ -11,6 +11,7 @@
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
+    "companion:build": "vite-node companion/build.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "package:mac": "electron-vite build && electron-builder --mac --publish=never && node scripts/rename-mac.cjs",

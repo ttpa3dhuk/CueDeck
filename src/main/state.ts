@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'
+import { DEFAULT_REMOTE_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'
 import type { AppState, DeckState, Role, TimerState, VideoState } from '../shared/types.js'
 
 // Canonical definitions live in src/shared/types.ts (shared with preload/renderer).
@@ -12,6 +12,8 @@ export type {
   ListMode,
   LiveFit,
   PlaylistEntry,
+  RemoteSettings,
+  RemoteStatus,
   SlideMedia,
   SlideMediaRect,
   TimerMode,
@@ -59,6 +61,11 @@ export function initialState(): AppState {
     timerMode: 'countdown',
     timerPosition: 'top-right',
     timerScale: 1,
+    timerFree: { x: 0.85, y: 0.12 },
+    timerColor: null,
+    timerWarnColors: true,
+    speakerLayout: { sidebarPct: 37, nextPct: null },
+    speakerMsgLayout: { pos: null, scale: 1 },
     videoTakeMode: 'play-start',
     slideTakeMode: 'from-start',
     notesFontSize: 18,
@@ -89,7 +96,17 @@ export function initialState(): AppState {
     clickerGlobal: false,
     clickerGlobalArrows: false,
     outputMonitorsEnabled: true,
-    uiTheme: 'dark',
+    uiTheme: 'light',
+    remote: {
+      ...DEFAULT_REMOTE_SETTINGS,
+      http: 'off',
+      osc: 'off',
+      httpError: null,
+      oscError: null,
+      hosts: [],
+      companion: 'off',
+      companionError: null,
+    },
   }
 }
 

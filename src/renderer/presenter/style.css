@@ -784,6 +784,20 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   align-items: center;
   gap: 6px;
 }
+/* Номер записи для кнопок Stream Deck «playlist/select/N» (remote-on — только
+   при включённом внешнем управлении). Счётчик сам пересчитывается при
+   перетаскивании — JS не нужен. */
+.playlist-list { counter-reset: pl; }
+.playlist-item { counter-increment: pl; }
+body.remote-on .playlist-item .row::before {
+  content: counter(pl);
+  min-width: 18px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .playlist-item .drag-handle {
   color: var(--muted);
   font-size: 14px;
@@ -1475,6 +1489,8 @@ body[data-role="operator"] #current-slide {
   gap: 6px;
 }
 .bottombar button { white-space: nowrap; }
+/* Нижняя панель — одни значки (просьба Азата 2026-09-24); подпись — в title. */
+.bottombar .icon-btn { min-width: 34px; padding: 4px 8px; font-size: 16px; line-height: 1; text-align: center; }
 
 .banner {
   position: fixed;
@@ -1703,6 +1719,126 @@ body[data-role="operator"] #current-slide {
   font-size: 12px;
 }
 
+/* Окно «Настройки»: разделы слева, содержимое справа. Новые разделы — кнопка
+   в .settings-nav + section[data-section] с тем же именем. */
+.settings-modal-content { width: 760px; gap: 12px; }
+/* Высота постоянная: окно не прыгает при смене раздела, длинные разделы скроллятся. */
+.settings-layout { display: flex; gap: 16px; height: min(520px, 70vh); }
+.settings-body { overflow-y: auto; }
+.settings-nav { display: flex; flex-direction: column; gap: 4px; width: 180px; flex-shrink: 0; }
+.settings-nav button { text-align: left; }
+.settings-nav button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.settings-body { flex: 1; min-width: 0; }
+.settings-section { display: flex; flex-direction: column; gap: 8px; }
+.midi-list { display: flex; flex-direction: column; gap: 4px; }
+/* «Настройки → Суфлёр»: макет экрана суфлёра с перетаскиваемым таймером. */
+.prompter-stage {
+  position: relative;
+  height: 260px;
+  max-width: 100%;
+  aspect-ratio: var(--ps-ratio, 16 / 9);
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  user-select: none;
+}
+/* Зоны — в пропорциях настоящего экрана суфлёра (слайд слева, справа «Дальше» и «Заметки»). */
+.prompter-stage .ps-zone {
+  position: absolute;
+  border: 1px dashed #333; color: #444; font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+}
+.prompter-stage .ps-slide { left: 1%; top: 6%; width: 59%; height: 92%; }
+.prompter-stage .ps-next { left: 61%; top: 6%; width: 38%; height: 39%; }
+.prompter-stage .ps-notes { left: 61%; top: 46.5%; width: 38%; height: 51.5%; }
+.prompter-timer {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-weight: 700; line-height: 1; white-space: nowrap;
+  background: rgba(255, 255, 255, 0.08);
+  outline: 1px dashed var(--accent);
+  border-radius: 4px;
+  color: var(--timer-green);
+  cursor: grab;
+  font-variant-numeric: tabular-nums;
+}
+.prompter-timer.dragging { cursor: grabbing; }
+.prompter-timer.off { opacity: 0.3; }
+/* Слои макета: границы колонок < таймер < сообщение. В ⛶ таймер мышь не ловит — там его не тащат. */
+.prompter-timer { z-index: 2; }
+.prompter-timer.full { background: transparent; outline-style: dotted; cursor: default; pointer-events: none; }
+.prompter-timer .pt-handle {
+  position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px;
+  background: var(--accent); border-radius: 2px; cursor: nwse-resize;
+}
+.prompter-timer.full .pt-handle { display: none; }
+.prompter-msg {
+  position: absolute; transform: translate(-50%, -50%);
+  background: var(--danger); color: #fff; font-weight: 800; line-height: 1.15;
+  white-space: nowrap; cursor: grab; outline: 1px dashed #fff; text-align: center;
+  max-width: 90%; overflow: hidden; text-overflow: ellipsis;
+}
+.prompter-msg { z-index: 3; }
+/* Обе плашки макета одинаково «живые»: яркие всегда, под курсором — рамка,
+   пока тащишь — свечение. Тусклое сообщение только в ⛶: суфлёр его там прячет. */
+.prompter-msg.idle { opacity: 0.9; }
+.prompter-msg.masked { opacity: 0.3; }
+.prompter-timer:hover, .prompter-msg:hover {
+  outline: 2px solid var(--accent);
+  box-shadow: 0 0 0 4px rgba(76, 139, 245, 0.25);
+}
+.prompter-timer.dragging, .prompter-msg.dragging {
+  outline: 2px solid #fff;
+  box-shadow: 0 0 0 6px rgba(76, 139, 245, 0.45), 0 0 24px rgba(76, 139, 245, 0.6);
+  filter: brightness(1.15);
+}
+.prompter-msg .pt-handle { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; background: #fff; border-radius: 2px; cursor: nwse-resize; }
+.ps-vdiv, .ps-hdiv { position: absolute; z-index: 1; background: transparent; }
+.ps-vdiv { width: 10px; transform: translateX(-50%); cursor: col-resize; }
+.ps-hdiv { height: 10px; transform: translateY(-50%); cursor: row-resize; }
+.ps-vdiv:hover, .ps-hdiv:hover, .ps-vdiv.dragging, .ps-hdiv.dragging { background: rgba(76, 139, 245, 0.35); }
+.color-swatches { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.color-swatch { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; }
+.color-swatch.active { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.color-swatch.auto { background: conic-gradient(var(--timer-green) 0 33%, var(--timer-yellow) 0 66%, var(--timer-red) 0); }
+#timer-color-input { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+.midi-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.midi-row.gone { opacity: 0.5; }
+.midi-row .midi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.midi-row .midi-meta { color: var(--muted); font-size: 12px; }
+.midi-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background 0.25s; }
+.midi-dot.hit { background: var(--timer-green); transition: none; }
+
+/* Внешнее управление (Stream Deck / Companion / OSC) — раздел окна «Настройки» */
+.remote-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.remote-port { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.remote-port input {
+  width: 72px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.remote-row.remote-status-row { flex-wrap: nowrap; }
+.remote-status-row button { white-space: nowrap; flex-shrink: 0; }
+.remote-section.off .remote-row:first-of-type { opacity: 0.55; }
+.remote-status { font-size: 12px; color: var(--muted); }
+.remote-status-lines { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.remote-port input.remote-host { width: 130px; }
+.remote-status.on { color: var(--timer-green); }
+.remote-status.error { color: var(--danger); }
+
 /* Speaker role overrides */
 body[data-role="speaker"] .op-only { display: none !important; }
 body[data-role="speaker"] .topbar { background: transparent; border-bottom: none; }
@@ -1735,6 +1871,23 @@ body[data-role="speaker"][data-timer-position="bottom-left"] .timer { bottom: 24
 body[data-role="speaker"][data-timer-position="bottom-right"] .timer { bottom: 24px; right: 24px; }
 /* Суфлёр через vMix — режиссёр накладывает свой таймер, наш убираем */
 body[data-role="speaker"][data-timer-position="hidden"] .timer { display: none; }
+/* Свой цвет таймера на суфлёре («Настройки → Суфлёр»): переменные ставит applyState. */
+body[data-role="speaker"] .timer.green { color: var(--speaker-timer-green, var(--timer-green)); }
+body[data-role="speaker"] .timer.yellow { color: var(--speaker-timer-yellow, var(--timer-yellow)); }
+body[data-role="speaker"] .timer.red { color: var(--speaker-timer-red, var(--timer-red)); }
+/* Сообщение спикеру, перетащенное на макете: центр в долях экрана. */
+body[data-msg-free="1"] .speaker-message {
+  left: calc(var(--msg-x, 0.5) * 100%);
+  top: calc(var(--msg-y, 0.15) * 100%);
+  transform: translate(-50%, -50%);
+}
+/* Свободно: центр таймера — в долях экрана (--timer-x/--timer-y из AppState.timerFree). */
+body[data-role="speaker"][data-timer-position="free"] .timer {
+  left: calc(var(--timer-x, 0.85) * 100%);
+  top: calc(var(--timer-y, 0.12) * 100%);
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
 
 /* «Только таймер» (⛶): весь экран суфлёра — чистый таймер на чёрном. Этот выход
    уходит по HDMI/NDI в микшер (Resolume/vMix), там его кадрируют и накладывают
@@ -1840,11 +1993,11 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   transform: translateX(-50%);
   max-width: 90vw;
   z-index: 50;
-  padding: 20px 44px;
-  border-radius: 16px;
+  padding: calc(20px * var(--msg-scale, 1)) calc(44px * var(--msg-scale, 1));
+  border-radius: calc(16px * var(--msg-scale, 1));
   background: var(--danger);
   color: #fff;
-  font-size: 64px;
+  font-size: calc(64px * var(--msg-scale, 1));
   font-weight: 800;
   line-height: 1.15;
   text-align: center;

@@ -66,6 +66,9 @@ const api: PresenterApi = {
     setMode: (mode) => ipcRenderer.invoke('timer:set-mode', mode),
     setPosition: (pos) => ipcRenderer.invoke('timer:set-position', pos),
     setScale: (scale) => ipcRenderer.invoke('timer:set-scale', scale),
+    setFree: (x, y) => ipcRenderer.invoke('timer:set-free', x, y),
+    setColor: (color) => ipcRenderer.invoke('timer:set-color', color),
+    setWarnColors: (on) => ipcRenderer.invoke('timer:set-warn-colors', on),
     setTickSound: (enabled) => ipcRenderer.invoke('timer:set-tick-sound', enabled),
     setGongSound: (enabled) => ipcRenderer.invoke('timer:set-gong-sound', enabled),
     setLoop: (enabled) => ipcRenderer.invoke('timer:set-loop', enabled),
@@ -75,6 +78,7 @@ const api: PresenterApi = {
     toggle: () => ipcRenderer.invoke('blackout:toggle'),
   },
   speakerMessage: {
+    setLayout: (layout) => ipcRenderer.invoke('speaker-message:set-layout', layout),
     set: (text) => ipcRenderer.invoke('speaker-message:set', text),
     setPresets: (presets) => ipcRenderer.invoke('speaker-message:set-presets', presets),
   },
@@ -112,6 +116,18 @@ const api: PresenterApi = {
   },
   ui: {
     setTheme: (theme) => ipcRenderer.invoke('ui:set-theme', theme),
+  },
+  prompter: {
+    setLayout: (layout) => ipcRenderer.invoke('prompter:set-layout', layout),
+  },
+  midi: {
+    getEnabled: () => ipcRenderer.invoke('midi:get-enabled'),
+    setEnabled: (names) => ipcRenderer.invoke('midi:set-enabled', names),
+  },
+  remote: {
+    configure: (settings) => ipcRenderer.invoke('remote:configure', settings),
+    openHelp: () => ipcRenderer.invoke('remote:open-help'),
+    saveCompanionPage: () => ipcRenderer.invoke('remote:save-companion-page'),
   },
   files: {
     // Sandboxed renderer has no File.path (removed in Electron 32) — this is
@@ -159,6 +175,11 @@ const api: PresenterApi = {
       const listener = () => cb()
       ipcRenderer.on('menu:open-display-setup', listener)
       return () => ipcRenderer.removeListener('menu:open-display-setup', listener)
+    },
+    onOpenSettings: (cb) => {
+      const listener = () => cb()
+      ipcRenderer.on('menu:open-settings', listener)
+      return () => ipcRenderer.removeListener('menu:open-settings', listener)
     },
     onTopologyChanged: (cb) => {
       const listener = () => cb()
@@ -214,6 +235,7 @@ const api: PresenterApi = {
     restore: () => ipcRenderer.invoke('session:restore'),
   },
   soffice: {
+    current: () => ipcRenderer.invoke('soffice:current'),
     check: () => ipcRenderer.invoke('soffice:check'),
     recheck: () => ipcRenderer.invoke('soffice:recheck'),
     paths: () => ipcRenderer.invoke('soffice:paths'),

@@ -6,6 +6,7 @@ import { Readable } from 'node:stream'
 import { DONATE_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
 import { initDiag, instrumentIpc, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
+import { captureIpcHandlers, initRemote, registerRemoteIpc } from './remote/server.js'
 import { askBootLayout } from './boot-dialog.js'
 import { showNagDialog } from './nag-dialog.js'
 import { attachOperatorCloseGuard, requestQuit } from './quit-guard.js'
@@ -22,6 +23,11 @@ import {
   getTimerMode,
   getTimerPosition,
   getTimerScale,
+  getTimerFree,
+  getTimerColor,
+  getTimerWarnColors,
+  getSpeakerLayout,
+  getSpeakerMsgLayout,
   getVideoTakeMode,
   getSlideTakeMode,
   getNotesFontSize,
@@ -158,9 +164,9 @@ function buildMenu(): void {
               { role: 'about' },
               { type: 'separator' },
               {
-                label: 'Display Setup…',
+                label: 'Настройки…',
                 accelerator: 'CmdOrCtrl+,',
-                click: () => sendToOperator('menu:open-display-setup'),
+                click: () => sendToOperator('menu:open-settings'),
               },
               { type: 'separator' },
               { role: 'hide' },
@@ -320,8 +326,12 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionCheckHandler(() => true)
 
   instrumentIpc()
+  // Внешнее управление зовёт те же обработчики, что и кнопки оператора, —
+  // запоминаем их при регистрации (remote/server.ts).
+  captureIpcHandlers()
   registerIpcHandlers()
   registerDiagIpc()
+  registerRemoteIpc()
   buildMenu()
 
   /**
@@ -360,6 +370,11 @@ app.whenReady().then(async () => {
     timerMode: getTimerMode(),
     timerPosition: getTimerPosition(),
     timerScale: getTimerScale(),
+    timerFree: getTimerFree(),
+    timerColor: getTimerColor(),
+    timerWarnColors: getTimerWarnColors(),
+    speakerLayout: getSpeakerLayout(),
+    speakerMsgLayout: getSpeakerMsgLayout(),
     videoTakeMode: getVideoTakeMode(),
     slideTakeMode: getSlideTakeMode(),
     notesFontSize: getNotesFontSize(),
@@ -386,6 +401,10 @@ app.whenReady().then(async () => {
       }
     })(),
   })
+
+  // Слушатели Stream Deck / Companion — до диалогов старта: пока оператор
+  // выбирает раскладку, кнопки уже должны отвечать, а не сыпать ошибками.
+  await initRemote()
 
   setOperatorWindowHook(attachOperatorCloseGuard)
   await bootNag()

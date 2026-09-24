@@ -18,7 +18,7 @@ import { elementAudioStream, LiveMeter, LivePool, LiveView, listMediaDevices } f
 import { liveDisplayName, liveFitFor, parseLiveUri } from '../../shared/live'
 import { WINDOW_TITLES } from '../../shared/window-titles'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
-import type { ListMode } from '../../shared/types'
+import type { ListMode, RemoteStatus, UiTheme } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
 import type {
   AppState,
@@ -144,7 +144,9 @@ const nextEmpty = $('next-empty')
 const notesInput = $<HTMLTextAreaElement>('notes-input')
 const notesReadonly = $('notes-readonly')
 const banner = $('banner')
-const setupModal = $('setup-modal')
+// Раздел «Экраны» окна «Настройки» (бывшая модалка «Настройка экранов»).
+const setupModal = $('setup-section')
+const settingsModal = $('settings-modal')
 
 let docLoaded = false
 let lastRenderedSlide = -1
@@ -178,7 +180,6 @@ const slideTakeModeSelect = isOperator ? $<HTMLSelectElement>('slide-take-mode')
 
 // ── Мониторы выходов + тема оператора ─────────────────────────────────────
 const outputMonitors = isOperator ? $('output-monitors') : null
-const themeToggleBtn = isOperator ? $<HTMLButtonElement>('theme-toggle') : null
 
 // ── Speaker flash message (1.1) ────────────────────────────────────────────
 const speakerMessageOverlay = $('speaker-message')
@@ -1398,6 +1399,9 @@ function updateOutputMonitors(state: AppState): void {
 }
 
 function applyState(state: AppState): void {
+  // Номера на карточках плейлиста — только при внешнем управлении: по ним
+  // настраивают кнопки «запись N» на Stream Deck (CSS-счётчик, style.css).
+  if (isOperator) document.body.classList.toggle('remote-on', state.remote.enabled)
   if (state.pdfPath) {
     slidePlaceholder.classList.add('hidden')
     pdfName.textContent =
@@ -1489,6 +1493,10 @@ function applyState(state: AppState): void {
     '--timer-scale',
     String(state.timerScale),
   )
+  document.documentElement.style.setProperty('--timer-x', String(state.timerFree.x))
+  document.documentElement.style.setProperty('--timer-y', String(state.timerFree.y))
+  applyPrompterVars(state)
+  if (isOperator && !settingsModal.classList.contains('hidden')) renderPrompterMock(state)
   const notesFontValueEl = document.getElementById('notes-font-value')
   if (notesFontValueEl) notesFontValueEl.textContent = String(state.notesFontSize)
   const scaleValueEl = document.getElementById('timer-scale-value')
@@ -1529,11 +1537,6 @@ function applyState(state: AppState): void {
 
   if (isOperator) {
     document.body.dataset.theme = state.uiTheme
-    if (themeToggleBtn) {
-      themeToggleBtn.textContent = state.uiTheme === 'dark' ? '☀️ Светлая' : '🌙 Тёмная'
-      themeToggleBtn.title =
-        state.uiTheme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'
-    }
     updateOutputMonitors(state)
   }
 }
@@ -1868,7 +1871,7 @@ function dispatchHotkey(action: string): void {
 }
 
 let capturingHotkey: { actionId: string; btn: HTMLButtonElement } | null = null
-function openHotkeysModal(): void {
+function renderHotkeysSection(): void {
   const list = $('hotkeys-list')
   list.innerHTML = ''
   for (const a of HOTKEY_ACTIONS) {
@@ -1889,11 +1892,11 @@ function openHotkeysModal(): void {
     row.append(lbl, key)
     list.appendChild(row)
   }
-  $('hotkeys-modal').classList.remove('hidden')
 }
-function closeHotkeysModal(): void {
+/** Ушли из раздела / закрыли настройки — перехват клавиши отменяется. */
+function cancelHotkeyCapture(): void {
+  capturingHotkey?.btn.classList.remove('capturing')
   capturingHotkey = null
-  $('hotkeys-modal').classList.add('hidden')
 }
 
 // Клавиши глушим только когда пользователь реально печатает (текст/число),
@@ -2057,12 +2060,7 @@ function setupOperatorControls(): void {
   timerToggle.addEventListener('click', toggleTimer)
   timerReset.addEventListener('click', () => window.api.timer.reset())
   blackoutToggle.addEventListener('click', () => window.api.blackout.toggle())
-  $('display-setup').addEventListener('click', openSetup)
-  $('audio-setup').addEventListener('click', () => { openAudioModal().catch(() => undefined) })
-  $('audio-close').addEventListener('click', () => $('audio-modal').classList.add('hidden'))
-  $('theme-toggle').addEventListener('click', () => {
-    window.api.ui.setTheme(getState().uiTheme === 'dark' ? 'light' : 'dark')
-  })
+  $('settings-btn').addEventListener('click', () => openSettings())
 
   // Duration inputs (мин + сек) — debounced, коммитим сумму обоих полей
   let durDebounce: number | null = null
@@ -2434,6 +2432,11 @@ function setupOperatorControls(): void {
 
   // Отчёт о проблеме + маркеры (diag)
   window.api.menu.onReport(() => void openReportModal())
+  // Статус внешнего управления меняется и без модалки (порт освободился после
+  // рестарта и т. п.) — если «Настройка экранов» открыта, обновляем строку.
+  subscribe((s, patch) => {
+    if (patch?.remote && !settingsModal.classList.contains('hidden')) renderRemoteStatus(s.remote)
+  })
   $('report-close').addEventListener('click', hideReportModal)
   $('report-save').addEventListener('click', () => void saveReport())
   // Из текстового поля: Cmd/Ctrl+Enter — сохранить, Esc — закрыть.
@@ -2458,9 +2461,7 @@ function setupOperatorControls(): void {
   }
 
   // Hotkeys editor
-  $<HTMLButtonElement>('hotkeys-btn').addEventListener('click', openHotkeysModal)
-  $<HTMLButtonElement>('hotkeys-close').addEventListener('click', closeHotkeysModal)
-  $<HTMLButtonElement>('hotkeys-reset').addEventListener('click', () => { resetHotkeys(); openHotkeysModal() })
+  $<HTMLButtonElement>('hotkeys-reset').addEventListener('click', () => { resetHotkeys(); renderHotkeysSection() })
   // Capture phase: intercept the next key while rebinding so it doesn't trigger an action.
   window.addEventListener('keydown', (e) => {
     if (!capturingHotkey) return
@@ -2468,7 +2469,7 @@ function setupOperatorControls(): void {
     e.stopPropagation()
     if (e.code !== 'Escape') saveHotkey(capturingHotkey.actionId, e.code)
     capturingHotkey = null
-    openHotkeysModal()
+    renderHotkeysSection()
   }, true)
 
   // Project menu (from macOS menubar)
@@ -2596,16 +2597,17 @@ function setupOperatorControls(): void {
   })
 
   window.api.menu.onOpenPdf(openPdf)
-  window.api.menu.onOpenDisplaySetup(openSetup)
+  window.api.menu.onOpenDisplaySetup(() => openSettings('screens'))
+  window.api.menu.onOpenSettings(() => openSettings('screens'))
   window.api.menu.onTopologyChanged(() => {
-    showBanner('Раскладка экранов изменилась. Cmd+, для переназначения.')
+    showBanner('Раскладка экранов изменилась. ⚙️ Настройки → Экраны (Cmd+,) — переназначить.')
   })
 }
 
-async function openSetup(): Promise<void> {
+/** Раздел «Экраны»: список дисплеев свежий на каждое открытие. */
+async function renderScreensSection(): Promise<void> {
   const displays = await window.api.displays.list()
   buildSetupModal(displays)
-  setupModal.classList.remove('hidden')
 }
 
 async function listAudioOutputs(): Promise<MediaDeviceInfo[]> {
@@ -2848,11 +2850,9 @@ async function confirmLiveModal(): Promise<void> {
   }
 }
 
-async function openAudioModal(): Promise<void> {
-  const modal = $('audio-modal')
+async function renderAudioSection(): Promise<void> {
   const list = $('audio-device-list')
   list.innerHTML = '<div class="audio-loading">Поиск устройств…</div>'
-  modal.classList.remove('hidden')
 
   const previewList = $('audio-preview-list')
   const outs = await listAudioOutputs()
@@ -2916,8 +2916,9 @@ function buildSetupModal(displays: DisplayInfo[]): void {
   })
   renderRoleMapping(state.layout, displays, state.displayMap)
   updateWindowedSection(state.layout)
-
-  $<HTMLButtonElement>('setup-cancel').onclick = () => setupModal.classList.add('hidden')
+  // «Отмена» и «Применить» касаются только раздела «Экраны»: раскладка
+  // пересобирает окна, поэтому она не применяется на лету, как остальное.
+  $<HTMLButtonElement>('setup-cancel').onclick = closeSettings
   $<HTMLButtonElement>('setup-apply').onclick = async () => {
     const selectedLayout = Array.from(layoutInputs).find((i) => i.checked)?.value as Layout
     const mapping: DisplayMap = {}
@@ -2925,11 +2926,566 @@ function buildSetupModal(displays: DisplayInfo[]): void {
       const r = sel.dataset.role as Role
       mapping[r] = Number(sel.value)
     })
-    setupModal.classList.add('hidden')
+    closeSettings()
     await window.api.layout.setAskOnStartup(askLayoutToggle.checked)
     await window.api.monitor.setEnabled(monitorsToggle.checked)
     await window.api.layout.set(selectedLayout, mapping, windowedToggle.checked)
   }
+}
+
+// ── Окно «Настройки» ─────────────────────────────────────────────────────────
+// Разделы слева, содержимое справа. Всё применяется сразу, кроме раздела
+// «Экраны»: смена раскладки пересобирает окна — там своя кнопка «Применить».
+
+type SettingsSection = 'screens' | 'prompter' | 'clicker' | 'audio' | 'hotkeys' | 'ui' | 'lo' | 'remote' | 'midi'
+let settingsWired = false
+
+function showSettingsSection(name: SettingsSection): void {
+  settingsModal.querySelectorAll<HTMLButtonElement>('.settings-nav button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.section === name)
+  })
+  settingsModal.querySelectorAll<HTMLElement>('.settings-section').forEach((sec) => {
+    sec.classList.toggle('hidden', sec.dataset.section !== name)
+  })
+  if (name !== 'hotkeys') cancelHotkeyCapture()
+  if (name === 'screens') void renderScreensSection()
+  if (name === 'prompter') void openPrompterSection()
+  if (name === 'audio') void renderAudioSection().catch(() => undefined)
+  if (name === 'hotkeys') renderHotkeysSection()
+  if (name === 'ui') renderUiSection()
+  if (name === 'lo') void renderLoSection()
+  if (name === 'midi') void renderMidiSection()
+}
+
+function closeSettings(): void {
+  cancelHotkeyCapture()
+  settingsModal.classList.add('hidden')
+}
+
+function renderUiSection(): void {
+  const theme = getState().uiTheme
+  settingsModal.querySelectorAll<HTMLInputElement>('input[name="ui-theme"]').forEach((r) => {
+    r.checked = r.value === theme
+  })
+}
+
+async function renderLoSection(): Promise<void> {
+  const status = $('lo-settings-status')
+  const path = await window.api.soffice.current()
+  status.textContent = path ? `✅ Найден: ${path}` : '⚠ Не найден — PPTX не откроются.'
+  const pathsEl = $('lo-settings-paths')
+  if (path) {
+    pathsEl.classList.add('hidden')
+  } else {
+    const paths = await window.api.soffice.paths()
+    pathsEl.textContent = `Искали здесь: ${paths.join(' · ')} — а также по PATH. Установить: libreoffice.org.`
+    pathsEl.classList.remove('hidden')
+  }
+}
+
+function openSettings(section: SettingsSection = 'screens'): void {
+  if (!settingsWired) {
+    settingsWired = true
+    settingsModal.querySelectorAll<HTMLButtonElement>('.settings-nav button').forEach((b) => {
+      b.addEventListener('click', () => showSettingsSection(b.dataset.section as SettingsSection))
+    })
+    $('settings-close').addEventListener('click', closeSettings)
+    settingsModal.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeSettings()
+    })
+    settingsModal.querySelectorAll<HTMLInputElement>('input[name="ui-theme"]').forEach((r) => {
+      r.addEventListener('change', () => { if (r.checked) void window.api.ui.setTheme(r.value as UiTheme) })
+    })
+    $('lo-settings-recheck').addEventListener('click', async () => {
+      await recheckLibreOffice()
+      void renderLoSection()
+    })
+    $('lo-settings-pick').addEventListener('click', async () => {
+      await pickLibreOffice()
+      void renderLoSection()
+    })
+  }
+  wireRemoteSection(getState().remote)
+  showSettingsSection(section)
+  settingsModal.classList.remove('hidden')
+}
+
+// ── Суфлёр (раздел «Настройки → Суфлёр») ────────────────────────────────────
+// Макет экрана суфлёра в его пропорциях. Таймер тащится мышкой (→ режим
+// 'free', центр в долях экрана), размер — уголком или колёсиком (timerScale).
+// Геометрия копирует CSS суфлёра: кегль 88px·scale, поля 14/24px·scale,
+// угловые отступы 24px — всё умножено на k = высота макета / высота экрана.
+
+let prompterScreenH = 1080
+/** Суфлёр тянет свой сплиттер — состояние не должно перебивать переменную на ходу. */
+let speakerSplitterDragging = false
+let prompterWired = false
+let prompterTextTimer: number | null = null
+
+async function openPrompterSection(): Promise<void> {
+  const state = getState()
+  const displays = await window.api.displays.list().catch(() => [] as DisplayInfo[])
+  const id = state.displayMap.speaker
+  const d = displays.find((x) => x.id === id)
+  const w = d?.bounds.width ?? 1920
+  const h = d?.bounds.height ?? 1080
+  prompterScreenH = h
+  $('prompter-stage').style.setProperty('--ps-ratio', `${w} / ${h}`)
+  if (!prompterWired) wirePrompterMock()
+  renderPrompterMock(getState())
+  if (prompterTextTimer) window.clearInterval(prompterTextTimer)
+  prompterTextTimer = window.setInterval(() => {
+    if (settingsModal.classList.contains('hidden')) {
+      window.clearInterval(prompterTextTimer!)
+      prompterTextTimer = null
+      return
+    }
+    const s = getState()
+    $('prompter-timer').firstChild!.textContent = timerView(s.timer, s.timerMode).text
+  }, 500)
+}
+
+/**
+ * Переменные суфлёра из состояния: цвет таймера, колонки, сообщение спикеру.
+ * Ставятся во всех окнах (в чужих они просто не используются).
+ */
+function applyPrompterVars(state: AppState): void {
+  const root = document.documentElement.style
+  const c = state.timerColor
+  const setOrClear = (name: string, v: string | null): void => {
+    if (v) root.setProperty(name, v)
+    else root.removeProperty(name)
+  }
+  setOrClear('--speaker-timer-green', c)
+  setOrClear('--speaker-timer-yellow', c && !state.timerWarnColors ? c : null)
+  setOrClear('--speaker-timer-red', c && !state.timerWarnColors ? c : null)
+  if (!speakerSplitterDragging) {
+    root.setProperty('--speaker-sidebar', `${state.speakerLayout.sidebarPct}%`)
+    setOrClear('--speaker-next-h', state.speakerLayout.nextPct === null ? null : `${state.speakerLayout.nextPct}%`)
+  }
+  const m = state.speakerMsgLayout
+  root.setProperty('--msg-scale', String(m.scale))
+  if (m.pos) {
+    document.body.dataset.msgFree = '1'
+    root.setProperty('--msg-x', String(m.pos.x))
+    root.setProperty('--msg-y', String(m.pos.y))
+  } else {
+    delete document.body.dataset.msgFree
+  }
+}
+
+/** Цвет цифр на макете — ровно как на суфлёре. */
+function prompterTimerColor(state: AppState, color: TimerView['color']): string {
+  const c = state.timerColor
+  if (c && (color === 'green' || !state.timerWarnColors)) return c
+  if (color === 'neutral') return '#fff'
+  return `var(--timer-${color})`
+}
+
+// Зоны макета (доли), пересчитываются из speakerLayout.
+const PS_TOP = 0.06
+const PS_H = 0.92
+
+function renderPrompterMock(state: AppState): void {
+  const stage = $('prompter-stage')
+  const el = $('prompter-timer')
+  const msg = $('prompter-msg')
+  const H = stage.clientHeight
+  const W = stage.clientWidth
+  if (!H) return
+  const k = H / prompterScreenH
+
+  // Колонки: слайд | «Дальше» / «Заметки»
+  const side = state.speakerLayout.sidebarPct / 100
+  const next = (state.speakerLayout.nextPct ?? 50) / 100
+  const zone = (sel: string, l: number, t: number, w: number, h: number): void => {
+    const z = stage.querySelector<HTMLElement>(sel)!
+    z.style.left = `${l * 100}%`
+    z.style.top = `${t * 100}%`
+    z.style.width = `${w * 100}%`
+    z.style.height = `${h * 100}%`
+  }
+  zone('.ps-slide', 0.01, PS_TOP, 1 - side - 0.02, PS_H)
+  zone('.ps-next', 1 - side, PS_TOP, side - 0.01, PS_H * next - 0.005)
+  zone('.ps-notes', 1 - side, PS_TOP + PS_H * next + 0.005, side - 0.01, PS_H * (1 - next) - 0.005)
+  const vdiv = stage.querySelector<HTMLElement>('.ps-vdiv')!
+  vdiv.style.left = `${(1 - side - 0.005) * 100}%`
+  vdiv.style.top = `${PS_TOP * 100}%`
+  vdiv.style.height = `${PS_H * 100}%`
+  const hdiv = stage.querySelector<HTMLElement>('.ps-hdiv')!
+  hdiv.style.left = `${(1 - side) * 100}%`
+  hdiv.style.width = `${(side - 0.01) * 100}%`
+  hdiv.style.top = `${(PS_TOP + PS_H * next) * 100}%`
+
+  // Сообщение спикеру
+  if (!msg.classList.contains('dragging')) {
+    const ml = state.speakerMsgLayout
+    msg.firstChild!.textContent = state.speakerMessage || state.speakerMsgPresets[0] || 'Сообщение спикеру'
+    msg.classList.toggle('idle', !state.speakerMessage)
+    // В «только таймер» суфлёр сообщение не показывает — на макете оно едва видно.
+    const masked = isFullTimer(state.timerPosition)
+    msg.classList.toggle('masked', masked)
+    msg.title = masked ? 'В режиме «только таймер» сообщение на суфлёре скрыто' : 'Потяни — положение; уголок или колёсико — размер'
+    msg.style.fontSize = `${64 * ml.scale * k}px`
+    msg.style.padding = `${20 * ml.scale * k}px ${44 * ml.scale * k}px`
+    msg.style.borderRadius = `${16 * ml.scale * k}px`
+    const mh = msg.offsetHeight
+    msg.style.left = `${(ml.pos ? ml.pos.x : 0.5) * W}px`
+    msg.style.top = `${ml.pos ? ml.pos.y * H : 64 * k + mh / 2}px`
+  }
+
+  // Таймер
+  if (el.classList.contains('dragging')) return
+  const sc = state.timerScale
+  const pos = state.timerPosition
+  const view = timerView(state.timer, state.timerMode)
+  el.firstChild!.textContent = view.text
+  el.style.color = prompterTimerColor(state, view.color)
+  el.classList.toggle('off', pos === 'hidden')
+  el.classList.toggle('full', pos === 'full' || pos === 'full-noflash')
+  el.style.fontSize = `${88 * sc * k}px`
+  el.style.padding = `${14 * sc * k}px ${24 * sc * k}px`
+  const m = 24 * k
+  const bw = el.offsetWidth
+  const bh = el.offsetHeight
+  let cx: number
+  let cy: number
+  if (pos === 'full' || pos === 'full-noflash') {
+    el.style.fontSize = `${Math.min(0.46 * H * sc, 0.8 * H)}px`
+    el.style.padding = '0'
+    cx = W / 2
+    cy = H / 2
+  } else if (pos === 'free' || pos === 'hidden') {
+    cx = state.timerFree.x * W
+    cy = state.timerFree.y * H
+  } else {
+    cx = pos.endsWith('left') ? m + bw / 2 : W - m - bw / 2
+    cy = pos.startsWith('top') ? m + bh / 2 : H - m - bh / 2
+  }
+  el.style.left = `${cx}px`
+  el.style.top = `${cy}px`
+
+  // Отметка выбранного цвета
+  document.querySelectorAll<HTMLButtonElement>('#timer-color-swatches .color-swatch').forEach((b) => {
+    b.classList.toggle('active', (b.dataset.color || null) === state.timerColor)
+  })
+  const warn = document.getElementById('timer-warn-colors') as HTMLInputElement | null
+  if (warn) warn.checked = state.timerWarnColors
+}
+
+function wirePrompterMock(): void {
+  prompterWired = true
+  const stage = $('prompter-stage')
+  const timerEl = $('prompter-timer')
+  const msgEl = $('prompter-msg')
+  let lastSent = 0
+  const throttled = (fn: () => void): void => {
+    const now = performance.now()
+    if (now - lastSent > 40) {
+      lastSent = now
+      fn()
+    }
+  }
+  const clampCenter = (el: HTMLElement, cx: number, cy: number): [number, number] => {
+    const W = stage.clientWidth
+    const H = stage.clientHeight
+    const hw = Math.min(el.offsetWidth / 2, W / 2)
+    const hh = Math.min(el.offsetHeight / 2, H / 2)
+    return [Math.min(W - hw, Math.max(hw, cx)) / W, Math.min(H - hh, Math.max(hh, cy)) / H]
+  }
+  const clampScale = (v: number, min: number, max: number): number => Math.max(min, Math.min(max, v))
+
+  /** Перетаскивание плашки: центр за курсором, координаты — доли макета. */
+  const draggable = (el: HTMLElement, canDrag: () => boolean, send: (x: number, y: number) => void): void => {
+    const handle = el.querySelector<HTMLElement>('.pt-handle')!
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target === handle || !canDrag()) return
+      e.preventDefault()
+      el.setPointerCapture(e.pointerId)
+      el.classList.add('dragging')
+      const r = el.getBoundingClientRect()
+      const offX = e.clientX - (r.left + r.width / 2)
+      const offY = e.clientY - (r.top + r.height / 2)
+      const at = (ev: PointerEvent): [number, number] => {
+        const s = stage.getBoundingClientRect()
+        return clampCenter(el, ev.clientX - offX - s.left, ev.clientY - offY - s.top)
+      }
+      const move = (ev: PointerEvent): void => {
+        const [x, y] = at(ev)
+        el.style.left = `${x * stage.clientWidth}px`
+        el.style.top = `${y * stage.clientHeight}px`
+        throttled(() => send(x, y))
+      }
+      const up = (ev: PointerEvent): void => {
+        el.removeEventListener('pointermove', move)
+        el.removeEventListener('pointerup', up)
+        el.classList.remove('dragging')
+        const [x, y] = at(ev)
+        send(x, y)
+      }
+      el.addEventListener('pointermove', move)
+      el.addEventListener('pointerup', up)
+    })
+  }
+
+  /** Уголок плашки: ширина за курсором, масштаб пропорционально (центр на месте → ×2). */
+  const resizable = (el: HTMLElement, get: () => number, send: (v: number) => void, min: number, max: number): void => {
+    const handle = el.querySelector<HTMLElement>('.pt-handle')!
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      handle.setPointerCapture(e.pointerId)
+      const startX = e.clientX
+      const startW = el.offsetWidth
+      const start = get()
+      const calc = (ev: PointerEvent): number =>
+        clampScale((start * (startW + (ev.clientX - startX) * 2)) / startW, min, max)
+      const move = (ev: PointerEvent): void => throttled(() => send(calc(ev)))
+      const up = (ev: PointerEvent): void => {
+        handle.removeEventListener('pointermove', move)
+        handle.removeEventListener('pointerup', up)
+        send(calc(ev))
+      }
+      handle.addEventListener('pointermove', move)
+      handle.addEventListener('pointerup', up)
+    })
+  }
+
+  // Таймер
+  draggable(timerEl, () => !isFullTimer(getState().timerPosition), (x, y) => void window.api.timer.setFree(x, y))
+  resizable(timerEl, () => getState().timerScale, (v) => void window.api.timer.setScale(v), 0.3, 4)
+
+  // Сообщение спикеру
+  const setMsg = (patch: Partial<AppState['speakerMsgLayout']>): void =>
+    void window.api.speakerMessage.setLayout({ ...getState().speakerMsgLayout, ...patch })
+  draggable(msgEl, () => true, (x, y) => setMsg({ pos: { x, y } }))
+  resizable(msgEl, () => getState().speakerMsgLayout.scale, (v) => setMsg({ scale: v }), 0.3, 3)
+  $('prompter-msg-reset').addEventListener('click', () => setMsg({ pos: null, scale: 1 }))
+
+  // Колёсико: над сообщением — его размер, в остальном макете — таймер.
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault()
+    const step = e.deltaY < 0 ? 0.05 : -0.05
+    if (msgEl.contains(e.target as Node)) {
+      setMsg({ scale: clampScale(getState().speakerMsgLayout.scale + step, 0.3, 3) })
+    } else {
+      void window.api.timer.setScale(getState().timerScale + step)
+    }
+  }, { passive: false })
+
+  // Границы колонок
+  const setLayout = (patch: Partial<AppState['speakerLayout']>): void =>
+    void window.api.prompter.setLayout({ ...getState().speakerLayout, ...patch })
+  const divDrag = (div: HTMLElement, calc: (ev: PointerEvent, s: DOMRect) => Partial<AppState['speakerLayout']>): void => {
+    div.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      div.setPointerCapture(e.pointerId)
+      div.classList.add('dragging')
+      const move = (ev: PointerEvent): void => throttled(() => setLayout(calc(ev, stage.getBoundingClientRect())))
+      const up = (ev: PointerEvent): void => {
+        div.removeEventListener('pointermove', move)
+        div.removeEventListener('pointerup', up)
+        div.classList.remove('dragging')
+        setLayout(calc(ev, stage.getBoundingClientRect()))
+      }
+      div.addEventListener('pointermove', move)
+      div.addEventListener('pointerup', up)
+    })
+  }
+  divDrag(stage.querySelector<HTMLElement>('.ps-vdiv')!, (ev, s) => ({
+    sidebarPct: clampScale(((s.right - ev.clientX) / s.width) * 100, 18, 60),
+  }))
+  divDrag(stage.querySelector<HTMLElement>('.ps-hdiv')!, (ev, s) => ({
+    nextPct: clampScale(((ev.clientY - s.top - PS_TOP * s.height) / (PS_H * s.height)) * 100, 15, 85),
+  }))
+  $('prompter-layout-reset').addEventListener('click', () => setLayout({ sidebarPct: 37, nextPct: null }))
+
+  // Цвет таймера: пресеты, «Свой…» — системная палитра (круг оттенков на маке).
+  document.querySelectorAll<HTMLButtonElement>('#timer-color-swatches .color-swatch').forEach((b) => {
+    b.addEventListener('click', () => void window.api.timer.setColor(b.dataset.color || null))
+  })
+  const picker = $<HTMLInputElement>('timer-color-input')
+  $('timer-color-custom').addEventListener('click', () => {
+    picker.value = getState().timerColor ?? '#3fce7c'
+    picker.click()
+  })
+  picker.addEventListener('input', () => throttled(() => void window.api.timer.setColor(picker.value)))
+  picker.addEventListener('change', () => void window.api.timer.setColor(picker.value))
+  $<HTMLInputElement>('timer-warn-colors').addEventListener('change', (e) => {
+    void window.api.timer.setWarnColors((e.target as HTMLInputElement).checked)
+  })
+
+  // Макет меняет ширину вместе с окном настроек — пересчитать геометрию.
+  new ResizeObserver(() => renderPrompterMock(getState())).observe(stage)
+}
+
+// ── MIDI (раздел «Настройки → MIDI») ─────────────────────────────────────────
+// Web MIDI Chromium — без нативных модулей и пересборки. Устройство
+// запоминается по имени, как камера живого входа: id у MIDI-портов меняется
+// при перевтыкании. Пока только выбор устройств и индикатор активности;
+// назначение кнопок на команды — PLAN 2.18, шаг 5.
+
+let midiAccess: MIDIAccess | null = null
+let midiEnabled: string[] = []
+
+async function renderMidiSection(): Promise<void> {
+  const status = $('midi-status')
+  if (!('requestMIDIAccess' in navigator)) {
+    status.textContent = 'MIDI в этой сборке недоступен.'
+    return
+  }
+  try {
+    midiEnabled = await window.api.midi.getEnabled()
+    if (!midiAccess) {
+      midiAccess = await navigator.requestMIDIAccess({ sysex: false })
+      midiAccess.onstatechange = () => renderMidiList()
+    }
+  } catch (err) {
+    status.textContent = `Нет доступа к MIDI: ${err instanceof Error ? err.message : String(err)}`
+    return
+  }
+  renderMidiList()
+}
+
+function renderMidiList(): void {
+  const list = $('midi-list')
+  const status = $('midi-status')
+  if (!midiAccess) return
+  const inputs = [...midiAccess.inputs.values()].filter((i) => i.state === 'connected')
+  const names = new Set(inputs.map((i) => i.name ?? ''))
+  list.textContent = ''
+
+  const row = (name: string, meta: string, present: boolean, input?: MIDIInput): void => {
+    const el = document.createElement('label')
+    el.className = 'midi-row' + (present ? '' : ' gone')
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'
+    cb.checked = midiEnabled.includes(name)
+    cb.onchange = () => {
+      midiEnabled = cb.checked ? [...new Set([...midiEnabled, name])] : midiEnabled.filter((n) => n !== name)
+      void window.api.midi.setEnabled(midiEnabled)
+    }
+    const dot = document.createElement('span')
+    dot.className = 'midi-dot'
+    const title = document.createElement('span')
+    title.className = 'midi-name'
+    title.textContent = name
+    const info = document.createElement('span')
+    info.className = 'midi-meta'
+    info.textContent = meta
+    el.append(cb, dot, title, info)
+    list.append(el)
+    if (input) {
+      input.onmidimessage = () => {
+        dot.classList.add('hit')
+        requestAnimationFrame(() => requestAnimationFrame(() => dot.classList.remove('hit')))
+      }
+    }
+  }
+
+  for (const i of inputs) row(i.name ?? 'без имени', i.manufacturer ?? '', true, i)
+  // Отмеченные, но сейчас не подключённые — чтобы галка не пропадала,
+  // пока устройство едет в кейсе.
+  for (const n of midiEnabled.filter((x) => !names.has(x))) row(n, 'не подключено', false)
+
+  status.textContent = inputs.length
+    ? `Подключено устройств: ${inputs.length}. Отмечено: ${midiEnabled.filter((n) => names.has(n)).length}.`
+    : 'MIDI-устройств не найдено. Подключи контроллер — список обновится сам.'
+}
+
+// ── Внешнее управление (Stream Deck / Companion / OSC, main/remote/) ─────────
+// В отличие от остальной модалки применяется сразу: оператор включает, видит
+// статус «работает» или «порт занят» и тут же открывает список команд.
+
+function wireRemoteSection(remote: RemoteStatus): void {
+  const toggle = $<HTMLInputElement>('remote-toggle')
+  const httpPort = $<HTMLInputElement>('remote-http-port')
+  const oscPort = $<HTMLInputElement>('remote-osc-port')
+  const lan = $<HTMLInputElement>('remote-lan')
+  const companion = $<HTMLInputElement>('remote-companion')
+  const companionHost = $<HTMLInputElement>('remote-companion-host')
+  toggle.checked = remote.enabled
+  companion.checked = remote.companionPush
+  companionHost.value = remote.companionHost
+  httpPort.value = String(remote.httpPort)
+  oscPort.value = String(remote.oscPort)
+  lan.checked = remote.lan
+  renderRemoteStatus(remote)
+
+  const commit = async (): Promise<void> => {
+    const res = await window.api.remote.configure({
+      enabled: toggle.checked,
+      httpPort: Number(httpPort.value),
+      oscPort: Number(oscPort.value),
+      lan: lan.checked,
+      companionPush: companion.checked,
+      companionHost: companionHost.value,
+    })
+    if (!res.ok) {
+      renderRemoteStatus(getState().remote, res.error)
+      return
+    }
+    // Мусор в порту main заменил прежним значением — показываем, что реально стоит.
+    httpPort.value = String(res.status.httpPort)
+    oscPort.value = String(res.status.oscPort)
+    companionHost.value = res.status.companionHost
+  }
+  toggle.onchange = () => void commit()
+  lan.onchange = () => void commit()
+  httpPort.onchange = () => void commit()
+  oscPort.onchange = () => void commit()
+  companion.onchange = () => void commit()
+  companionHost.onchange = () => void commit()
+  for (const input of [httpPort, oscPort, companionHost]) {
+    input.onkeydown = (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') input.blur()
+    }
+  }
+  $<HTMLButtonElement>('remote-help').onclick = () => void window.api.remote.openHelp()
+  $<HTMLButtonElement>('remote-companion-page').onclick = () => void window.api.remote.saveCompanionPage()
+}
+
+function renderRemoteStatus(r: RemoteStatus, error?: string): void {
+  const el = document.getElementById('remote-status')
+  if (!el) return
+  const comp = document.getElementById('remote-companion-status')
+  if (comp) {
+    comp.className = 'remote-status'
+    if (!r.enabled || !r.companionPush) comp.textContent = ''
+    else if (r.companion === 'on') {
+      comp.classList.add('on')
+      comp.textContent = `● Companion ${r.companionHost}: кнопки получают данные`
+    } else if (r.companion === 'error') {
+      comp.classList.add('error')
+      comp.textContent = `⚠ ${r.companionError ?? 'нет связи с Companion'}`
+    } else comp.textContent = `Companion ${r.companionHost}: подключаюсь…`
+  }
+  document.getElementById('remote-section')?.classList.toggle('off', !r.enabled)
+  const help = document.getElementById('remote-help') as HTMLButtonElement | null
+  if (help) help.disabled = r.http !== 'on'
+  el.className = 'remote-status'
+  if (error) {
+    el.classList.add('error')
+    el.textContent = `⚠ ${error}`
+    return
+  }
+  if (!r.enabled) {
+    el.textContent = 'Выключено'
+    return
+  }
+  const problems = [
+    r.httpError ? `HTTP: ${r.httpError}` : '',
+    r.oscError ? `OSC: ${r.oscError}` : '',
+  ].filter(Boolean)
+  if (problems.length) {
+    el.classList.add('error')
+    el.textContent = `⚠ ${problems.join(' · ')}`
+    return
+  }
+  el.classList.add('on')
+  const where = r.lan ? r.hosts.join(', ') : '127.0.0.1'
+  el.textContent = `● Работает — ${where} · HTTP ${r.httpPort} · OSC ${r.oscPort}`
 }
 
 function updateWindowedSection(layout: Layout): void {
@@ -2982,9 +3538,6 @@ function buildOperatorBottomBar(): void {
   const timerControlsRow = document.querySelector<HTMLElement>('.topbar-row.timer-controls')
   if (!notes || !timerControlsRow || !takeBtn) return
 
-  // Speaker-overlay controls that still live in the top bar — move them down too.
-  const scaleGroup = document.getElementById('timer-scale-down')?.closest('.group') as HTMLElement | null
-  const positionGroup = document.querySelector<HTMLElement>('.position-group')
 
   const timerBox = document.createElement('div')
   timerBox.className = 'bottom-timer'
@@ -3004,18 +3557,6 @@ function buildOperatorBottomBar(): void {
 
   timerBox.append(head, timerControlsRow)
 
-  // Row 3: speaker monitor size + corner (moved from the top bar).
-  if (scaleGroup || positionGroup) {
-    const speakerRow = document.createElement('div')
-    speakerRow.className = 'bt-speaker'
-    const lbl = document.createElement('span')
-    lbl.className = 'bt-speaker-label'
-    lbl.textContent = 'Суфлёр'
-    speakerRow.append(lbl)
-    if (scaleGroup) speakerRow.append(scaleGroup)
-    if (positionGroup) speakerRow.append(positionGroup)
-    timerBox.append(speakerRow)
-  }
 
   takeBtn.classList.add('take-big')
   // Order: timer (left), notes, speaker message, TAKE (far right).
@@ -3033,19 +3574,24 @@ function setupSpeakerSplitters(): void {
   const notes = sidebar?.querySelector<HTMLElement>('.notes')
   if (!sidebar || !notes) return
 
+  // Раньше размеры жили в localStorage окна суфлёра. Переносим их в общие
+  // настройки один раз — если там ещё значения по умолчанию.
+  try {
+    const oldW = Number(localStorage.getItem('cuedeck.speakerSideW'))
+    const oldH = Number(localStorage.getItem('cuedeck.speakerNextH'))
+    const cur = getState().speakerLayout
+    if ((oldW || oldH) && cur.sidebarPct === 37 && cur.nextPct === null) {
+      void window.api.prompter.setLayout({
+        sidebarPct: oldW >= 18 && oldW <= 60 ? oldW : 37,
+        nextPct: oldH >= 15 && oldH <= 85 ? oldH : null,
+      })
+    }
+    localStorage.removeItem('cuedeck.speakerSideW')
+    localStorage.removeItem('cuedeck.speakerNextH')
+  } catch { /* localStorage unavailable — ignore */ }
+
   const setVar = (name: string, pct: number): void =>
     document.documentElement.style.setProperty(name, `${pct}%`)
-  const restore = (key: string, name: string, min: number, max: number): void => {
-    try {
-      const saved = Number(localStorage.getItem(key))
-      if (saved >= min && saved <= max) setVar(name, saved)
-    } catch { /* localStorage unavailable — ignore */ }
-  }
-  const persist = (key: string, pct: number): void => {
-    try {
-      if (Number.isFinite(pct)) localStorage.setItem(key, String(pct))
-    } catch { /* ignore */ }
-  }
   const wireDrag = (handle: HTMLElement, onMove: (e: MouseEvent) => void, onDone: () => void): void => {
     let dragging = false
     const move = (e: MouseEvent): void => {
@@ -3054,6 +3600,7 @@ function setupSpeakerSplitters(): void {
     const up = (): void => {
       if (!dragging) return
       dragging = false
+      speakerSplitterDragging = false
       document.removeEventListener('mousemove', move)
       document.removeEventListener('mouseup', up)
       document.body.style.userSelect = ''
@@ -3064,6 +3611,7 @@ function setupSpeakerSplitters(): void {
     }
     handle.addEventListener('mousedown', (e) => {
       dragging = true
+      speakerSplitterDragging = true
       document.body.style.userSelect = 'none'
       document.addEventListener('mousemove', move)
       document.addEventListener('mouseup', up)
@@ -3074,7 +3622,6 @@ function setupSpeakerSplitters(): void {
     Math.round(Math.max(min, Math.min(max, pct)) * 10) / 10
 
   // Вертикальная граница: ширина всей колонки (18–60% окна)
-  restore('cuedeck.speakerSideW', '--speaker-sidebar', 18, 60)
   const vHandle = document.createElement('div')
   vHandle.className = 'speaker-splitter'
   vHandle.title = 'Ширина колонки «Дальше / Заметки»'
@@ -3086,11 +3633,12 @@ function setupSpeakerSplitters(): void {
       sideW = clampPct(((window.innerWidth - e.clientX) / window.innerWidth) * 100, 18, 60)
       setVar('--speaker-sidebar', sideW)
     },
-    () => persist('cuedeck.speakerSideW', sideW),
+    () => {
+      if (Number.isFinite(sideW)) void window.api.prompter.setLayout({ ...getState().speakerLayout, sidebarPct: sideW })
+    },
   )
 
   // Горизонтальная граница: высота «Дальше» против «Заметок» (15–85% колонки)
-  restore('cuedeck.speakerNextH', '--speaker-next-h', 15, 85)
   const hHandle = document.createElement('div')
   hHandle.className = 'speaker-hsplitter'
   hHandle.title = 'Высота «Дальше» / «Заметки»'
@@ -3103,7 +3651,9 @@ function setupSpeakerSplitters(): void {
       nextH = clampPct(((e.clientY - r.top) / r.height) * 100, 15, 85)
       setVar('--speaker-next-h', nextH)
     },
-    () => persist('cuedeck.speakerNextH', nextH),
+    () => {
+      if (Number.isFinite(nextH)) void window.api.prompter.setLayout({ ...getState().speakerLayout, nextPct: nextH })
+    },
   )
 }
 

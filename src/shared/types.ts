@@ -45,6 +45,9 @@ export type TimerPosition =
   | 'hidden'
   | 'full'
   | 'full-noflash'
+  // 'free' — там, куда оператор перетащил таймер мышкой («Настройки → Суфлёр»);
+  // координаты — AppState.timerFree.
+  | 'free'
 
 // 'live' — не файл, а внешний источник (USB-капчер/камера); путь у него
 // псевдо-URI `live://…`, см. src/shared/live.ts.
@@ -209,6 +212,23 @@ export interface AppState {
   timerMode: TimerMode
   timerPosition: TimerPosition
   timerScale: number
+  /**
+   * Центр таймера в режиме 'free' — доли экрана суфлёра (0..1), а не пиксели:
+   * переживает смену разрешения и переезд на другой дисплей.
+   */
+  timerFree: { x: number; y: number }
+  /** Свой цвет цифр таймера на суфлёре (#rrggbb); null — стандартный зелёный. */
+  timerColor: string | null
+  /** Жёлтый/красный в конце отсчёта поверх своего цвета (по умолчанию да). */
+  timerWarnColors: boolean
+  /**
+   * Колонки суфлёра: ширина «Дальше/Заметки» в % окна (18–60) и доля «Дальше»
+   * по высоте колонки (15–85; null — поровну). Раньше жили в localStorage окна
+   * суфлёра — их нельзя было менять от оператора.
+   */
+  speakerLayout: { sidebarPct: number; nextPct: number | null }
+  /** Сообщение спикеру: центр в долях экрана (null — сверху по центру) и масштаб. */
+  speakerMsgLayout: { pos: { x: number; y: number } | null; scale: number }
   videoTakeMode: VideoTakeMode
   slideTakeMode: SlideTakeMode
   notesFontSize: number
@@ -302,6 +322,48 @@ export interface AppState {
   outputMonitorsEnabled: boolean
   /** Тема окна оператора; персистится. */
   uiTheme: UiTheme
+  /** Внешнее управление (Stream Deck / Companion / OSC): настройки + живой статус. */
+  remote: RemoteStatus
+}
+
+/**
+ * Внешнее управление (PLAN 2.18, main/remote/). Слушатели живут в main, поэтому
+ * команды доходят независимо от того, какое окно в фокусе и в фокусе ли
+ * CueDeck вообще. По умолчанию выключено; `lan: false` — слушаем только
+ * 127.0.0.1 (Stream Deck воткнут в этот же компьютер), `true` — все сетевые
+ * интерфейсы (Companion на другой машине).
+ */
+export interface RemoteSettings {
+  enabled: boolean
+  httpPort: number
+  oscPort: number
+  lan: boolean
+  /** Отправлять состояние (таймер, слайды, ролик) в Bitfocus Companion — кнопки его показывают. */
+  companionPush: boolean
+  /** Где Companion: `хост:порт` его веб-интерфейса (по умолчанию тот же компьютер). */
+  companionHost: string
+}
+
+export type RemoteListenerState = 'off' | 'on' | 'error'
+
+export interface RemoteStatus extends RemoteSettings {
+  http: RemoteListenerState
+  osc: RemoteListenerState
+  httpError: string | null
+  oscError: string | null
+  /** Адреса, по которым нас видно: 127.0.0.1, а при lan — IPv4 сетевых карт. */
+  hosts: string[]
+  companion: RemoteListenerState
+  companionError: string | null
+}
+
+export const DEFAULT_REMOTE_SETTINGS: RemoteSettings = {
+  enabled: false,
+  httpPort: 9420,
+  oscPort: 9421,
+  lan: false,
+  companionPush: true,
+  companionHost: '127.0.0.1:8000',
 }
 
 /** Slots 4–6 are empty by default — free rows the user fills in via ПКМ. */

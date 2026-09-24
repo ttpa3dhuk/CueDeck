@@ -33,6 +33,14 @@ import {
   setTimerMode,
   setTimerPosition,
   setTimerScale,
+  setTimerFree,
+  setTimerColor,
+  validTimerColor,
+  setTimerWarnColors,
+  setSpeakerLayout,
+  sanitizeSpeakerLayout,
+  setSpeakerMsgLayout,
+  sanitizeSpeakerMsgLayout,
   setVideoTakeMode,
   setSlideTakeMode,
   setNotesFontSize,
@@ -1006,8 +1014,42 @@ export function registerIpcHandlers(): void {
     setTimerPosition(pos)
   })
 
+  // Свободное положение таймера на суфлёре: центр в долях экрана (0..1).
+  ipcMain.handle('timer:set-free', (_e, x: number, y: number) => {
+    const c = (v: number): number => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5)
+    const pos = { x: Math.round(c(x) * 1000) / 1000, y: Math.round(c(y) * 1000) / 1000 }
+    store.patch({ timerFree: pos, timerPosition: 'free' })
+    setTimerFree(pos)
+    setTimerPosition('free')
+  })
+
+  // Цвет цифр таймера на суфлёре: '#rrggbb' или null (стандартный зелёный).
+  ipcMain.handle('timer:set-color', (_e, color: unknown) => {
+    const c = validTimerColor(color)
+    store.patch({ timerColor: c })
+    setTimerColor(c)
+  })
+  ipcMain.handle('timer:set-warn-colors', (_e, v: unknown) => {
+    const on = v !== false
+    store.patch({ timerWarnColors: on })
+    setTimerWarnColors(on)
+  })
+  // Колонки суфлёра — с макета в настройках или сплиттерами на самом суфлёре.
+  ipcMain.handle('prompter:set-layout', (_e, v: unknown) => {
+    const layout = sanitizeSpeakerLayout(v)
+    store.patch({ speakerLayout: layout })
+    setSpeakerLayout(layout)
+  })
+  // Сообщение спикеру: положение (null — сверху по центру) и масштаб.
+  ipcMain.handle('speaker-message:set-layout', (_e, v: unknown) => {
+    const layout = sanitizeSpeakerMsgLayout(v)
+    store.patch({ speakerMsgLayout: layout })
+    setSpeakerMsgLayout(layout)
+  })
+
+  // Масштаб 0.3–4: суфлёры бывают от 7" до 85" — старый потолок 2.5 не хватал.
   ipcMain.handle('timer:set-scale', (_e, scale: number) => {
-    const clamped = Math.max(0.5, Math.min(2.5, Math.round(scale * 100) / 100))
+    const clamped = Math.max(0.3, Math.min(4, Math.round(scale * 100) / 100))
     store.patch({ timerScale: clamped })
     setTimerScale(clamped)
   })
@@ -1635,6 +1677,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('soffice:check', async () => {
     return Boolean(await findSoffice())
   })
+
+  /** Какой soffice сейчас используется — для раздела «Настройки → PPTX / LibreOffice». */
+  ipcMain.handle('soffice:current', async () => (await findSoffice()) ?? null)
 
   /** Кнопка «Проверить снова» после установки — сбрасывает кэш пути. */
   ipcMain.handle('soffice:recheck', async () => Boolean(await recheckSoffice()))
