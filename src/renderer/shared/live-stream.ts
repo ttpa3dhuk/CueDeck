@@ -21,6 +21,7 @@
  */
 
 import { parseLiveUri } from '../../shared/live'
+import { t } from '../../shared/i18n'
 
 export type LiveStatus = 'off' | 'connecting' | 'live' | 'error'
 
@@ -148,17 +149,17 @@ export async function listMediaDevices(): Promise<MediaDeviceInfo[]> {
 function humanError(err: unknown, deviceLabel: string): string {
   const name = (err as { name?: string })?.name ?? ''
   if (name === 'NotAllowedError' || name === 'SecurityError') {
-    return 'Нет доступа к камере. Системные настройки → Конфиденциальность → Камера'
+    return t('Нет доступа к камере. Системные настройки → Конфиденциальность → Камера')
   }
   if (name === 'NotReadableError' || name === 'TrackStartError') {
-    return `Устройство занято другой программой: ${deviceLabel}`
+    return t('Устройство занято другой программой: {name}', { name: deviceLabel })
   }
   if (name === 'OverconstrainedError') {
-    return `Устройство не отдаёт запрошенный формат: ${deviceLabel}`
+    return t('Устройство не отдаёт запрошенный формат: {name}', { name: deviceLabel })
   }
-  if (name === 'NotFoundError') return `Устройство не найдено: ${deviceLabel}`
-  if (name === 'TimeoutError') return `Устройство не отвечает: ${deviceLabel}`
-  return `Не удалось открыть вход: ${deviceLabel}`
+  if (name === 'NotFoundError') return t('Устройство не найдено: {name}', { name: deviceLabel })
+  if (name === 'TimeoutError') return t('Устройство не отвечает: {name}', { name: deviceLabel })
+  return t('Не удалось открыть вход: {name}', { name: deviceLabel })
 }
 
 /** Что источник реально отдаёт — для плашки диагностики у оператора. */
@@ -306,7 +307,7 @@ export class LivePool {
   private async open(entry: PoolEntry): Promise<void> {
     const source = parseLiveUri(entry.uri)
     if (!source) {
-      this.setState(entry, 'error', 'Внешний вход задан неверно')
+      this.setState(entry, 'error', t('Внешний вход задан неверно'))
       entry.retryAt = Number.MAX_SAFE_INTEGER
       return
     }
@@ -321,7 +322,7 @@ export class LivePool {
       const cam = findDevice(devices, 'videoinput', source.videoLabel)
       if (!cam) {
         entry.retryAt = Date.now() + RETRY_MS
-        this.setState(entry, 'error', `Устройство не найдено: ${source.videoLabel}`)
+        this.setState(entry, 'error', t('Устройство не найдено: {name}', { name: source.videoLabel }))
         return
       }
       const mic = source.audioLabel

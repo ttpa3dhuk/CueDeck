@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { DONATE_URL } from '../shared/types.js'
+import { t } from '../shared/i18n.js'
 
 /**
  * Стартовая плашка поддержки (PLAN 2.12) — «как в REAPER»: показывается первым
@@ -19,6 +20,8 @@ const COUNTDOWN_SEC = 5
 const SAFETY_TIMEOUT_MS = 30_000
 
 function pageHtml(version: string): string {
+  // Надпись кнопки меняет скрипт страницы — отдаём ему перевод целиком.
+  const cont = JSON.stringify(t('Продолжить'))
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>CueDeck</title>
@@ -48,20 +51,20 @@ function pageHtml(version: string): string {
   #go[disabled]:hover { background: #1f232c; }
 </style></head><body><div class="wrap">
   <h1>CueDeck ${version}</h1>
-  <div class="sub">Бесплатно, с открытым исходным кодом.</div>
-  <p class="body">Программу делает один человек в свободное время. Если она выручает вас на мероприятиях — поддержите разработку.</p>
-  ${DONATE_URL ? '<button id="donate">☕ Поддержать проект</button>' : ''}
-  <button id="go" disabled>Продолжить (${COUNTDOWN_SEC})</button>
+  <div class="sub">${t('Бесплатно, с открытым исходным кодом.')}</div>
+  <p class="body">${t('Программу делает один человек в свободное время. Если она выручает вас на мероприятиях — поддержите разработку.')}</p>
+  ${DONATE_URL ? `<button id="donate">${t('☕ Поддержать проект')}</button>` : ''}
+  <button id="go" disabled>${t('Продолжить')} (${COUNTDOWN_SEC})</button>
 </div><script>
   var left = ${COUNTDOWN_SEC}
   var go = document.getElementById('go')
   var proceed = function () { if (!go.disabled) document.title = 'cd:go' }
   var tick = setInterval(function () {
     left -= 1
-    if (left > 0) { go.textContent = 'Продолжить (' + left + ')'; return }
+    if (left > 0) { go.textContent = ${cont} + ' (' + left + ')'; return }
     clearInterval(tick)
     go.disabled = false
-    go.textContent = 'Продолжить'
+    go.textContent = ${cont}
     go.focus()
   }, 1000)
   go.addEventListener('click', proceed)

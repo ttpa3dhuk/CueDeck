@@ -17,6 +17,8 @@ import {
 import { elementAudioStream, LiveMeter, LivePool, LiveView, listMediaDevices } from '../shared/live-stream'
 import { liveDisplayName, liveFitFor, parseLiveUri } from '../../shared/live'
 import { WINDOW_TITLES } from '../../shared/window-titles'
+import { getLang, t, type Lang } from '../../shared/i18n'
+import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
 import type { ListMode, RemoteStatus, UiTheme } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
@@ -39,6 +41,8 @@ document.body.dataset.role = role
 // Одна страница на две роли, поэтому имя окна (по нему окно ищут в NDI/OBS/vMix)
 // ставится тут, а не в <title>: статический заголовок перебил бы title окна.
 document.title = WINDOW_TITLES[role]
+// Статичный текст страницы — на язык интерфейса, пока код ниже не начал рисовать (i18n.ts).
+translateDom()
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
 
@@ -94,7 +98,7 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
   // текст в 57×32 не влезает.
   if (!path) {
     kvPreview.classList.add('kv-empty')
-    kvPreview.title = 'Нет заставки — Blackout покажет чёрный экран'
+    kvPreview.title = t('Нет заставки — Blackout покажет чёрный экран')
     kvPreview.style.backgroundImage = ''
     return
   }
@@ -104,7 +108,7 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
   if (isVideoPath(path)) {
     kvPreview.classList.remove('kv-empty')
     kvPreview.classList.add('kv-video')
-    kvPreview.title = `Видео-заставка: ${baseName(path)} — крутится в цикле, пока включён Blackout`
+    kvPreview.title = t('Видео-заставка: {name} — крутится в цикле, пока включён Blackout', { name: baseName(path) })
     kvPreview.style.backgroundImage = ''
     return
   }
@@ -113,14 +117,14 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
   const data = await window.api.keyvisual.read()
   if (!data) {
     kvPreview.classList.add('kv-empty')
-    kvPreview.title = 'Не удалось загрузить файл заставки'
+    kvPreview.title = t('Не удалось загрузить файл заставки')
     kvPreview.style.backgroundImage = ''
     return
   }
   const blob = new Blob([data.bytes as BlobPart], { type: data.mime })
   kvBlobUrl = URL.createObjectURL(blob)
   kvPreview.classList.remove('kv-empty')
-  kvPreview.title = `Заставка: ${baseName(path)}`
+  kvPreview.title = t('Заставка: {name}', { name: baseName(path) })
   kvPreview.style.backgroundImage = `url(${kvBlobUrl})`
 }
 const currentCanvas = $<HTMLCanvasElement>('current-canvas')
@@ -323,7 +327,7 @@ function applyPreviewMonitoring(el: HTMLMediaElement | null, state: AppState): v
 }
 
 function statusText(s: { status: string; message: string | null }): string {
-  return s.status === 'error' ? (s.message ?? '') : 'Подключаю захват…'
+  return s.status === 'error' ? (s.message ?? '') : t('Подключаю захват…')
 }
 
 /**
@@ -344,7 +348,7 @@ function updateLiveInfo(
     return
   }
   const fps = view.fps()
-  el.textContent = `${st.width}×${st.height} · ${fps || '—'} к/с`
+  el.textContent = `${st.width}×${st.height} · ${fps || '—'} ${t('к/с')}`
   el.classList.toggle('slow', fps > 0 && fps < st.frameRate * 0.7)
   el.classList.remove('hidden')
 }
@@ -624,13 +628,13 @@ function updateVideoHeader(state: AppState): void {
   slideCounter.classList.add('video')
   slideRemaining.classList.add('big')
   if (dur > 0) {
-    slideCounter.textContent = `Видео ${formatClock(pos)} / ${formatClock(dur)}`
+    slideCounter.textContent = `${t('Видео')} ${formatClock(pos)} / ${formatClock(dur)}`
     const remaining = Math.max(0, dur - pos)
     slideRemaining.textContent = formatClock(remaining)
     slideRemaining.classList.toggle('warn', remaining > VIDEO_DANGER_SEC && remaining <= VIDEO_WARN_SEC)
     slideRemaining.classList.toggle('ending', remaining <= VIDEO_DANGER_SEC)
   } else {
-    slideCounter.textContent = 'Видео'
+    slideCounter.textContent = t('Видео')
     slideRemaining.textContent = ''
     slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
   }
@@ -744,9 +748,9 @@ function updatePreviewUI(state: AppState): void {
   if (previewCounter) {
     previewCounter.textContent = p.path
       ? p.kind === 'video'
-        ? 'видео'
+        ? t('видео')
         : p.kind === 'live'
-          ? 'захват'
+          ? t('захват')
           : `${p.currentSlide} / ${p.totalSlides || '—'}`
       : '— / —'
   }
@@ -783,8 +787,8 @@ function updatePreviewUI(state: AppState): void {
       const orphan = !entry
       loopBtn.classList.toggle('disabled', orphan)
       loopBtn.title = orphan
-        ? 'Цикл сохраняется у записи плейлиста — добавь ролик в плейлист, чтобы включить'
-        : 'Зациклить этот ролик: доиграв, начинается заново. Настройка сохраняется у записи плейлиста'
+        ? t('Цикл сохраняется у записи плейлиста — добавь ролик в плейлист, чтобы включить')
+        : t('Зациклить этот ролик: доиграв, начинается заново. Настройка сохраняется у записи плейлиста')
     }
   }
 }
@@ -927,7 +931,7 @@ function updateNextSpeaker(state: AppState): void {
   const next =
     staged ?? (idx >= 0 && idx < state.playlist.length - 1 ? state.playlist[idx + 1] : undefined)
   if (next) {
-    nextSpeakerEl.textContent = `Далее: ${next.speakerName || next.displayName || next.fileName}`
+    nextSpeakerEl.textContent = t('Далее: {name}', { name: next.speakerName || next.displayName || next.fileName })
     nextSpeakerEl.classList.remove('hidden')
   } else {
     nextSpeakerEl.textContent = ''
@@ -982,7 +986,7 @@ async function activateEntry(entry: PlaylistEntry, live: boolean): Promise<void>
     const st = getState()
     if (st.fileKind === 'video' && st.video.playing && st.currentPlaylistId !== entry.id) {
       const ok = window.confirm(
-        `Сейчас на экране идёт видео. Прервать его и выдать в эфир «${entry.displayName || entry.fileName}»?`,
+        t('Сейчас на экране идёт видео. Прервать его и выдать в эфир «{name}»?', { name: entry.displayName || entry.fileName }),
       )
       if (!ok) return
     }
@@ -993,13 +997,13 @@ async function activateEntry(entry: PlaylistEntry, live: boolean): Promise<void>
       showLoModal()
       return
     }
-    showBanner('Конвертация PPTX через LibreOffice…', 60_000)
+    showBanner(t('Конвертация PPTX через LibreOffice…'), 60_000)
   }
   const res = live
     ? await window.api.playlist.activateLive(entry.id)
     : await window.api.playlist.activate(entry.id)
   if (entry.kind === 'pptx') banner.classList.add('hidden')
-  if (!res.ok && res.error) showBanner(`Ошибка: ${res.error}`, 8000)
+  if (!res.ok && res.error) showBanner(t('Ошибка: {error}', { error: res.error }), 8000)
 }
 
 // Inline rename of a playlist entry's display label (the file on disk is untouched).
@@ -1070,7 +1074,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
         : entry.kind === 'video'
           ? 'VIDEO'
           : entry.kind === 'live'
-            ? 'ВХОД'
+            ? t('ВХОД')
             : 'PDF'
 
   // Цикл включается прямо в плейлисте, не выводя запись в эфир: у видео-заставки
@@ -1081,7 +1085,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   loopBadge.innerHTML = LOOP_ICON
   loopBadge.classList.toggle('on', Boolean(entry.loop))
   loopBadge.classList.toggle('hidden', entry.kind !== 'video' && entry.kind !== 'list')
-  loopBadge.title = 'Зациклить ролик: доиграв, начинается заново'
+  loopBadge.title = t('Зациклить ролик: доиграв, начинается заново')
   loopBadge.addEventListener('click', (e) => {
     e.stopPropagation()
     window.api.playlist.update(entry.id, { loop: !fresh().loop })
@@ -1097,7 +1101,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   const renameBtn = document.createElement('button')
   renameBtn.className = 'rename'
   renameBtn.textContent = '✎'
-  renameBtn.title = 'Переименовать в списке (имя файла не меняется)'
+  renameBtn.title = t('Переименовать в списке (имя файла не меняется)')
   renameBtn.addEventListener('click', (e) => {
     e.stopPropagation()
     startRename(li, fresh())
@@ -1107,7 +1111,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   const removeBtn = document.createElement('button')
   removeBtn.className = 'remove'
   removeBtn.textContent = '✕'
-  removeBtn.title = 'Удалить из плейлиста'
+  removeBtn.title = t('Удалить из плейлиста')
   removeBtn.addEventListener('click', (e) => {
     e.stopPropagation()
     window.api.playlist.remove(entry.id)
@@ -1121,7 +1125,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
     const listBtn = document.createElement('button')
     listBtn.className = 'rename'
     listBtn.textContent = '⚙'
-    listBtn.title = 'Содержимое списка: порядок, удаление, секунды на фото'
+    listBtn.title = t('Содержимое списка: порядок, удаление, секунды на фото')
     listBtn.addEventListener('click', (e) => {
       e.stopPropagation()
       openListModal(fresh())
@@ -1137,10 +1141,10 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
     const setupBtn = document.createElement('button')
     setupBtn.className = 'rename'
     setupBtn.textContent = '⚙'
-    setupBtn.title = 'Настроить захват: устройство картинки и звука'
+    setupBtn.title = t('Настроить захват: устройство картинки и звука')
     setupBtn.addEventListener('click', (e) => {
       e.stopPropagation()
-      openLiveModal(fresh()).catch(() => showBanner('Не удалось получить список устройств'))
+      openLiveModal(fresh()).catch(() => showBanner(t('Не удалось получить список устройств')))
     })
     setupBtn.addEventListener('dblclick', (e) => e.stopPropagation())
     row1.append(setupBtn)
@@ -1153,8 +1157,8 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   speakerInput.className = 'speaker-name'
   // Поле свободное: имя спикера, пометка «после обеда» — что угодно (Б-6).
   // Текст попадает в «Далее: …» на суфлёре, если запись следующая.
-  speakerInput.placeholder = 'Комментарий'
-  speakerInput.title = 'Любая пометка: имя спикера, примечание. Показывается в «Далее: …», когда запись следующая'
+  speakerInput.placeholder = t('Комментарий')
+  speakerInput.title = t('Любая пометка: имя спикера, примечание. Показывается в «Далее: …», когда запись следующая')
   speakerInput.value = entry.speakerName
   speakerInput.addEventListener('click', (e) => e.stopPropagation())
   speakerInput.addEventListener('mousedown', (e) => e.stopPropagation())
@@ -1171,7 +1175,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   const durRow = document.createElement('div')
   durRow.className = 'duration-row'
   const durLabel = document.createElement('span')
-  durLabel.textContent = 'Таймер:'
+  durLabel.textContent = t('Таймер:')
   const durInput = document.createElement('input')
   durInput.type = 'number'
   durInput.min = '0'
@@ -1190,7 +1194,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
     }, 400)
   })
   const durSuffix = document.createElement('span')
-  durSuffix.textContent = 'мин'
+  durSuffix.textContent = t('мин')
   durRow.append(durLabel, durInput, durSuffix)
 
   // Строка пропавшего материала: видна только на записи с классом .missing
@@ -1199,11 +1203,11 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   missingRow.className = 'missing-row'
   const missingLabel = document.createElement('span')
   missingLabel.className = 'missing-label'
-  missingLabel.textContent = '⚠ файл не найден'
+  missingLabel.textContent = t('⚠ файл не найден')
   const relocateBtn = document.createElement('button')
   relocateBtn.className = 'relocate'
-  relocateBtn.textContent = entry.kind === 'list' ? 'Открыть список…' : 'Указать файл…'
-  relocateBtn.title = 'Материал переехал — указать его новое место. Комментарий и таймер записи сохранятся'
+  relocateBtn.textContent = entry.kind === 'list' ? t('Открыть список…') : t('Указать файл…')
+  relocateBtn.title = t('Материал переехал — указать его новое место. Комментарий и таймер записи сохранятся')
   relocateBtn.addEventListener('click', (e) => {
     e.stopPropagation()
     // У списка пропасть может любой из элементов — чинить надо поимённо,
@@ -1213,7 +1217,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
       return
     }
     window.api.playlist.relocate(entry.id).then((ok) => {
-      if (ok) showBanner(`Файл перепривязан: ${fresh().fileName}`, 3000)
+      if (ok) showBanner(t('Файл перепривязан: {name}', { name: fresh().fileName }), 3000)
     })
   })
   relocateBtn.addEventListener('mousedown', (e) => e.stopPropagation())
@@ -1359,7 +1363,7 @@ function updateMissingNotice(state: AppState): void {
   if (!notice || !title) return
   const count = state.missingIds.length
   notice.classList.toggle('hidden', count === 0)
-  if (count > 0) title.textContent = `Не найдено файлов: ${count} из ${state.playlist.length}`
+  if (count > 0) title.textContent = t('Не найдено файлов: {n} из {total}', { n: count, total: state.playlist.length })
 }
 
 // ── Монитор выхода под эфиром: живой снимок окна суфлёра (или зала) ───────
@@ -1409,28 +1413,28 @@ function applyState(state: AppState): void {
     if (state.fileKind === 'live') {
       // Листать нечего — вместо счётчика слайдов показываем, что в эфире вход.
       slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
-      slideCounter.textContent = 'Захват'
+      slideCounter.textContent = t('Захват')
       slideRemaining.textContent = ''
     } else if (state.listIndex >= 0) {
       // Список в эфире: важно не «слайд 1 из 1» текущего файла, а место в пачке.
       const list = state.playlist.find((e) => e.id === state.currentPlaylistId)
       const total = list?.items?.length ?? 0
       slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
-      slideCounter.textContent = `Список ${state.listPos + 1} из ${total || '—'}`
-      slideRemaining.textContent = state.fileKind === 'video' ? 'ролик' : 'фото'
+      slideCounter.textContent = t('Список {n} из {total}', { n: state.listPos + 1, total: total || '—' })
+      slideRemaining.textContent = state.fileKind === 'video' ? t('ролик') : t('фото')
     } else if (state.fileKind === 'video') {
       updateVideoHeader(state)
     } else {
       slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
-      slideCounter.textContent = `Слайд ${state.currentSlide} из ${state.totalSlides || '—'}`
+      slideCounter.textContent = t('Слайд {n} из {total}', { n: state.currentSlide, total: state.totalSlides || '—' })
       const remaining = Math.max(0, (state.totalSlides || 0) - state.currentSlide)
-      slideRemaining.textContent = state.totalSlides > 0 ? `(осталось ${remaining})` : ''
+      slideRemaining.textContent = state.totalSlides > 0 ? t('(осталось {n})', { n: remaining }) : ''
     }
   } else {
     slidePlaceholder.classList.remove('hidden')
     pdfName.textContent = ''
     slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
-    slideCounter.textContent = 'Слайд — из —'
+    slideCounter.textContent = t('Слайд — из —')
     slideRemaining.textContent = ''
     currentCanvas.classList.add('hidden')
     currentImage.classList.add('hidden')
@@ -1544,11 +1548,11 @@ function applyState(state: AppState): void {
 async function projectNew(): Promise<void> {
   const state = getState()
   if (state.playlist.length > 0 || state.keyVisualPath) {
-    const ok = window.confirm('Очистить текущий плейлист и начать новый проект?')
+    const ok = window.confirm(t('Очистить текущий плейлист и начать новый проект?'))
     if (!ok) return
   }
   await window.api.project.create()
-  showBanner('Новый проект', 2000)
+  showBanner(t('Новый проект'), 2000)
   // Re-enable "Последний" so the user can go back to the previous session
   if (role === 'operator') {
     window.api.session.hasLast().then((has) => {
@@ -1564,14 +1568,14 @@ async function projectOpen(): Promise<void> {
     // говорим прямо, сколько из скольких. Сами записи подсвечены красным.
     if (res.missing) {
       showBanner(
-        `⚠ Не найдено файлов: ${res.missing} из ${res.total ?? '—'}. Записи отмечены красным — нажми «Указать файл…»`,
+        t('⚠ Не найдено файлов: {n} из {total}. Записи отмечены красным — нажми «Указать файл…»', { n: res.missing, total: res.total ?? '—' }),
         12000,
       )
     } else {
-      showBanner(`Открыт: ${baseName(res.path)}`, 3000)
+      showBanner(t('Открыт: {name}', { name: baseName(res.path) }), 3000)
     }
   } else if (!res.ok && res.error) {
-    showBanner(`Ошибка: ${res.error}`, 6000)
+    showBanner(t('Ошибка: {error}', { error: res.error }), 6000)
   }
 }
 
@@ -1581,23 +1585,23 @@ async function projectOpen(): Promise<void> {
  * потому что пути внутри проекта станут относительными.
  */
 async function projectConsolidate(): Promise<void> {
-  showBanner('Собираю проект: копирую материалы…', 120000)
+  showBanner(t('Собираю проект: копирую материалы…'), 120000)
   const res = await window.api.project.consolidate()
   if (res.cancelled) return hideBanner()
   if (!res.ok) {
-    showBanner(`Не удалось собрать: ${res.error ?? 'неизвестная ошибка'}`, 8000)
+    showBanner(t('Не удалось собрать: {error}', { error: res.error ?? t('неизвестная ошибка') }), 8000)
     return
   }
-  const skipped = res.skipped ? `, пропущено ненайденных: ${res.skipped}` : ''
-  showBanner(`Проект собран в ${baseName(res.path ?? '')}: скопировано файлов ${res.copied}${skipped}`, 10000)
+  const skipped = res.skipped ? t(', пропущено ненайденных: {n}', { n: res.skipped }) : ''
+  showBanner(t('Проект собран в {name}: скопировано файлов {n}', { name: baseName(res.path ?? ''), n: res.copied }) + skipped, 10000)
 }
 
 async function projectSave(saveAs: boolean = false): Promise<void> {
   const res = await window.api.project.save(saveAs)
   if (res.ok && res.path) {
-    showBanner(`Сохранено: ${baseName(res.path)}`, 3000)
+    showBanner(t('Сохранено: {name}', { name: baseName(res.path) }), 3000)
   } else if (!res.ok && res.error) {
-    showBanner(`Ошибка сохранения: ${res.error}`, 6000)
+    showBanner(t('Ошибка сохранения: {error}', { error: res.error }), 6000)
   }
 }
 
@@ -1634,9 +1638,9 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
 async function openPdf(): Promise<void> {
   // Open stages into the off-air preview deck; Take (Enter) promotes it to air.
   const res = await window.api.preview.openDialog()
-  if (!res.ok && !res.cancelled) showBanner(`Не удалось открыть: ${res.error}`)
-  if (res.ok && res.sha1Mismatch) showBanner('Заметки в sidecar-файле относятся к другому PDF. Перезаписать их.')
-  if (res.ok) showBanner('Загружено в превью — Enter, чтобы выдать в эфир', 4000)
+  if (!res.ok && !res.cancelled) showBanner(t('Не удалось открыть: {error}', { error: res.error }))
+  if (res.ok && res.sha1Mismatch) showBanner(t('Заметки в sidecar-файле относятся к другому PDF. Перезаписать их.'))
+  if (res.ok) showBanner(t('Загружено в превью — Enter, чтобы выдать в эфир'), 4000)
 }
 
 function showHelpModal(): void {
@@ -1661,7 +1665,7 @@ async function openReportModal(): Promise<void> {
   const markersEl = $('report-markers')
   const info = await window.api.diag.info().catch(() => null)
   if (info && info.markers.length) {
-    markersEl.textContent = `⚑ Отмеченные моменты: ${info.markers.map((m) => `#${m.n} ${m.at}`).join(', ')} — они есть в журнале, опиши, что было в эти моменты.`
+    markersEl.textContent = t('⚑ Отмеченные моменты: {list} — они есть в журнале, опиши, что было в эти моменты.', { list: info.markers.map((m) => `#${m.n} ${m.at}`).join(', ') })
     markersEl.classList.remove('hidden')
   } else {
     markersEl.classList.add('hidden')
@@ -1679,19 +1683,19 @@ async function saveReport(): Promise<void> {
   const result = $('report-result')
   btn.disabled = true
   result.className = 'report-result'
-  result.textContent = 'Собираю отчёт…'
+  result.textContent = t('Собираю отчёт…')
   result.classList.remove('hidden')
   const res = await window.api.diag.buildReport($<HTMLTextAreaElement>('report-comment').value)
   btn.disabled = false
   if (res.ok) {
     result.classList.add('ok')
-    result.textContent = `Сохранено на рабочий стол: ${baseName(res.path)}. Пришли этот файл Азату в Telegram.`
+    result.textContent = t('Сохранено на рабочий стол: {name}. Пришли этот файл Азату в Telegram.', { name: baseName(res.path) })
     const reveal = $<HTMLButtonElement>('report-reveal')
     reveal.classList.remove('hidden')
     reveal.onclick = () => window.api.diag.showInFolder(res.path)
   } else {
     result.classList.add('err')
-    result.textContent = `Не удалось собрать отчёт: ${res.error}`
+    result.textContent = t('Не удалось собрать отчёт: {error}', { error: res.error })
   }
 }
 
@@ -1702,11 +1706,11 @@ async function saveReport(): Promise<void> {
  */
 function installCommandFor(platform: string): { label: string; cmd: string } | null {
   if (platform === 'darwin') {
-    return { label: 'Вариант 2 — через Homebrew (терминал)', cmd: 'brew install --cask libreoffice' }
+    return { label: t('Вариант 2 — через Homebrew (терминал)'), cmd: 'brew install --cask libreoffice' }
   }
   if (platform === 'win32') {
     return {
-      label: 'Вариант 2 — через winget (PowerShell)',
+      label: t('Вариант 2 — через winget (PowerShell)'),
       cmd: 'winget install --id TheDocumentFoundation.LibreOffice',
     }
   }
@@ -1741,13 +1745,13 @@ async function pickLibreOffice(): Promise<void> {
   const res = await window.api.soffice.pick()
   if (!res.ok) {
     // Отмену диалога от неверного файла не отличаем — баннер нейтральный.
-    showBanner('LibreOffice по этому пути не найден. Нужен soffice.com или soffice.exe из папки program', 7000)
+    showBanner(t('LibreOffice по этому пути не найден. Нужен soffice.com или soffice.exe из папки program'), 7000)
     return
   }
   sofficePresentCache = true
   document.getElementById('libreoffice-notice')?.classList.add('hidden')
   hideLoModal()
-  showBanner(`LibreOffice подключён: ${res.path}`, 5000)
+  showBanner(t('LibreOffice подключён: {path}', { path: res.path }), 5000)
 }
 
 /** «Проверить снова» после установки — без перезапуска приложения. */
@@ -1757,7 +1761,7 @@ async function recheckLibreOffice(): Promise<void> {
   document.getElementById('libreoffice-notice')?.classList.toggle('hidden', found)
   if (found) {
     hideLoModal()
-    showBanner('LibreOffice найден — PPTX теперь откроются', 4000)
+    showBanner(t('LibreOffice найден — PPTX теперь откроются'), 4000)
     return
   }
   // Не нашли — показываем, где именно искали: чаще всего LibreOffice просто
@@ -1765,7 +1769,7 @@ async function recheckLibreOffice(): Promise<void> {
   const paths = await window.api.soffice.paths()
   const el = document.getElementById('lo-paths')
   if (el) {
-    el.textContent = `Не нашли. Искали здесь: ${paths.join(' · ')} — а также по PATH.`
+    el.textContent = t('Не нашли. Искали здесь: {paths} — а также по PATH.', { paths: paths.join(' · ') })
     el.classList.remove('hidden')
   }
 }
@@ -1797,15 +1801,15 @@ function hideBanner(): void {
 // Shift/Ctrl+digits) stay handled by the switch below and are NOT remappable.
 interface HotkeyAction { id: string; label: string; def: string }
 const HOTKEY_ACTIONS: HotkeyAction[] = [
-  { id: 'take', label: 'ЭФИР / take (превью → эфир)', def: 'Tab' },
-  { id: 'programNext', label: 'Эфир: следующий слайд', def: 'ArrowRight' },
-  { id: 'programPrev', label: 'Эфир: предыдущий слайд', def: 'ArrowLeft' },
-  { id: 'previewNext', label: 'Превью: следующий слайд', def: 'BracketRight' },
-  { id: 'previewPrev', label: 'Превью: предыдущий слайд', def: 'BracketLeft' },
-  { id: 'videoPlay', label: 'Видео: play / pause', def: 'Space' },
-  { id: 'mute', label: 'Видео: звук вкл / выкл', def: 'KeyM' },
-  { id: 'timerToggle', label: 'Таймер: старт / пауза', def: 'KeyT' },
-  { id: 'timerReset', label: 'Таймер: сброс', def: 'KeyR' },
+  { id: 'take', label: t('ЭФИР / take (превью → эфир)'), def: 'Tab' },
+  { id: 'programNext', label: t('Эфир: следующий слайд'), def: 'ArrowRight' },
+  { id: 'programPrev', label: t('Эфир: предыдущий слайд'), def: 'ArrowLeft' },
+  { id: 'previewNext', label: t('Превью: следующий слайд'), def: 'BracketRight' },
+  { id: 'previewPrev', label: t('Превью: предыдущий слайд'), def: 'BracketLeft' },
+  { id: 'videoPlay', label: t('Видео: play / pause'), def: 'Space' },
+  { id: 'mute', label: t('Видео: звук вкл / выкл'), def: 'KeyM' },
+  { id: 'timerToggle', label: t('Таймер: старт / пауза'), def: 'KeyT' },
+  { id: 'timerReset', label: t('Таймер: сброс'), def: 'KeyR' },
   { id: 'blackout', label: 'Blackout', def: 'KeyB' },
 ]
 let hotkeyMap: Record<string, string> = {}
@@ -1886,7 +1890,7 @@ function renderHotkeysSection(): void {
     key.addEventListener('click', () => {
       if (capturingHotkey) capturingHotkey.btn.classList.remove('capturing')
       capturingHotkey = { actionId: a.id, btn: key }
-      key.textContent = 'Нажми клавишу… (Esc — отмена)'
+      key.textContent = t('Нажми клавишу… (Esc — отмена)')
       key.classList.add('capturing')
     })
     row.append(lbl, key)
@@ -2021,9 +2025,9 @@ function setupFileDrop(): void {
     if (paths.length === 0) return
     window.api.playlist.addPaths(paths).then((added) => {
       if (added.length > 0) {
-        showBanner(`В плейлист добавлено: ${added.length}`, 3000)
+        showBanner(t('В плейлист добавлено: {n}', { n: added.length }), 3000)
       } else {
-        showBanner('Формат не поддерживается (PDF / PPTX / видео / изображения)', 5000)
+        showBanner(t('Формат не поддерживается (PDF / PPTX / видео / изображения)'), 5000)
       }
     })
   })
@@ -2165,7 +2169,7 @@ function setupOperatorControls(): void {
     const wanted = clickerGlobalToggle.checked
     const actual = await window.api.clicker.setGlobal(wanted)
     if (wanted && !actual) {
-      showBanner('Глобальный кликер не включился: PgUp/PgDn заняты другим приложением', 8000)
+      showBanner(t('Глобальный кликер не включился: PgUp/PgDn заняты другим приложением'), 8000)
     }
   })
   const clickerArrowsToggle = $<HTMLInputElement>('clicker-arrows-toggle')
@@ -2173,7 +2177,7 @@ function setupOperatorControls(): void {
     const wanted = clickerArrowsToggle.checked
     const actual = await window.api.clicker.setGlobalArrows(wanted)
     if (wanted && !actual && getState().clickerGlobal) {
-      showBanner('Стрелки не захватились: ←/→ заняты другим приложением', 8000)
+      showBanner(t('Стрелки не захватились: ←/→ заняты другим приложением'), 8000)
     }
   })
 
@@ -2223,7 +2227,7 @@ function setupOperatorControls(): void {
     addMenu.classList.add('hidden')
     if (btn.dataset.add === 'files') window.api.playlist.add()
     else if (btn.dataset.add === 'list') window.api.playlist.addList()
-    else openLiveModal().catch(() => showBanner('Не удалось получить список устройств'))
+    else openLiveModal().catch(() => showBanner(t('Не удалось получить список устройств')))
   })
   // Клик мимо меню закрывает его — обычное поведение выпадашки.
   document.addEventListener('click', () => addMenu?.classList.add('hidden'))
@@ -2241,7 +2245,7 @@ function setupOperatorControls(): void {
 
   $('live-cancel').addEventListener('click', () => $('live-modal').classList.add('hidden'))
   $('live-add').addEventListener('click', () => {
-    confirmLiveModal().catch(() => showBanner('Не удалось добавить захват'))
+    confirmLiveModal().catch(() => showBanner(t('Не удалось добавить захват')))
   })
 
   // Compact toggle
@@ -2259,10 +2263,10 @@ function setupOperatorControls(): void {
   // LibreOffice notice + install modal
   document.getElementById('lo-install-btn')?.addEventListener('click', showLoModal)
   document.getElementById('lo-recheck-btn')?.addEventListener('click', () => {
-    recheckLibreOffice().catch(() => showBanner('Не удалось проверить LibreOffice'))
+    recheckLibreOffice().catch(() => showBanner(t('Не удалось проверить LibreOffice')))
   })
   document.getElementById('lo-pick-btn')?.addEventListener('click', () => {
-    pickLibreOffice().catch(() => showBanner('Не удалось указать LibreOffice'))
+    pickLibreOffice().catch(() => showBanner(t('Не удалось указать LibreOffice')))
   })
   document.getElementById('lo-modal-close')?.addEventListener('click', hideLoModal)
   document.getElementById('lo-download-btn')?.addEventListener('click', () => {
@@ -2386,7 +2390,7 @@ function setupOperatorControls(): void {
     input.type = 'text'
     input.className = 'sm-preset-edit'
     input.value = btn.dataset.msg ?? ''
-    input.placeholder = 'Текст кнопки…'
+    input.placeholder = t('Текст кнопки…')
     input.maxLength = 60
     btn.style.display = 'none'
     btn.after(input)
@@ -2450,7 +2454,7 @@ function setupOperatorControls(): void {
   })
   $('report-logs').addEventListener('click', () => void window.api.diag.openLogFolder())
   window.api.diag.onMarked((n) =>
-    showBanner(`⚑ Момент #${n} отмечен в журнале. После шоу: Help → Сообщить о проблеме`, 3000),
+    showBanner(t('⚑ Момент #{n} отмечен в журнале. После шоу: Help → Сообщить о проблеме', { n }), 3000),
   )
   if (DONATE_URL) {
     document.getElementById('donate-note')?.classList.remove('hidden')
@@ -2543,15 +2547,15 @@ function setupOperatorControls(): void {
   })
 
   document.getElementById('relink-folder-btn')?.addEventListener('click', () => {
-    showBanner('Ищу файлы в папке…', 60000)
+    showBanner(t('Ищу файлы в папке…'), 60000)
     window.api.playlist.relinkFolder().then((res) => {
       if (res.cancelled) return hideBanner()
       if (res.fixed === 0) {
-        showBanner('В этой папке ничего не нашлось — попробуй папку уровнем выше', 8000)
+        showBanner(t('В этой папке ничего не нашлось — попробуй папку уровнем выше'), 8000)
       } else if (res.remaining > 0) {
-        showBanner(`Найдено файлов: ${res.fixed}. Осталось ненайденных: ${res.remaining}`, 8000)
+        showBanner(t('Найдено файлов: {n}. Осталось ненайденных: {left}', { n: res.fixed, left: res.remaining }), 8000)
       } else {
-        showBanner(`Все файлы найдены (${res.fixed}). Сохрани проект, чтобы запомнить пути`, 8000)
+        showBanner(t('Все файлы найдены ({n}). Сохрани проект, чтобы запомнить пути', { n: res.fixed }), 8000)
       }
     })
   })
@@ -2565,7 +2569,7 @@ function setupOperatorControls(): void {
 
   window.api.update.onAvailable((info) => {
     updateUrl = info.url
-    updateText.textContent = `Новая версия ${info.newerVersion} доступна`
+    updateText.textContent = t('Новая версия {v} доступна', { v: info.newerVersion })
     updateBar.classList.remove('hidden')
   })
   updateDownload.addEventListener('click', () => {
@@ -2592,15 +2596,15 @@ function setupOperatorControls(): void {
     const btn = $<HTMLButtonElement>('btn-last')
     btn.disabled = true
     const res = await window.api.session.restore()
-    if (!res.ok && res.error) showBanner(`Ошибка: ${res.error}`, 6000)
-    else if (res.sha1Mismatch) showBanner('Заметки относятся к другому PDF — возможно файл изменился.', 5000)
+    if (!res.ok && res.error) showBanner(t('Ошибка: {error}', { error: res.error }), 6000)
+    else if (res.sha1Mismatch) showBanner(t('Заметки относятся к другому PDF — возможно файл изменился.'), 5000)
   })
 
   window.api.menu.onOpenPdf(openPdf)
   window.api.menu.onOpenDisplaySetup(() => openSettings('screens'))
   window.api.menu.onOpenSettings(() => openSettings('screens'))
   window.api.menu.onTopologyChanged(() => {
-    showBanner('Раскладка экранов изменилась. ⚙️ Настройки → Экраны (Cmd+,) — переназначить.')
+    showBanner(t('Раскладка экранов изменилась. ⚙️ Настройки → Экраны (Cmd+,) — переназначить.'))
   })
 }
 
@@ -2655,7 +2659,7 @@ function renderListItems(): void {
   const playingIdx = state.currentPlaylistId === listEditingId ? state.listIndex : -1
 
   if (items.length === 0) {
-    box.innerHTML = '<div class="list-empty">Пусто — добавь фотографии или ролики.</div>'
+    box.innerHTML = `<div class="list-empty">${t('Пусто — добавь фотографии или ролики.')}</div>`
     return
   }
   box.innerHTML = ''
@@ -2674,7 +2678,7 @@ function renderListItems(): void {
 
     const tag = document.createElement('span')
     tag.className = 'tag'
-    tag.textContent = item.kind === 'video' ? 'ВИДЕО' : 'ФОТО'
+    tag.textContent = item.kind === 'video' ? t('ВИДЕО') : t('ФОТО')
 
     const nm = document.createElement('span')
     nm.className = 'nm'
@@ -2687,11 +2691,11 @@ function renderListItems(): void {
     row.classList.toggle('missing', missing)
     let fix: HTMLButtonElement | null = null
     if (missing) {
-      nm.title = `${item.path}\nФайл не найден — переехал или удалён`
+      nm.title = `${item.path}\n${t('Файл не найден — переехал или удалён')}`
       fix = document.createElement('button')
       fix.className = 'fix'
-      fix.textContent = 'Заменить…'
-      fix.title = 'Указать, где теперь лежит этот файл'
+      fix.textContent = t('Заменить…')
+      fix.title = t('Указать, где теперь лежит этот файл')
       fix.addEventListener('click', (e) => {
         e.stopPropagation()
         window.api.playlist.relocateItem(listEditingId!, i)
@@ -2700,7 +2704,7 @@ function renderListItems(): void {
 
     const del = document.createElement('button')
     del.textContent = '✕'
-    del.title = 'Убрать из списка'
+    del.title = t('Убрать из списка')
     del.addEventListener('click', (e) => {
       e.stopPropagation()
       window.api.playlist.updateList(listEditingId!, { items: items.filter((_, k) => k !== i) })
@@ -2774,9 +2778,9 @@ async function openLiveModal(entry?: PlaylistEntry): Promise<void> {
   const current = entry ? parseLiveUri(entry.filePath) : null
   liveEditingId = entry?.id ?? null
   liveChosenVideo = current?.videoLabel ?? null
-  $('live-modal-title').textContent = entry ? 'Настройка внешнего входа' : 'Внешний вход'
-  $('live-add').textContent = entry ? 'Сохранить' : 'Добавить в плейлист'
-  list.innerHTML = '<div class="audio-loading">Поиск устройств…</div>'
+  $('live-modal-title').textContent = entry ? t('Настройка внешнего входа') : t('Внешний вход')
+  $('live-add').textContent = entry ? t('Сохранить') : t('Добавить в плейлист')
+  list.innerHTML = `<div class="audio-loading">${t('Поиск устройств…')}</div>`
   audioSelect.innerHTML = ''
   modal.classList.remove('hidden')
 
@@ -2788,8 +2792,8 @@ async function openLiveModal(entry?: PlaylistEntry): Promise<void> {
   list.innerHTML = ''
   if (cams.length === 0) {
     list.innerHTML =
-      '<div class="audio-loading">Устройств не найдено. Проверь, что капчер воткнут и виден системе.<br/>' +
-      'Карты Blackmagic UltraStudio и DeckLink работают через свой драйвер и здесь не появляются — нужен UVC-капчер.</div>'
+      `<div class="audio-loading">${t('Устройств не найдено. Проверь, что капчер воткнут и виден системе.')}<br/>` +
+      `${t('Карты Blackmagic UltraStudio и DeckLink работают через свой драйвер и здесь не появляются — нужен UVC-капчер.')}</div>`
   }
   for (const d of cams) {
     const row = document.createElement('label')
@@ -2802,7 +2806,7 @@ async function openLiveModal(entry?: PlaylistEntry): Promise<void> {
       if (radio.checked) liveChosenVideo = d.label
     })
     const span = document.createElement('span')
-    span.textContent = d.label || 'Устройство без имени'
+    span.textContent = d.label || t('Устройство без имени')
     row.append(radio, span)
     list.appendChild(row)
   }
@@ -2814,13 +2818,13 @@ async function openLiveModal(entry?: PlaylistEntry): Promise<void> {
 
   const none = document.createElement('option')
   none.value = ''
-  none.textContent = 'Без звука (уходит в пульт напрямую)'
+  none.textContent = t('Без звука (уходит в пульт напрямую)')
   audioSelect.appendChild(none)
   for (const d of devices.filter((x) => x.kind === 'audioinput')) {
     if (d.deviceId === 'default') continue
     const opt = document.createElement('option')
     opt.value = d.label
-    opt.textContent = d.label || 'Вход без имени'
+    opt.textContent = d.label || t('Вход без имени')
     audioSelect.appendChild(opt)
   }
   // Сохранённый аудиовход мог отвалиться вместе с железом — тогда останется
@@ -2830,7 +2834,7 @@ async function openLiveModal(entry?: PlaylistEntry): Promise<void> {
 
 async function confirmLiveModal(): Promise<void> {
   if (!liveChosenVideo) {
-    showBanner('Сначала выбери устройство картинки')
+    showBanner(t('Сначала выбери устройство картинки'))
     return
   }
   const audioLabel = $<HTMLSelectElement>('live-audio-select').value || null
@@ -2839,20 +2843,20 @@ async function confirmLiveModal(): Promise<void> {
   if (liveEditingId) {
     await window.api.playlist.updateLive(liveEditingId, src)
     $('live-modal').classList.add('hidden')
-    showBanner('Внешний вход перенастроен', 3000)
+    showBanner(t('Внешний вход перенастроен'), 3000)
     return
   }
 
   const added = await window.api.playlist.addLive(src)
   $('live-modal').classList.add('hidden')
   if (added.length > 0) {
-    showBanner(`Внешний вход добавлен: ${added[0].fileName}`, 4000)
+    showBanner(t('Внешний вход добавлен: {name}', { name: added[0].fileName }), 4000)
   }
 }
 
 async function renderAudioSection(): Promise<void> {
   const list = $('audio-device-list')
-  list.innerHTML = '<div class="audio-loading">Поиск устройств…</div>'
+  list.innerHTML = `<div class="audio-loading">${t('Поиск устройств…')}</div>`
 
   const previewList = $('audio-preview-list')
   const outs = await listAudioOutputs()
@@ -2883,13 +2887,13 @@ async function renderAudioSection(): Promise<void> {
     return row
   }
 
-  list.appendChild(makeRow('main', null, 'Системный выход по умолчанию'))
+  list.appendChild(makeRow('main', null, t('Системный выход по умолчанию')))
   // У предпрослушки дефолта «системный выход» нет намеренно: на площадке он
   // запросто окажется трактом зала, и превью зазвучало бы в зал.
-  previewList.appendChild(makeRow('preview', null, 'Выключена (превью без звука)'))
+  previewList.appendChild(makeRow('preview', null, t('Выключена (превью без звука)')))
   for (const d of outs) {
     if (d.deviceId === 'default') continue // covered by our "default" option
-    const label = d.label || `Устройство ${d.deviceId.slice(0, 6)}…`
+    const label = d.label || t('Устройство {id}…', { id: d.deviceId.slice(0, 6) })
     list.appendChild(makeRow('main', d.deviceId, label))
     previewList.appendChild(makeRow('preview', d.deviceId, label))
   }
@@ -2967,18 +2971,26 @@ function renderUiSection(): void {
   settingsModal.querySelectorAll<HTMLInputElement>('input[name="ui-theme"]').forEach((r) => {
     r.checked = r.value === theme
   })
+  // Галка — на выбранном языке (он может ждать перезапуска), плашка
+  // «перезапустить» — пока выбранный не совпадает с тем, на котором работаем.
+  void window.api.ui.getLang().then((lang) => {
+    settingsModal.querySelectorAll<HTMLInputElement>('input[name="ui-lang"]').forEach((r) => {
+      r.checked = r.value === lang
+    })
+    $('ui-lang-restart-row').classList.toggle('hidden', lang === getLang())
+  })
 }
 
 async function renderLoSection(): Promise<void> {
   const status = $('lo-settings-status')
   const path = await window.api.soffice.current()
-  status.textContent = path ? `✅ Найден: ${path}` : '⚠ Не найден — PPTX не откроются.'
+  status.textContent = path ? t('✅ Найден: {path}', { path }) : t('⚠ Не найден — PPTX не откроются.')
   const pathsEl = $('lo-settings-paths')
   if (path) {
     pathsEl.classList.add('hidden')
   } else {
     const paths = await window.api.soffice.paths()
-    pathsEl.textContent = `Искали здесь: ${paths.join(' · ')} — а также по PATH. Установить: libreoffice.org.`
+    pathsEl.textContent = t('Искали здесь: {paths} — а также по PATH. Установить: libreoffice.org.', { paths: paths.join(' · ') })
     pathsEl.classList.remove('hidden')
   }
 }
@@ -2996,6 +3008,14 @@ function openSettings(section: SettingsSection = 'screens'): void {
     settingsModal.querySelectorAll<HTMLInputElement>('input[name="ui-theme"]').forEach((r) => {
       r.addEventListener('change', () => { if (r.checked) void window.api.ui.setTheme(r.value as UiTheme) })
     })
+    settingsModal.querySelectorAll<HTMLInputElement>('input[name="ui-lang"]').forEach((r) => {
+      r.addEventListener('change', async () => {
+        if (!r.checked) return
+        await window.api.ui.setLang(r.value as Lang)
+        renderUiSection()
+      })
+    })
+    $('ui-lang-restart').addEventListener('click', () => void window.api.ui.relaunch())
     $('lo-settings-recheck').addEventListener('click', async () => {
       await recheckLibreOffice()
       void renderLoSection()
@@ -3120,12 +3140,12 @@ function renderPrompterMock(state: AppState): void {
   // Сообщение спикеру
   if (!msg.classList.contains('dragging')) {
     const ml = state.speakerMsgLayout
-    msg.firstChild!.textContent = state.speakerMessage || state.speakerMsgPresets[0] || 'Сообщение спикеру'
+    msg.firstChild!.textContent = state.speakerMessage || state.speakerMsgPresets[0] || t('Сообщение спикеру')
     msg.classList.toggle('idle', !state.speakerMessage)
     // В «только таймер» суфлёр сообщение не показывает — на макете оно едва видно.
     const masked = isFullTimer(state.timerPosition)
     msg.classList.toggle('masked', masked)
-    msg.title = masked ? 'В режиме «только таймер» сообщение на суфлёре скрыто' : 'Потяни — положение; уголок или колёсико — размер'
+    msg.title = masked ? t('В режиме «только таймер» сообщение на суфлёре скрыто') : t('Потяни — положение; уголок или колёсико — размер')
     msg.style.fontSize = `${64 * ml.scale * k}px`
     msg.style.padding = `${20 * ml.scale * k}px ${44 * ml.scale * k}px`
     msg.style.borderRadius = `${16 * ml.scale * k}px`
@@ -3331,7 +3351,7 @@ let midiEnabled: string[] = []
 async function renderMidiSection(): Promise<void> {
   const status = $('midi-status')
   if (!('requestMIDIAccess' in navigator)) {
-    status.textContent = 'MIDI в этой сборке недоступен.'
+    status.textContent = t('MIDI в этой сборке недоступен.')
     return
   }
   try {
@@ -3341,7 +3361,7 @@ async function renderMidiSection(): Promise<void> {
       midiAccess.onstatechange = () => renderMidiList()
     }
   } catch (err) {
-    status.textContent = `Нет доступа к MIDI: ${err instanceof Error ? err.message : String(err)}`
+    status.textContent = t('Нет доступа к MIDI: {error}', { error: err instanceof Error ? err.message : String(err) })
     return
   }
   renderMidiList()
@@ -3383,14 +3403,14 @@ function renderMidiList(): void {
     }
   }
 
-  for (const i of inputs) row(i.name ?? 'без имени', i.manufacturer ?? '', true, i)
+  for (const i of inputs) row(i.name ?? t('без имени'), i.manufacturer ?? '', true, i)
   // Отмеченные, но сейчас не подключённые — чтобы галка не пропадала,
   // пока устройство едет в кейсе.
-  for (const n of midiEnabled.filter((x) => !names.has(x))) row(n, 'не подключено', false)
+  for (const n of midiEnabled.filter((x) => !names.has(x))) row(n, t('не подключено'), false)
 
   status.textContent = inputs.length
-    ? `Подключено устройств: ${inputs.length}. Отмечено: ${midiEnabled.filter((n) => names.has(n)).length}.`
-    : 'MIDI-устройств не найдено. Подключи контроллер — список обновится сам.'
+    ? t('Подключено устройств: {n}. Отмечено: {checked}.', { n: inputs.length, checked: midiEnabled.filter((n) => names.has(n)).length })
+    : t('MIDI-устройств не найдено. Подключи контроллер — список обновится сам.')
 }
 
 // ── Внешнее управление (Stream Deck / Companion / OSC, main/remote/) ─────────
@@ -3455,11 +3475,11 @@ function renderRemoteStatus(r: RemoteStatus, error?: string): void {
     if (!r.enabled || !r.companionPush) comp.textContent = ''
     else if (r.companion === 'on') {
       comp.classList.add('on')
-      comp.textContent = `● Companion ${r.companionHost}: кнопки получают данные`
+      comp.textContent = t('● Companion {host}: кнопки получают данные', { host: r.companionHost })
     } else if (r.companion === 'error') {
       comp.classList.add('error')
-      comp.textContent = `⚠ ${r.companionError ?? 'нет связи с Companion'}`
-    } else comp.textContent = `Companion ${r.companionHost}: подключаюсь…`
+      comp.textContent = `⚠ ${r.companionError ?? t('нет связи с Companion')}`
+    } else comp.textContent = t('Companion {host}: подключаюсь…', { host: r.companionHost })
   }
   document.getElementById('remote-section')?.classList.toggle('off', !r.enabled)
   const help = document.getElementById('remote-help') as HTMLButtonElement | null
@@ -3471,7 +3491,7 @@ function renderRemoteStatus(r: RemoteStatus, error?: string): void {
     return
   }
   if (!r.enabled) {
-    el.textContent = 'Выключено'
+    el.textContent = t('Выключено')
     return
   }
   const problems = [
@@ -3485,7 +3505,7 @@ function renderRemoteStatus(r: RemoteStatus, error?: string): void {
   }
   el.classList.add('on')
   const where = r.lan ? r.hosts.join(', ') : '127.0.0.1'
-  el.textContent = `● Работает — ${where} · HTTP ${r.httpPort} · OSC ${r.oscPort}`
+  el.textContent = t('● Работает — {where} · HTTP {http} · OSC {osc}', { where, http: r.httpPort, osc: r.oscPort })
 }
 
 function updateWindowedSection(layout: Layout): void {
@@ -3502,9 +3522,9 @@ function renderRoleMapping(layout: Layout, displays: DisplayInfo[], current: Dis
         : ['operator', 'speaker', 'audience']
 
   const labels: Record<Role, string> = {
-    operator: 'Operator (я)',
-    speaker: 'Speaker (суфлёр)',
-    audience: 'Audience (проектор)',
+    operator: t('Operator (я)'),
+    speaker: t('Speaker (суфлёр)'),
+    audience: t('Audience (проектор)'),
   }
 
   const container = $('role-mapping')
@@ -3624,7 +3644,7 @@ function setupSpeakerSplitters(): void {
   // Вертикальная граница: ширина всей колонки (18–60% окна)
   const vHandle = document.createElement('div')
   vHandle.className = 'speaker-splitter'
-  vHandle.title = 'Ширина колонки «Дальше / Заметки»'
+  vHandle.title = t('Ширина колонки «Дальше / Заметки»')
   sidebar.appendChild(vHandle)
   let sideW = NaN
   wireDrag(
@@ -3641,7 +3661,7 @@ function setupSpeakerSplitters(): void {
   // Горизонтальная граница: высота «Дальше» против «Заметок» (15–85% колонки)
   const hHandle = document.createElement('div')
   hHandle.className = 'speaker-hsplitter'
-  hHandle.title = 'Высота «Дальше» / «Заметки»'
+  hHandle.title = t('Высота «Дальше» / «Заметки»')
   notes.appendChild(hHandle)
   let nextH = NaN
   wireDrag(
@@ -3730,7 +3750,7 @@ async function bootstrap(): Promise<void> {
   if (role === 'operator') {
     window.api.diag.info().then((info) => {
       if (info.abnormalPrevious) {
-        showBanner('В прошлый раз CueDeck закрылся аварийно. Help → Сообщить о проблеме — соберёт журнал в zip', 12000)
+        showBanner(t('В прошлый раз CueDeck закрылся аварийно. Help → Сообщить о проблеме — соберёт журнал в zip'), 12000)
       }
     }).catch(() => undefined)
 
@@ -3746,7 +3766,7 @@ async function bootstrap(): Promise<void> {
   }
 
   subscribe((state, patch) => {
-    handleStateChange(state, patch).catch((err) => showBanner(`Ошибка: ${err.message}`))
+    handleStateChange(state, patch).catch((err) => showBanner(t('Ошибка: {error}', { error: err.message })))
   })
 
   // Unsupported codec (ProRes / HEVC without OS support) → <video> fires error.
@@ -3862,5 +3882,5 @@ function mediaErrorInfo(el: HTMLVideoElement): { code: number | null; message: s
 
 bootstrap().catch((err) => {
   window.api.diag.log('error', 'bootstrap упал', String(err?.stack ?? err))
-  showBanner(`Не удалось запустить: ${err.message}`)
+  showBanner(t('Не удалось запустить: {error}', { error: err.message }))
 })

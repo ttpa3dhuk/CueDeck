@@ -1,5 +1,6 @@
 import type { RemoteSettings } from '../../shared/types.js'
-import { REMOTE_COMMANDS, type RemoteCommand } from './commands.js'
+import { commandTitle, REMOTE_COMMANDS, type RemoteCommand } from './commands.js'
+import { getLang, t } from '../../shared/i18n.js'
 
 /**
  * Справочная страница `GET /` — открывается кнопкой «Список команд» в
@@ -14,30 +15,31 @@ const esc = (s: string): string =>
 function argHint(c: RemoteCommand): string {
   switch (c.arg) {
     case 'duration':
-      return 'минуты: <code>5</code>, <code>0.5</code>; мин:сек <code>1:30</code>; <code>90s</code>, <code>1h</code>'
+      return t('минуты: <code>5</code>, <code>0.5</code>; мин:сек <code>1:30</code>; <code>90s</code>, <code>1h</code>')
     case 'index':
-      return 'номер с единицы'
+      return t('номер с единицы')
     case 'number':
-      return 'номер слайда'
+      return t('номер слайда')
     case 'seconds':
-      return 'секунды: <code>10</code>, <code>2.5</code>, <code>1:30</code>'
+      return t('секунды: <code>10</code>, <code>2.5</code>, <code>1:30</code>')
     case 'enum':
       return (c.values ?? []).map((v) => `<code>${esc(v)}</code>`).join(' ')
     case 'text':
-      return 'любой текст'
+      return t('любой текст')
     default:
       return ''
   }
 }
 
 function row(c: RemoteCommand, base: string, oscPort: number): string {
-  const suffix = c.example ? `/${encodeURIComponent(c.example)}` : ''
+  const example = c.example ? t(c.example) : ''
+  const suffix = example ? `/${encodeURIComponent(example)}` : ''
   const url = `${base}/api/${c.path}${suffix}`
-  const oscArg = c.example ? ` <span class="arg">${esc(c.example)}</span>` : ''
+  const oscArg = example ? ` <span class="arg">${esc(example)}</span>` : ''
   const hint = argHint(c)
   return `<tr>
-  <td><b>${esc(c.title)}</b>${hint ? `<div class="hint">${hint}</div>` : ''}</td>
-  <td><div class="copy"><code>${esc(url)}</code><button data-copy="${esc(url)}">копировать</button></div></td>
+  <td><b>${esc(commandTitle(c))}</b>${hint ? `<div class="hint">${hint}</div>` : ''}</td>
+  <td><div class="copy"><code>${esc(url)}</code><button data-copy="${esc(url)}">${t('копировать')}</button></div></td>
   <td><code>/cuedeck/${esc(c.path)}</code>${oscArg}<div class="hint">UDP ${oscPort}</div></td>
 </tr>`
 }
@@ -47,16 +49,34 @@ export function helpPage(s: RemoteSettings, hosts: string[]): string {
   const groups = [...new Set(REMOTE_COMMANDS.map((c) => c.group))]
   const tables = groups
     .map(
-      (g) => `<h2>${esc(g)}</h2>
-<table><thead><tr><th>Что делает</th><th>URL — Stream Deck «Website» / Companion HTTP</th><th>OSC</th></tr></thead><tbody>
+      (g) => `<h2>${esc(t(g))}</h2>
+<table><thead><tr><th>${t('Что делает')}</th><th>${t('URL — Stream Deck «Website» / Companion HTTP')}</th><th>OSC</th></tr></thead><tbody>
 ${REMOTE_COMMANDS.filter((c) => c.group === g).map((c) => row(c, base, s.oscPort)).join('\n')}
 </tbody></table>`,
     )
     .join('\n')
   const lan = hosts.filter((h) => h !== '127.0.0.1')
+  // Строки для скрипта страницы (живой таймер сверху) — одним объектом.
+  const js = JSON.stringify({
+    copied: t('скопировано'),
+    copy: t('копировать'),
+    modes: { countdown: t('обратный отсчёт'), stopwatch: t('секундомер'), clock: t('часы') },
+    running: t('▶ идёт'),
+    stopped: t('⏸ стоит'),
+    duration: t('длительность'),
+    program: t('Эфир: '),
+    slide: t('слайд'),
+    left: t('осталось'),
+    video: t('ролик'),
+    kv: t('ЗАСТАВКА'),
+    programKv: t('Эфир: заставка'),
+    programEmpty: t('Эфир пуст'),
+    message: t('Сообщение спикеру: '),
+    offline: t('нет связи с CueDeck'),
+  })
 
   return `<!doctype html>
-<html lang="ru"><head><meta charset="utf-8">
+<html lang="${getLang()}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CueDeck Remote</title>
 <style>
@@ -90,56 +110,56 @@ ${REMOTE_COMMANDS.filter((c) => c.group === g).map((c) => row(c, base, s.oscPort
   @media (max-width: 720px) { td:first-child { width:auto; } th:nth-child(3), td:nth-child(3) { display:none; } .clock { font-size: 34px; } }
 </style></head>
 <body><main>
-<h1>CueDeck — внешнее управление</h1>
-<p class="sub">Команды работают, в каком бы окне ни был фокус. ${
+<h1>${t('CueDeck — внешнее управление')}</h1>
+<p class="sub">${t('Команды работают, в каком бы окне ни был фокус.')} ${
     s.lan
-      ? `Открыто для сети: ${lan.map((h) => `<code>${esc(h)}</code>`).join(', ') || 'сетевых адресов не найдено'}.`
-      : 'Доступ только с этого компьютера.'
+      ? t('Открыто для сети: {hosts}.', { hosts: lan.map((h) => `<code>${esc(h)}</code>`).join(', ') || t('сетевых адресов не найдено') })
+      : t('Доступ только с этого компьютера.')
   }</p>
 
 <div class="live">
   <div id="clock" class="clock">--:--</div>
-  <div class="meta"><div id="state">подключаюсь…</div><div id="prog"></div><div id="msg"></div></div>
+  <div class="meta"><div id="state">${t('подключаюсь…')}</div><div id="prog"></div><div id="msg"></div></div>
 </div>
 
 <div class="howto">
-  <div><h3>Stream Deck — родная программа Elgato</h3><ol>
-    <li>Справа «Система» → перетащи «Веб-сайт» (Website) на кнопку.</li>
-    <li>В поле URL вставь адрес из таблицы.</li>
-    <li>Включи <b>«GET-запрос в фоне»</b> (GET request in background) — иначе будет открываться браузер.</li>
+  <div><h3>${t('Stream Deck — родная программа Elgato')}</h3><ol>
+    <li>${t('Справа «Система» → перетащи «Веб-сайт» (Website) на кнопку.')}</li>
+    <li>${t('В поле URL вставь адрес из таблицы.')}</li>
+    <li>${t('Включи <b>«GET-запрос в фоне»</b> (GET request in background) — иначе будет открываться браузер.')}</li>
   </ol></div>
   <div><h3>Bitfocus Companion</h3><ol>
-    <li>Подключение <b>Generic HTTP Requests</b> → действие GET → тот же URL.</li>
-    <li>Или <b>Generic OSC</b>: хост <code>127.0.0.1</code>${s.lan ? ' (или IP этого компьютера)' : ''}, порт <code>${s.oscPort}</code>, адрес из колонки OSC.</li>
-    <li>Показать на кнопке: <code>${esc(base)}/api/state</code> (JSON: <code>timer.text</code>, <code>program.remaining</code>, <code>video.remainingText</code>…) или просто текст — <code>/api/timer/text</code>, <code>/api/program/text</code> («3/12»), <code>/api/program/remaining</code>, <code>/api/video/remaining</code>.</li>
+    <li>${t('Подключение <b>Generic HTTP Requests</b> → действие GET → тот же URL.')}</li>
+    <li>${t('Или <b>Generic OSC</b>: хост <code>127.0.0.1</code>{lan}, порт <code>{port}</code>, адрес из колонки OSC.', { lan: s.lan ? t(' (или IP этого компьютера)') : '', port: s.oscPort })}</li>
+    <li>${t('Показать на кнопке: <code>{base}/api/state</code> (JSON: <code>timer.text</code>, <code>program.remaining</code>, <code>video.remainingText</code>…) или просто текст — <code>/api/timer/text</code>, <code>/api/program/text</code> («3/12»), <code>/api/program/remaining</code>, <code>/api/video/remaining</code>.', { base: esc(base) })}</li>
   </ol></div>
 </div>
 
 ${tables}
 
-<p class="hint" style="margin-top:24px">Аргумент можно передать и параметром: <code>${esc(base)}/api/timer/add?value=1:30</code>. В OSC команды без аргумента игнорируют «отпускание» кнопки (аргумент 0/false).</p>
+<p class="hint" style="margin-top:24px">${t('Аргумент можно передать и параметром: <code>{base}/api/timer/add?value=1:30</code>. В OSC команды без аргумента игнорируют «отпускание» кнопки (аргумент 0/false).', { base: esc(base) })}</p>
 
 <script>
+  const T = ${js}
   for (const b of document.querySelectorAll('button[data-copy]')) {
     b.addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(b.dataset.copy) }
       catch { const t = document.createElement('textarea'); t.value = b.dataset.copy; document.body.append(t); t.select(); document.execCommand('copy'); t.remove() }
-      b.textContent = 'скопировано'; b.classList.add('done')
-      setTimeout(() => { b.textContent = 'копировать'; b.classList.remove('done') }, 1200)
+      b.textContent = T.copied; b.classList.add('done')
+      setTimeout(() => { b.textContent = T.copy; b.classList.remove('done') }, 1200)
     })
   }
   const clock = document.getElementById('clock'), st = document.getElementById('state'), msg = document.getElementById('msg'), prog = document.getElementById('prog')
-  const modes = { countdown: 'обратный отсчёт', stopwatch: 'секундомер', clock: 'часы' }
   async function poll() {
     try {
       const r = await (await fetch('/api/state', { cache: 'no-store' })).json()
       clock.textContent = r.timer.text
       clock.className = 'clock ' + r.timer.color
-      st.textContent = (r.timer.running ? '▶ идёт' : '⏸ стоит') + ' · ' + (modes[r.timer.mode] || r.timer.mode) + ' · длительность ' + r.timer.durationText
+      st.textContent = (r.timer.running ? T.running : T.stopped) + ' · ' + (T.modes[r.timer.mode] || r.timer.mode) + ' · ' + T.duration + ' ' + r.timer.durationText
       const p = r.program
-      prog.textContent = p.name ? 'Эфир: ' + p.name + (p.total ? ' · слайд ' + p.text + ' · осталось ' + p.remaining : '') + (r.video.active ? ' · ролик ' + (r.video.playing ? '▶ ' : '⏸ ') + r.video.remainingText : '') + (p.blackout ? ' · ЗАСТАВКА' : '') : (p.blackout ? 'Эфир: заставка' : 'Эфир пуст')
-      msg.textContent = r.speakerMessage ? 'Сообщение спикеру: «' + r.speakerMessage + '»' : ''
-    } catch { st.textContent = 'нет связи с CueDeck'; clock.className = 'clock' }
+      prog.textContent = p.name ? T.program + p.name + (p.total ? ' · ' + T.slide + ' ' + p.text + ' · ' + T.left + ' ' + p.remaining : '') + (r.video.active ? ' · ' + T.video + ' ' + (r.video.playing ? '▶ ' : '⏸ ') + r.video.remainingText : '') + (p.blackout ? ' · ' + T.kv : '') : (p.blackout ? T.programKv : T.programEmpty)
+      msg.textContent = r.speakerMessage ? T.message + '«' + r.speakerMessage + '»' : ''
+    } catch { st.textContent = T.offline; clock.className = 'clock' }
   }
   poll(); setInterval(poll, 500)
 </script>

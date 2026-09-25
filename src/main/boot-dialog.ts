@@ -1,6 +1,7 @@
 import { BrowserWindow, shell } from 'electron'
 import { DONATE_URL } from '../shared/types.js'
 import type { Layout } from './layout.js'
+import { t } from '../shared/i18n.js'
 
 export interface BootLayoutChoice {
   /** null — окно закрыли без выбора: оставить предложенный режим. */
@@ -13,10 +14,11 @@ export interface BootLayoutChoice {
 // внизу (нижний слот он всегда отдаёт cancel-кнопке). Порядок кнопок — 3/2/1
 // сверху вниз, ниже линия и «Поддержать проект». Заодно это база под
 // nag-плашку из PLAN 2.12.
-const CHOICES: { layout: Layout; label: string; hotkey: string }[] = [
-  { layout: 'operator-speaker-audience', label: '3 экрана (+ суфлёр)', hotkey: '3' },
-  { layout: 'presenter-audience', label: '2 экрана (ноут + проектор)', hotkey: '2' },
-  { layout: 'solo', label: '1 экран (только я)', hotkey: '1' },
+// label — функция: язык интерфейса становится известен уже после загрузки модуля.
+const CHOICES: { layout: Layout; label: () => string; hotkey: string }[] = [
+  { layout: 'operator-speaker-audience', label: () => t('3 экрана (+ суфлёр)'), hotkey: '3' },
+  { layout: 'presenter-audience', label: () => t('2 экрана (ноут + проектор)'), hotkey: '2' },
+  { layout: 'solo', label: () => t('1 экран (только я)'), hotkey: '1' },
 ]
 
 // Страница целиком в data:-URL — без отдельного renderer-entry и preload.
@@ -24,13 +26,13 @@ const CHOICES: { layout: Layout; label: string; hotkey: string }[] = [
 function pageHtml(displayCount: number, suggestedIdx: number): string {
   const buttons = CHOICES.map(
     (c, i) =>
-      `<button data-i="${i}"${i === suggestedIdx ? ' class="suggested"' : ''}>${c.label}</button>`,
+      `<button data-i="${i}"${i === suggestedIdx ? ' class="suggested"' : ''}>${c.label()}</button>`,
   ).join('')
   const keymap = JSON.stringify(
     Object.fromEntries(CHOICES.map((c, i) => [c.hotkey, i])),
   )
   const donate = DONATE_URL
-    ? '<div class="sep"></div><button id="donate">☕ Поддержать проект</button>'
+    ? `<div class="sep"></div><button id="donate">${t('☕ Поддержать проект')}</button>`
     : ''
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
@@ -64,9 +66,9 @@ function pageHtml(displayCount: number, suggestedIdx: number): string {
   #donate { background: none; border: none; color: #8b93a3; font-size: 12px; padding: 4px; }
   #donate:hover { color: #e6e8ec; background: none; }
 </style></head><body><div class="wrap">
-  <h1>В каком режиме работаем?</h1>
-  <div class="sub">Сейчас подключено экранов: ${displayCount}.</div>
-  <label class="ask"><input type="checkbox" id="ask"> Больше не спрашивать при запуске</label>
+  <h1>${t('В каком режиме работаем?')}</h1>
+  <div class="sub">${t('Сейчас подключено экранов: {n}.', { n: displayCount })}</div>
+  <label class="ask"><input type="checkbox" id="ask"> ${t('Больше не спрашивать при запуске')}</label>
   ${buttons}
   ${donate}
 </div><script>

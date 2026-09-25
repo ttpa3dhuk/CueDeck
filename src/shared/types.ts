@@ -368,9 +368,9 @@ export const DEFAULT_REMOTE_SETTINGS: RemoteSettings = {
 
 /** Slots 4–6 are empty by default — free rows the user fills in via ПКМ. */
 export const DEFAULT_SPEAKER_MSG_PRESETS = [
-  'Заканчивайте',
-  'Ближе к микрофону',
-  'Финальный слайд',
+  'Заканчивайте', // i18n-ok: ключ словаря, t() при показе
+  'Ближе к микрофону', // i18n-ok: ключ словаря, t() при показе
+  'Финальный слайд', // i18n-ok: ключ словаря, t() при показе
   '',
   '',
   '',

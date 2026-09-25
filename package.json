@@ -60,9 +60,15 @@
       "category": "public.app-category.productivity",
       "identity": "-",
       "extendInfo": {
-        "NSCameraUsageDescription": "CueDeck берёт картинку с USB-капчера или камеры, чтобы выдать внешний источник (ноутбук ведущего, диджея) на экран зала.",
-        "NSMicrophoneUsageDescription": "CueDeck берёт звук с аудиовхода капчера, когда сигнал приходит вместе с картинкой по HDMI."
+        "NSCameraUsageDescription": "CueDeck takes video from a USB capture device or camera to show an external source (the host's or DJ's laptop) on the audience screen.",
+        "NSMicrophoneUsageDescription": "CueDeck takes audio from the capture device's input when sound arrives together with the picture over HDMI."
       },
+      "extraResources": [
+        {
+          "from": "build/ru.lproj",
+          "to": "ru.lproj"
+        }
+      ],
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },

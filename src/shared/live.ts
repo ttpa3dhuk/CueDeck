@@ -22,6 +22,7 @@
 
 import { DEFAULT_LIVE_FIT } from './types.js'
 import type { LiveFit, PlaylistEntry } from './types.js'
+import { t } from './i18n.js'
 
 export const LIVE_SCHEME = 'live'
 
@@ -58,7 +59,7 @@ export function parseLiveUri(path: string | null | undefined): LiveSource | null
 
 /** Имя источника для плейлиста и заголовков. */
 export function liveDisplayName(path: string): string {
-  return parseLiveUri(path)?.videoLabel ?? 'Внешний вход'
+  return parseLiveUri(path)?.videoLabel ?? t('Внешний вход')
 }
 
 /**

@@ -1,6 +1,7 @@
 import { readFile, rename, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { isLiveUri } from '../shared/live.js'
+import { t } from '../shared/i18n.js'
 import type { PlaylistEntry } from './state.js'
 
 /** 2 — пути к материалам внутри папки проекта пишутся относительными. */
@@ -56,7 +57,7 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
     id: String(v.id ?? cryptoRandomId()),
     kind: (v.kind as PlaylistEntry['kind']) ?? 'pdf',
     filePath,
-    fileName: String(v.fileName ?? v.pdfName ?? (filePath ? basename(filePath) : 'Список')),
+    fileName: String(v.fileName ?? v.pdfName ?? (filePath ? basename(filePath) : t('Список'))),
     displayName: String(v.displayName ?? ''),
     speakerName: String(v.speakerName ?? ''),
     durationMs: Number(v.durationMs ?? 30 * 60 * 1000),

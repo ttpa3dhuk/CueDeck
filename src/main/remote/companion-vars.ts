@@ -37,6 +37,27 @@ export const COMPANION_VARS = {
 } as const
 
 export type CompanionVarName = keyof typeof COMPANION_VARS
+
+/** Те же описания для английской страницы Companion (companion/build.ts). */
+export const COMPANION_VARS_EN: Record<CompanionVarName, string> = {
+  cuedeck_online: 'CueDeck is running and sending data: 1 / 0',
+  cuedeck_seen:
+    'When CueDeck last sent data (unix seconds). More than 10 s behind $(internal:time_unix) — CueDeck crashed or the network dropped',
+  cuedeck_timer: 'Timer as on the prompter: 04:59, −00:12 (or the time of day in clock mode)',
+  cuedeck_timer_color: 'Timer colour: green / yellow / red / neutral',
+  cuedeck_timer_over: 'Time is up (the countdown went negative): 1 / 0',
+  cuedeck_timer_running: 'Timer running: 1 / 0',
+  cuedeck_slide: 'Slide on air: 3/12 (empty when there is nothing to flip)',
+  cuedeck_slides_left: 'Slides left after the current one: 9',
+  cuedeck_program: 'What is on air (playlist entry or file name)',
+  cuedeck_preview: 'What is in preview — goes to the audience on TAKE',
+  cuedeck_next: 'Which entry “next speaker” will put into preview',
+  cuedeck_video: 'Time left of the clip on air: 00:13 (empty when there is no clip)',
+  cuedeck_video_playing: 'Clip on air is playing: 1 / 0',
+  cuedeck_muted: 'Program sound is off: 1 / 0',
+  cuedeck_blackout: 'Blackout / key visual on: 1 / 0',
+  cuedeck_message: 'Speaker message on the prompter (empty — none)',
+}
 export type CompanionVars = Record<CompanionVarName, string>
 
 export type CompanionStateView = RemoteStateView &

@@ -8,6 +8,8 @@ import { checkForUpdates } from './updater.js'
 import { initDiag, instrumentIpc, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
 import { captureIpcHandlers, initRemote, registerRemoteIpc } from './remote/server.js'
 import { askBootLayout } from './boot-dialog.js'
+import { askUiLang } from './lang-dialog.js'
+import { DEFAULT_LANG, setLang, t } from '../shared/i18n.js'
 import { showNagDialog } from './nag-dialog.js'
 import { attachOperatorCloseGuard, requestQuit } from './quit-guard.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
@@ -45,6 +47,8 @@ import {
   getTimerPresets,
   getOutputMonitorsEnabled,
   getUiTheme,
+  getUiLang,
+  setUiLang,
   getLastLaunchAt,
   setLastLaunchAt,
 } from './display-mapping.js'
@@ -164,7 +168,7 @@ function buildMenu(): void {
               { role: 'about' },
               { type: 'separator' },
               {
-                label: 'Настройки…',
+                label: t('Настройки…'),
                 accelerator: 'CmdOrCtrl+,',
                 click: () => sendToOperator('menu:open-settings'),
               },
@@ -182,32 +186,32 @@ function buildMenu(): void {
       label: 'File',
       submenu: [
         {
-          label: 'Новый проект',
+          label: t('Новый проект'),
           accelerator: 'CmdOrCtrl+N',
           click: () => sendToOperator('menu:project-new'),
         },
         {
-          label: 'Открыть проект…',
+          label: t('Открыть проект…'),
           accelerator: 'CmdOrCtrl+Shift+O',
           click: () => sendToOperator('menu:project-open'),
         },
         {
-          label: 'Сохранить проект',
+          label: t('Сохранить проект'),
           accelerator: 'CmdOrCtrl+S',
           click: () => sendToOperator('menu:project-save'),
         },
         {
-          label: 'Сохранить как…',
+          label: t('Сохранить как…'),
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => sendToOperator('menu:project-save-as'),
         },
         {
-          label: 'Собрать проект в папку…',
+          label: t('Собрать проект в папку…'),
           click: () => sendToOperator('menu:project-consolidate'),
         },
         { type: 'separator' },
         {
-          label: 'Открыть PDF / PPTX / видео…',
+          label: t('Открыть PDF / PPTX / видео…'),
           accelerator: 'CmdOrCtrl+O',
           click: () => sendToOperator('menu:open-pdf'),
         },
@@ -226,7 +230,7 @@ function buildMenu(): void {
       label: 'Help',
       submenu: [
         {
-          label: 'Горячие клавиши…',
+          label: t('Горячие клавиши…'),
           accelerator: 'Shift+/',
           click: () => sendToOperator('menu:help'),
         },
@@ -234,19 +238,19 @@ function buildMenu(): void {
         {
           // Тот же хоткей ловит и окно оператора по e.code (любая раскладка);
           // двойное срабатывание глушит markMoment.
-          label: '⚑ Отметить момент в журнале',
+          label: t('⚑ Отметить момент в журнале'),
           accelerator: 'CmdOrCtrl+Shift+M',
           click: () => markMoment('menu'),
         },
         {
-          label: 'Сообщить о проблеме…',
+          label: t('Сообщить о проблеме…'),
           click: () => openReportDialog(),
         },
         ...(DONATE_URL
           ? ([
               { type: 'separator' },
               {
-                label: '☕ Поддержать проект…',
+                label: t('☕ Поддержать проект…'),
                 click: () => shell.openExternal(DONATE_URL).catch(() => undefined),
               },
             ] as Electron.MenuItemConstructorOptions[])
@@ -332,6 +336,16 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
   registerDiagIpc()
   registerRemoteIpc()
+
+  // Язык — раньше меню и любых окон: всё дальше рисуется уже на нём. Не
+  // выбран ни разу (первый запуск) — спросить (lang-dialog.ts).
+  let uiLang = getUiLang()
+  if (!uiLang) {
+    const choice = await askUiLang(DEFAULT_LANG)
+    uiLang = choice.lang
+    if (choice.chosen) setUiLang(uiLang)
+  }
+  setLang(uiLang)
   buildMenu()
 
   /**
@@ -356,6 +370,11 @@ app.whenReady().then(async () => {
   ipcMain.on('meter:report', (_e, level: number) => {
     if (typeof level !== 'number' || !Number.isFinite(level)) return
     sendToOperator('meter:program-level', Math.max(0, Math.min(1, level)))
+  })
+
+  // Смена языка в «Настройках» — через перезапуск; спросит о сохранении, как обычный выход.
+  ipcMain.handle('app:relaunch', () => {
+    void requestQuit({ relaunch: true })
   })
 
   ipcMain.handle('external:open', (_e, url: string) => {
@@ -409,6 +428,7 @@ app.whenReady().then(async () => {
   setOperatorWindowHook(attachOperatorCloseGuard)
   await bootNag()
   await bootLayout()
+  booting = false
   watchDisplayChanges()
   startOutputMonitor()
 
@@ -426,7 +446,15 @@ app.whenReady().then(async () => {
   })
 })
 
+/**
+ * Стартовые окна (язык, плашка, раскладка) идут по одному, и между ними окон
+ * нет вовсе — на Windows это `window-all-closed`, и без этой проверки
+ * программа закрылась бы, не успев открыться.
+ */
+let booting = true
+
 app.on('window-all-closed', async () => {
+  if (booting) return
   await flushPendingWrites()
   if (process.platform !== 'darwin') app.quit()
 })

@@ -3,7 +3,8 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 // Готовая страница Companion едет внутри приложения — клиенту не нужен репозиторий
 // (собирается `npx vite-node companion/build.ts`, см. companion/README.md).
-import companionPage from '../../../companion/CueDeck.companionconfig?raw'
+import companionPageRu from '../../../companion/CueDeck.companionconfig?raw'
+import companionPageEn from '../../../companion/CueDeck.en.companionconfig?raw'
 import dgram from 'node:dgram'
 import http from 'node:http'
 import os from 'node:os'
@@ -16,6 +17,7 @@ import { elapsedMs, formatMs, remainingMs, timerView } from '../../renderer/shar
 import { programHasVideo, resolveRemote, type RemoteArg } from './commands.js'
 import { helpPage } from './help-page.js'
 import { parseOscPacket } from './osc.js'
+import { getLang, t } from '../../shared/i18n.js'
 
 /**
  * Внешнее управление (PLAN 2.18): HTTP и OSC слушают в main-процессе, поэтому
@@ -79,13 +81,13 @@ function execute(source: string, segments: string[], extra: RemoteArg[]): Promis
       const h = handlers.get(c.channel)
       if (!h) {
         log.error(`remote: нет обработчика ${c.channel}`)
-        return { ok: false, command: r.command, error: `внутренняя ошибка: нет ${c.channel}` }
+        return { ok: false, command: r.command, error: t('внутренняя ошибка: нет {channel}', { channel: c.channel }) }
       }
       // Обработчики ipc.ts отвечают `{ ok:false, error }` (файл не найден,
       // список пуст…) — отдаём это кнопке, иначе Stream Deck покажет «успех».
       const res = (await h(REMOTE_EVENT, ...c.args)) as { ok?: unknown; error?: unknown } | undefined
       if (res && typeof res === 'object' && res.ok === false) {
-        const error = typeof res.error === 'string' && res.error ? res.error : `${c.channel} не выполнен`
+        const error = typeof res.error === 'string' && res.error ? res.error : t('{channel} не выполнен', { channel: c.channel })
         log.warn(`remote ${source} ${r.command}: ${error}`)
         return { ok: false, command: r.command, error }
       }
@@ -216,18 +218,18 @@ const LOCAL_HOSTS = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i
 async function onHttp(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   const settings = current
   if (!settings.lan && !LOCAL_HOSTS.test(req.headers.host ?? '')) {
-    json(res, 403, { ok: false, error: 'доступ только с этого компьютера' })
+    json(res, 403, { ok: false, error: t('доступ только с этого компьютера') })
     return
   }
   if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'HEAD') {
-    json(res, 405, { ok: false, error: 'только GET или POST' })
+    json(res, 405, { ok: false, error: t('только GET или POST') })
     return
   }
   let url: URL
   try {
     url = new URL(req.url ?? '/', 'http://x')
   } catch {
-    json(res, 400, { ok: false, error: 'кривой адрес' })
+    json(res, 400, { ok: false, error: t('кривой адрес') })
     return
   }
   const path = url.pathname.replace(/\/+$/, '') || '/'
@@ -250,7 +252,7 @@ async function onHttp(req: http.IncomingMessage, res: http.ServerResponse): Prom
     return
   }
   if (!path.startsWith('/api/')) {
-    json(res, 404, { ok: false, error: 'команды живут под /api/, список — на главной странице' })
+    json(res, 404, { ok: false, error: t('команды живут под /api/, список — на главной странице') })
     return
   }
 
@@ -258,7 +260,7 @@ async function onHttp(req: http.IncomingMessage, res: http.ServerResponse): Prom
   try {
     segments = path.slice(5).split('/').filter(Boolean).map(decodeURIComponent)
   } catch {
-    json(res, 400, { ok: false, error: 'кривая кодировка в адресе' })
+    json(res, 400, { ok: false, error: t('кривая кодировка в адресе') })
     return
   }
   const value = url.searchParams.get('value')
@@ -314,9 +316,9 @@ function offStatus(s: RemoteSettings): RemoteStatus {
 }
 
 function humanError(err: NodeJS.ErrnoException, port: number): string {
-  if (err.code === 'EADDRINUSE') return `порт ${port} занят другой программой — укажи другой`
-  if (err.code === 'EACCES') return `нет прав на порт ${port}`
-  if (err.code === 'EADDRNOTAVAIL') return 'сетевой адрес недоступен'
+  if (err.code === 'EADDRINUSE') return t('порт {port} занят другой программой — укажи другой', { port })
+  if (err.code === 'EACCES') return t('нет прав на порт {port}', { port })
+  if (err.code === 'EADDRNOTAVAIL') return t('сетевой адрес недоступен')
   return err.message
 }
 
@@ -325,7 +327,7 @@ function listenHttp(host: string, port: number): Promise<http.Server> {
     const srv = http.createServer((req, res) => {
       onHttp(req, res).catch((err) => {
         log.error('remote http упал', err)
-        if (!res.headersSent) json(res, 500, { ok: false, error: 'внутренняя ошибка' })
+        if (!res.headersSent) json(res, 500, { ok: false, error: t('внутренняя ошибка') })
       })
     })
     srv.once('error', reject)
@@ -408,7 +410,7 @@ async function apply(next: RemoteSettings): Promise<RemoteStatus> {
     log.info(
       `remote: HTTP ${st.http}${st.httpError ? ` (${st.httpError})` : ''} :${next.httpPort}, ` +
         `OSC ${st.osc}${st.oscError ? ` (${st.oscError})` : ''} :${next.oscPort}, ` +
-        `${next.lan ? 'из сети' : 'только этот компьютер'}`,
+        `${next.lan ? 'из сети' : 'только этот компьютер'}`, // i18n-ok: журнал
     )
   } else {
     log.info('remote: выключено')
@@ -453,7 +455,7 @@ export function registerRemoteIpc(): void {
     const next = sanitize(v ?? {})
     if (next.httpPort === next.oscPort) {
       // Один номер для TCP и UDP технически можно, но путает людей при настройке.
-      return { ok: false, error: 'порты HTTP и OSC должны различаться' }
+      return { ok: false, error: t('порты HTTP и OSC должны различаться') }
     }
     setRemoteSettings(next)
     return { ok: true, status: await apply(next) }
@@ -461,13 +463,14 @@ export function registerRemoteIpc(): void {
   ipcMain.handle('remote:save-companion-page', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender) ?? undefined
     const opts = {
-      title: 'Страница CueDeck для Companion',
+      title: t('Страница CueDeck для Companion'),
       defaultPath: join(app.getPath('desktop'), 'CueDeck.companionconfig'),
       filters: [{ name: 'Companion', extensions: ['companionconfig'] }],
     }
     const res = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts)
     if (res.canceled || !res.filePath) return { ok: false, cancelled: true }
-    await writeFile(res.filePath, companionPage)
+    // Подписи на кнопках — на языке интерфейса CueDeck (companion/build.ts).
+    await writeFile(res.filePath, getLang() === 'en' ? companionPageEn : companionPageRu)
     shell.showItemInFolder(res.filePath)
     return { ok: true, path: res.filePath }
   })
@@ -476,7 +479,7 @@ export function registerRemoteIpc(): void {
     setMidiInputs(Array.isArray(names) ? names : [])
   })
   ipcMain.handle('remote:open-help', () => {
-    if (status.http !== 'on') return { ok: false, error: 'HTTP не запущен' }
+    if (status.http !== 'on') return { ok: false, error: t('HTTP не запущен') }
     void shell.openExternal(`http://127.0.0.1:${current.httpPort}/`)
     return { ok: true }
   })

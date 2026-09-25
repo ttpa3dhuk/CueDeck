@@ -4,6 +4,8 @@
 
 Файл страницы **`CueDeck.companionconfig`** встроен в CueDeck: **⚙ Настройки** → «Внешнее управление» → **Страница Companion…** → сохранить. (В репозитории он лежит рядом с этим README.)
 
+Страниц две: `CueDeck.companionconfig` — русские подписи, `CueDeck.en.companionconfig` — английские. CueDeck сохраняет ту, что на языке его интерфейса. Обе собираются одной командой `npm run companion:build`, подписи — таблица `LABELS` в `build.ts`.
+
 ---
 
 ## Что понадобится

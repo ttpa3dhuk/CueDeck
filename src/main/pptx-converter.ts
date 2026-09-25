@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs'
 import { join, parse } from 'node:path'
 import { app } from 'electron'
 import { getSofficePath, setSofficePath } from './display-mapping.js'
+import { t } from '../shared/i18n.js'
 
 /**
  * Где искать LibreOffice. Пути платформозависимы — на Windows их не было
@@ -168,7 +169,7 @@ export async function convertPptxToPdf(pptxPath: string, sourceSha1: string): Pr
 
   const soffice = await findSoffice()
   if (!soffice) {
-    throw new Error('LibreOffice не установлен — скачай с libreoffice.org и перезапусти CueDeck')
+    throw new Error(t('LibreOffice не установлен — скачай с libreoffice.org и перезапусти CueDeck'))
   }
 
   await mkdir(cacheDir(), { recursive: true })
@@ -202,7 +203,7 @@ export async function convertPptxToPdf(pptxPath: string, sourceSha1: string): Pr
     const parsed = parse(pptxPath)
     const generated = join(tmpDir, `${parsed.name}.pdf`)
     if (!existsSync(generated)) {
-      throw new Error('LibreOffice не создал PDF (возможно, файл повреждён)')
+      throw new Error(t('LibreOffice не создал PDF (возможно, файл повреждён)'))
     }
     await rename(generated, target)
     log.info(`soffice: готово за ${Math.round(performance.now() - t0)} мс → ${target}`)

@@ -4,6 +4,8 @@ import type { DisplayMap, Layout } from './layout.js'
 import type { PlaylistEntry, RemoteSettings, SlideTakeMode, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
 import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 import { DEFAULT_REMOTE_SETTINGS } from '../shared/types.js'
+import { EN } from '../shared/i18n-en.js'
+import { parseLang, t, type Lang } from '../shared/i18n.js'
 
 interface SavedMapping {
   layout: Layout
@@ -46,6 +48,12 @@ interface PersistedShape {
   timerPresets: number[]
   outputMonitorsEnabled: boolean
   uiTheme: UiTheme
+  /**
+   * Язык интерфейса. Нет в файле — ещё не выбирали: при запуске спросим
+   * (lang-dialog.ts). В STORE_DEFAULTS его нет сознательно — иначе он
+   * записался бы в файл сам и вопрос не прозвучал бы никогда.
+   */
+  uiLang?: Lang
   /** Внешнее управление (remote/server.ts). */
   remote: RemoteSettings
   /** MIDI-входы, которые слушает CueDeck — имена устройств («Настройки → MIDI»). */
@@ -435,7 +443,9 @@ export function getSpeakerMsgPresets(): string[] {
   const arr = Array.isArray(raw) ? raw : []
   return DEFAULT_SPEAKER_MSG_PRESETS.map((def, i) => {
     const v = typeof arr[i] === 'string' ? String(arr[i]).trim() : ''
-    return v || def
+    // Заводской текст (на любом из языков) — показываем на текущем:
+    // «Заканчивайте» у английского интерфейса становится «Wrap up».
+    return !v || v === def || v === EN[def] ? t(def) : v
   })
 }
 
@@ -472,6 +482,16 @@ export function getUiTheme(): UiTheme {
 export function setUiTheme(theme: UiTheme): void {
   store().set('uiTheme', theme)
 }
+
+/** Выбранный язык интерфейса; null — ещё не выбирали (первый запуск). */
+export function getUiLang(): Lang | null {
+  return parseLang(store().get('uiLang'))
+}
+
+export function setUiLang(lang: Lang): void {
+  store().set('uiLang', lang)
+}
+
 
 /** Порт вне 1024–65535 или мусор в файле настроек → дефолт. */
 function validPort(v: unknown, def: number): number {

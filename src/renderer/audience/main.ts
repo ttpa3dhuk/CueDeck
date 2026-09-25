@@ -202,7 +202,7 @@ async function loadFile(): Promise<void> {
     lastSinkId = state.audioOutputId
     applySinkId(slideVideo, state.audioOutputId)
     syncVideoElement(slideVideo, state.video)
-    done('видео подвешено')
+    done('видео подвешено') // i18n-ok: журнал
     return
   }
 
@@ -221,7 +221,7 @@ async function loadFile(): Promise<void> {
     // Фотографии списка перетекают друг в друга, если оператор задал FADE.
     await crossfadeToImage(slideImage, slideImageUnder, slideImageBlobUrl, listFadeMs(state))
     slideImage.classList.remove('hidden')
-    done('картинка показана')
+    done('картинка показана') // i18n-ok: журнал
     return
   }
 
@@ -232,7 +232,7 @@ async function loadFile(): Promise<void> {
   await loadDocument(data.bytes)
   docLoaded = true
   await renderSlide()
-  done(`${state.fileKind} открыт (${Math.round(data.bytes.byteLength / 1024)} КБ), первый слайд отрисован`)
+  done(`${state.fileKind} открыт (${Math.round(data.bytes.byteLength / 1024)} КБ), первый слайд отрисован`) // i18n-ok: журнал
 }
 
 async function renderSlide(): Promise<void> {

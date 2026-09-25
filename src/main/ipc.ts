@@ -17,6 +17,7 @@ import type {
 } from './state.js'
 import { store, initialDeckState, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 import { DEFAULT_LIVE_FIT } from '../shared/types.js'
+import { getLang, parseLang, t } from '../shared/i18n.js'
 import { isLiveUri, liveDisplayName, makeLiveUri, parseLiveUri } from '../shared/live.js'
 import type { LiveSource } from '../shared/live.js'
 import { computePdfSha1, computeStatSha1, loadNotes, notesWriter, sha1FromBuffer, sidecarPathFor } from './notes-store.js'
@@ -65,6 +66,8 @@ import {
   setTimerPresets,
   setOutputMonitorsEnabled,
   setUiTheme,
+  getUiLang,
+  setUiLang,
 } from './display-mapping.js'
 import { indexFolder, pickBestCandidate, uniqueName } from './project-files.js'
 import { countPdfPages } from './pdf-pages.js'
@@ -95,12 +98,13 @@ const ALL_SUPPORTED_EXTS = [
 const VIDEO_EXTS_ARR = [...VIDEO_EXTS]
 const IMAGE_EXTS_ARR = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
 
-const OPEN_DIALOG_FILTERS: Electron.FileFilter[] = [
-  { name: 'Все поддерживаемые', extensions: ALL_SUPPORTED_EXTS },
+// Функция, а не константа: подписи на языке интерфейса, а он известен только после старта.
+const openDialogFilters = (): Electron.FileFilter[] => [
+  { name: t('Все поддерживаемые'), extensions: ALL_SUPPORTED_EXTS },
   { name: 'PDF', extensions: ['pdf'] },
   { name: 'PowerPoint / Keynote', extensions: ['pptx', 'ppt', 'odp', 'key'] },
-  { name: 'Видео', extensions: VIDEO_EXTS_ARR },
-  { name: 'Изображения', extensions: IMAGE_EXTS_ARR },
+  { name: t('Видео'), extensions: VIDEO_EXTS_ARR },
+  { name: t('Изображения'), extensions: IMAGE_EXTS_ARR },
 ]
 
 function extOf(path: string): string {
@@ -148,12 +152,12 @@ interface InspectedFile {
 /** Read a file's identity + page count + sidecar notes. Shared by both decks. */
 async function inspectFile(filePath: string): Promise<InspectedFile> {
   const kind = kindOf(filePath)
-  if (!kind) throw new Error('Неподдерживаемый формат файла')
+  if (!kind) throw new Error(t('Неподдерживаемый формат файла'))
 
   // Живой вход: файла нет — ни читать, ни считать страницы, ни искать заметки.
   // Идентичность = сам псевдо-путь (сменил устройство → сменился «файл»).
   if (kind === 'live') {
-    if (!parseLiveUri(filePath)) throw new Error('Неверно задан внешний вход')
+    if (!parseLiveUri(filePath)) throw new Error(t('Неверно задан внешний вход'))
     return { kind, sha1: filePath, totalSlides: 1, notes: {}, sha1Mismatch: false, slideMedia: [] }
   }
 
@@ -325,7 +329,7 @@ function openErrorMessage(err: unknown, filePath: string): string {
   const e = err as NodeJS.ErrnoException
   if (e?.code !== 'ENOENT') return (err as Error).message
   void refreshMissingFiles()
-  return `Файл не найден: ${basename(filePath)} — материал переехал. Нажми «Указать файл…» на карточке`
+  return t('Файл не найден: {name} — материал переехал. Нажми «Указать файл…» на карточке', { name: basename(filePath) })
 }
 
 async function openFile(
@@ -616,7 +620,7 @@ export async function saveProject(
   let target = state.projectPath
   if (!target || saveAs) {
     const res = await dialog.showSaveDialog(op!, {
-      title: 'Сохранить проект',
+      title: t('Сохранить проект'),
       defaultPath: target ?? `presenter-project.${PROJECT_EXTENSION}`,
       filters: [{ name: 'CueDeck project', extensions: [PROJECT_EXTENSION] }],
     })
@@ -640,8 +644,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('pdf:open-dialog', async () => {
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
-      title: 'Открыть PDF, PPTX, видео или изображение',
-      filters: OPEN_DIALOG_FILTERS,
+      title: t('Открыть PDF, PPTX, видео или изображение'),
+      filters: openDialogFilters(),
       properties: ['openFile'],
     })
     if (res.canceled || res.filePaths.length === 0) return { ok: false, cancelled: true }
@@ -723,8 +727,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('preview:open-dialog', async () => {
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
-      title: 'Открыть в превью',
-      filters: OPEN_DIALOG_FILTERS,
+      title: t('Открыть в превью'),
+      filters: openDialogFilters(),
       properties: ['openFile'],
     })
     if (res.canceled || res.filePaths.length === 0) return { ok: false, cancelled: true }
@@ -1122,7 +1126,7 @@ export function registerIpcHandlers(): void {
     const arr = Array.isArray(presets) ? presets : []
     const clean = DEFAULT_SPEAKER_MSG_PRESETS.map((def, i) => {
       const v = typeof arr[i] === 'string' ? arr[i].trim().slice(0, 60) : ''
-      return v || def
+      return v || t(def)
     })
     store.patch({ speakerMsgPresets: clean })
     setSpeakerMsgPresets(clean)
@@ -1269,6 +1273,15 @@ export function registerIpcHandlers(): void {
     setUiTheme(v)
   })
 
+  // Язык интерфейса: запоминаем, применится после перезапуска (i18n.ts).
+  // Отдаём выбранный, а не текущий: выбрали и не перезапустили — галка
+  // в «Настройках» должна стоять на выбранном.
+  ipcMain.handle('ui:get-lang', () => getUiLang() ?? getLang())
+  ipcMain.handle('ui:set-lang', (_e, lang: unknown) => {
+    const v = parseLang(lang)
+    if (v) setUiLang(v)
+  })
+
   /** Append supported files to the playlist; unsupported paths are skipped. */
   function toListItems(paths: string[]): ListItem[] {
     const out: ListItem[] = []
@@ -1284,9 +1297,9 @@ export function registerIpcHandlers(): void {
     const photos = items.filter((i) => i.kind === 'image').length
     const videos = items.length - photos
     const parts: string[] = []
-    if (photos) parts.push(`${photos} фото`)
-    if (videos) parts.push(`${videos} видео`)
-    return `Список — ${parts.join(', ') || 'пусто'}`
+    if (photos) parts.push(t('{n} фото', { n: photos }))
+    if (videos) parts.push(t('{n} видео', { n: videos }))
+    return t('Список — {what}', { what: parts.join(', ') || t('пусто') })
   }
 
   function appendListEntry(paths: string[]): PlaylistEntry[] {
@@ -1341,8 +1354,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('playlist:add', async (): Promise<PlaylistEntry[]> => {
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
-      title: 'Добавить файлы в плейлист',
-      filters: OPEN_DIALOG_FILTERS,
+      title: t('Добавить файлы в плейлист'),
+      filters: openDialogFilters(),
       properties: ['openFile', 'multiSelections'],
     })
     if (res.canceled || res.filePaths.length === 0) return []
@@ -1357,12 +1370,12 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('playlist:add-list', async (): Promise<PlaylistEntry[]> => {
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
-      title: 'Файлы для списка',
-      message: 'Фотографии и ролики, которые пойдут по кругу',
+      title: t('Файлы для списка'),
+      message: t('Фотографии и ролики, которые пойдут по кругу'),
       filters: [
-        { name: 'Фото и видео', extensions: [...IMAGE_EXTS_ARR, ...VIDEO_EXTS_ARR] },
-        { name: 'Изображения', extensions: IMAGE_EXTS_ARR },
-        { name: 'Видео', extensions: VIDEO_EXTS_ARR },
+        { name: t('Фото и видео'), extensions: [...IMAGE_EXTS_ARR, ...VIDEO_EXTS_ARR] },
+        { name: t('Изображения'), extensions: IMAGE_EXTS_ARR },
+        { name: t('Видео'), extensions: VIDEO_EXTS_ARR },
       ],
       properties: ['openFile', 'multiSelections'],
     })
@@ -1418,8 +1431,8 @@ export function registerIpcHandlers(): void {
       if (!old) return false
       const op = getOperatorWindow()
       const res = await dialog.showOpenDialog(op!, {
-        title: `Указать файл вместо «${old.fileName}»`,
-        filters: [{ name: 'Фото и видео', extensions: [...IMAGE_EXTS_ARR, ...VIDEO_EXTS_ARR] }],
+        title: t('Указать файл вместо «{name}»', { name: old.fileName }),
+        filters: [{ name: t('Фото и видео'), extensions: [...IMAGE_EXTS_ARR, ...VIDEO_EXTS_ARR] }],
         properties: ['openFile'],
       })
       if (res.canceled || res.filePaths.length === 0) return false
@@ -1442,8 +1455,8 @@ export function registerIpcHandlers(): void {
     if (!entry || entry.kind !== 'list') return false
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
-      title: 'Добавить в список',
-      filters: [{ name: 'Фото и видео', extensions: [...IMAGE_EXTS_ARR, ...VIDEO_EXTS_ARR] }],
+      title: t('Добавить в список'),
+      filters: [{ name: t('Фото и видео'), extensions: [...IMAGE_EXTS_ARR, ...VIDEO_EXTS_ARR] }],
       properties: ['openFile', 'multiSelections'],
     })
     if (res.canceled || res.filePaths.length === 0) return false
@@ -1592,7 +1605,7 @@ export function registerIpcHandlers(): void {
     // Крутить её в превью незачем: это подготовка, а не эфир.
     if (entry.kind === 'list') {
       const first = entry.items?.[0]
-      if (!first) return { ok: false, error: 'Список пуст — добавь фото или ролики' }
+      if (!first) return { ok: false, error: t('Список пуст — добавь фото или ролики') }
       store.patch({ previewListIndex: 0 })
       return loadPreview(first.path, { playlistId: id })
     }
@@ -1606,7 +1619,7 @@ export function registerIpcHandlers(): void {
     if (!entry) return { ok: false, error: 'Entry not found' }
     if (entry.kind === 'list') {
       if (!entry.items || entry.items.length === 0) {
-        return { ok: false, error: 'Список пуст — добавь фото или ролики' }
+        return { ok: false, error: t('Список пуст — добавь фото или ролики') }
       }
       await startListPlayback(id)
       return { ok: true, path: entry.items[0].path }
@@ -1629,11 +1642,11 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('keyvisual:set', async (): Promise<{ path: string | null }> => {
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
-      title: 'Выбрать заставку (key visual)',
+      title: t('Выбрать заставку (key visual)'),
       filters: [
-        { name: 'Картинка или видео', extensions: [...IMAGE_EXTS_ARR, 'gif', ...VIDEO_EXTS_ARR] },
-        { name: 'Изображения', extensions: [...IMAGE_EXTS_ARR, 'gif'] },
-        { name: 'Видео', extensions: VIDEO_EXTS_ARR },
+        { name: t('Картинка или видео'), extensions: [...IMAGE_EXTS_ARR, 'gif', ...VIDEO_EXTS_ARR] },
+        { name: t('Изображения'), extensions: [...IMAGE_EXTS_ARR, 'gif'] },
+        { name: t('Видео'), extensions: VIDEO_EXTS_ARR },
       ],
       properties: ['openFile'],
     })
@@ -1696,7 +1709,7 @@ export function registerIpcHandlers(): void {
     const op = getOperatorWindow()
     const win = process.platform === 'win32'
     const res = await dialog.showOpenDialog(op!, {
-      title: 'Укажи, где установлен LibreOffice',
+      title: t('Укажи, где установлен LibreOffice'),
       defaultPath: win ? 'C:\\Program Files' : '/Applications',
       // На macOS бандл .app выбирается как файл — нужен openDirectory-обход.
       properties: win ? ['openFile'] : ['openFile', 'treatPackageAsDirectory'],
@@ -1788,7 +1801,7 @@ export function registerIpcHandlers(): void {
     }> => {
       const op = getOperatorWindow()
       const res = await dialog.showOpenDialog(op!, {
-        title: 'Открыть проект',
+        title: t('Открыть проект'),
         filters: [{ name: 'CueDeck project', extensions: [PROJECT_EXTENSION] }],
         properties: ['openFile'],
       })
@@ -1838,8 +1851,8 @@ export function registerIpcHandlers(): void {
       if (missingIds.size === 0) return { fixed: 0, remaining: 0 }
       const op = getOperatorWindow()
       const res = await dialog.showOpenDialog(op!, {
-        title: 'Где теперь лежат материалы?',
-        message: 'Выбери папку — файлы найдутся в ней и во вложенных папках по именам',
+        title: t('Где теперь лежат материалы?'),
+        message: t('Выбери папку — файлы найдутся в ней и во вложенных папках по именам'),
         properties: ['openDirectory'],
       })
       if (res.canceled || res.filePaths.length === 0) {
@@ -1900,20 +1913,20 @@ export function registerIpcHandlers(): void {
       const op = getOperatorWindow()
       const state = store.get()
       if (state.playlist.length === 0 && !state.keyVisualPath) {
-        return { ok: false, error: 'Проект пуст — нечего собирать' }
+        return { ok: false, error: t('Проект пуст — нечего собирать') }
       }
       const res = await dialog.showOpenDialog(op!, {
-        title: 'Куда собрать проект',
-        message: 'Выбери папку — внутри появится папка проекта со всеми материалами',
+        title: t('Куда собрать проект'),
+        message: t('Выбери папку — внутри появится папка проекта со всеми материалами'),
         properties: ['openDirectory', 'createDirectory'],
       })
       if (res.canceled || res.filePaths.length === 0) return { ok: false, cancelled: true }
 
       const projectName = state.projectPath
         ? basename(state.projectPath, `.${PROJECT_EXTENSION}`)
-        : 'CueDeck-проект'
+        : t('CueDeck-проект')
       const targetDir = join(res.filePaths[0], projectName)
-      const mediaDir = join(targetDir, 'материалы')
+      const mediaDir = join(targetDir, t('материалы'))
 
       try {
         await mkdir(mediaDir, { recursive: true })
@@ -2019,8 +2032,8 @@ export function registerIpcHandlers(): void {
     if (!entry || entry.kind === 'live' || entry.kind === 'list') return false
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
-      title: `Указать файл для «${entry.displayName || entry.fileName}»`,
-      filters: OPEN_DIALOG_FILTERS,
+      title: t('Указать файл для «{name}»', { name: entry.displayName || entry.fileName }),
+      filters: openDialogFilters(),
       properties: ['openFile'],
     })
     if (res.canceled || res.filePaths.length === 0) return false

@@ -1,6 +1,7 @@
 import { log } from '../diag.js'
 import { store } from '../state.js'
 import { companionOfflineVars, companionVars, diffVars, type CompanionVars } from './companion-vars.js'
+import { t } from '../../shared/i18n.js'
 
 /**
  * Отправка состояния CueDeck в Bitfocus Companion (PLAN 2.18, шаг 3):
@@ -60,7 +61,7 @@ async function post(name: string, value: string): Promise<void> {
   const url = `http://${host}/api/custom-variable/${encodeURIComponent(name)}/value?value=${encodeURIComponent(value)}`
   const res = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
   if (res.status === 404) throw new MissingVariable(name)
-  if (!res.ok) throw new Error(`Companion ответил ${res.status}`)
+  if (!res.ok) throw new Error(t('Companion ответил {status}', { status: res.status }))
 }
 
 async function send(vars: Partial<CompanionVars>): Promise<void> {
@@ -72,11 +73,11 @@ async function send(vars: Partial<CompanionVars>): Promise<void> {
 
 function describe(err: unknown): string {
   if (err instanceof MissingVariable) {
-    return `в Companion нет переменной ${err.message} — импортируй страницу CueDeck`
+    return t('в Companion нет переменной {name} — импортируй страницу CueDeck', { name: err.message })
   }
   const code = (err as { cause?: { code?: string } })?.cause?.code
-  if (code === 'ECONNREFUSED') return `Companion не отвечает на ${host} — он запущен?`
-  if ((err as Error)?.name === 'TimeoutError') return `Companion на ${host} не ответил вовремя`
+  if (code === 'ECONNREFUSED') return t('Companion не отвечает на {host} — он запущен?', { host: host ?? '' })
+  if ((err as Error)?.name === 'TimeoutError') return t('Companion на {host} не ответил вовремя', { host: host ?? '' })
   return err instanceof Error ? err.message : String(err)
 }
 

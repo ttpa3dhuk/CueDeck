@@ -180,6 +180,12 @@ export interface PresenterApi {
   ui: {
     /** Тема окна оператора (персистится). */
     setTheme(theme: UiTheme): Promise<void>
+    /** Выбранный язык интерфейса (может ждать перезапуска). */
+    getLang(): Promise<'ru' | 'en'>
+    /** Запомнить язык — применится после перезапуска. */
+    setLang(lang: 'ru' | 'en'): Promise<void>
+    /** Перезапустить CueDeck (с вопросом о сохранении, как обычный выход). */
+    relaunch(): Promise<void>
   }
   /** Раскладка экрана суфлёра (колонки «Дальше/Заметки»). */
   prompter: {

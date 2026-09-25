@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, globalShortcut } from 'electron'
 import { companionGoodbye } from './remote/companion-push.js'
 import { flushPendingWrites, saveProject } from './ipc.js'
 import { markCleanExit } from './diag.js'
+import { t } from '../shared/i18n.js'
 
 /**
  * Подтверждение при закрытии (PLAN «🛡 ОТКРЫТО: подтверждение при закрытии»).
@@ -20,6 +21,8 @@ import { markCleanExit } from './diag.js'
 
 let confirmed = false
 let asking = false
+/** Выход ради перезапуска (смена языка в «Настройках»). */
+let relaunch = false
 let operatorWin: BrowserWindow | null = null
 
 /** Вешается на окно оператора при каждом его создании (см. windows.ts). */
@@ -39,7 +42,8 @@ export function attachOperatorCloseGuard(win: BrowserWindow): void {
  * Единая точка выхода: спрашивает (один раз), дописывает файлы и выходит.
  * `app.exit(0)` не поднимает before-quit заново, поэтому рекурсии нет.
  */
-export async function requestQuit(): Promise<void> {
+export async function requestQuit(opts: { relaunch?: boolean } = {}): Promise<void> {
+  if (opts.relaunch) relaunch = true
   if (asking) {
     // Диалог уже висит — не плодим второй, просто показываем его.
     if (operatorWin && !operatorWin.isDestroyed()) operatorWin.focus()
@@ -57,7 +61,12 @@ export async function requestQuit(): Promise<void> {
       } finally {
         asking = false
       }
-      if (!ok) return
+      if (!ok) {
+        // Передумали закрывать — и перезапуск отменяется: иначе он случился
+        // бы потом, на обычном выходе.
+        relaunch = false
+        return
+      }
     }
     confirmed = true
   }
@@ -66,18 +75,19 @@ export async function requestQuit(): Promise<void> {
   await companionGoodbye()
   await flushPendingWrites()
   markCleanExit()
+  if (relaunch) app.relaunch()
   app.exit(0)
 }
 
 async function confirmClose(op: BrowserWindow): Promise<boolean> {
   const { response } = await dialog.showMessageBox(op, {
     type: 'warning',
-    buttons: ['Сохранить и закрыть', 'Закрыть без сохранения', 'Отмена'],
+    buttons: [t('Сохранить и закрыть'), t('Закрыть без сохранения'), t('Отмена')],
     defaultId: 0,
     cancelId: 2,
     noLink: true,
-    message: 'Закрыть CueDeck?',
-    detail: 'Экраны зала и суфлёра погаснут.',
+    message: t('Закрыть CueDeck?'),
+    detail: t('Экраны зала и суфлёра погаснут.'),
   })
   if (response === 2) return false
   if (response === 1) return true
@@ -89,8 +99,8 @@ async function confirmClose(op: BrowserWindow): Promise<boolean> {
   if (res.error) {
     await dialog.showMessageBox(op, {
       type: 'error',
-      buttons: ['Понятно'],
-      message: 'Не удалось сохранить проект',
+      buttons: [t('Понятно')],
+      message: t('Не удалось сохранить проект'),
       detail: res.error,
     })
   }
