@@ -128,7 +128,7 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		this.config = {
 			host: (config.host ?? '').trim() || DEFAULT_CONFIG.host,
 			port: Number(config.port) || DEFAULT_CONFIG.port,
-			lang: config.lang === 'en' ? 'en' : 'ru',
+			lang: config.lang === 'ru' ? 'ru' : 'en',
 		}
 	}
 

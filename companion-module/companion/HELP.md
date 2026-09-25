@@ -6,11 +6,11 @@ The module controls CueDeck from Stream Deck and shows its state on the buttons:
 
 ### Setup
 
-1. **CueDeck** (its interface is in Russian): ⚙ button at the bottom → section **«Внешнее управление»** (External control) → ☑ **«Включить»** (Enable). The status line should read `● Работает — 127.0.0.1 · HTTP 9420` (Running).
+1. **CueDeck:** ⚙ button at the bottom → **External control** → ☑ **Enable**. The status line should read `● Running — 127.0.0.1 · HTTP 9420 · OSC 9421`. (CueDeck 0.7.0 is Russian-only: «Внешнее управление» → «Включить»; the interface language is in ⚙ Settings → Interface from the next version.)
 2. **Companion:** add the **CueDeck** connection. Same computer — leave `127.0.0.1` / `9420`.
 3. Open **Presets → CueDeck** and drag the buttons you need onto a page.
 
-**Companion on another computer:** in CueDeck also tick ☑ **«Из сети»** (From network); in the connection enter the IP of the CueDeck computer.
+**Companion on another computer:** in CueDeck also tick ☑ **From network**; in the connection enter the IP of the CueDeck computer.
 
 ### Presets
 
@@ -23,11 +23,11 @@ The module controls CueDeck from Stream Deck and shows its state on the buttons:
 | Speaker message | presets 1–4 (text from CueDeck), clear                                                                                                                                                     |
 | Preview         | slide ▶ / ◀, video, clear                                                                                                                                                                  |
 
-Preset button language (Russian / English) — in the connection settings.
+Preset button language (English by default, or Russian) — in the connection settings.
 
 ### Actions, feedbacks, variables
 
-- **Actions** cover every CueDeck command. For anything not listed use **Custom command** with a path from CueDeck → ⚙ → «Внешнее управление» → **«Список команд…»** (Command list), e.g. `timer/set/20`.
+- **Actions** cover every CueDeck command. For anything not listed use **Custom command** with a path from CueDeck → ⚙ Settings → External control → **Command list…**, e.g. `timer/set/20`.
 - **Feedbacks:** no connection, timer colour, time is over (blink), timer running, “timer only”, blackout, video playing, muted, loop, message shown, last slide, preview loaded, entry N on air / in preview.
 - **Variables:** `$(cuedeck:timer)`, `$(cuedeck:slide)`, `$(cuedeck:preview)`, `$(cuedeck:next)`, `$(cuedeck:video_remaining)`, `$(cuedeck:speaker_1)`… — full list in **Variables → cuedeck**.
 

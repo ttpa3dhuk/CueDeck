@@ -8,7 +8,8 @@ export type ModuleConfig = {
 	lang: Lang
 }
 
-export const DEFAULT_CONFIG: ModuleConfig = { host: '127.0.0.1', port: 9420, lang: 'ru' }
+// Язык подписей по умолчанию — английский, как у CueDeck (Азат 2026-09-25).
+export const DEFAULT_CONFIG: ModuleConfig = { host: '127.0.0.1', port: 9420, lang: 'en' }
 
 export function GetConfigFields(): SomeCompanionConfigField[] {
 	return [
@@ -18,8 +19,8 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			label: '',
 			width: 12,
 			value:
-				'In CueDeck (Russian interface): ⚙ → «Внешнее управление» (External control) → ☑ «Включить» (Enable). ' +
-				'Companion on another computer — also ☑ «Из сети» (From network) and enter the CueDeck computer’s IP here.<br>' +
+				'In CueDeck: ⚙ Settings → External control → ☑ Enable. ' +
+				'Companion on another computer — also ☑ From network, and enter the CueDeck computer’s IP here.<br>' +
 				'В CueDeck: ⚙ Настройки → Внешнее управление → ☑ Включить. ' +
 				'Companion на другом компьютере — там же ☑ «Из сети», а здесь IP компьютера с CueDeck.',
 		},
@@ -47,8 +48,8 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			width: 8,
 			default: DEFAULT_CONFIG.lang,
 			choices: [
-				{ id: 'ru', label: 'Русский' },
 				{ id: 'en', label: 'English' },
+				{ id: 'ru', label: 'Русский' },
 			],
 		},
 	]
