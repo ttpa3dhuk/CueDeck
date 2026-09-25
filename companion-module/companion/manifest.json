@@ -1,14 +1,14 @@
 {
 	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
 	"type": "connection",
-	"id": "cuedeck",
+	"id": "cuedeck-cuedeck",
 	"name": "CueDeck",
 	"shortname": "cuedeck",
 	"description": "CueDeck — presentation playout for live events: speaker playlist, preview/program, timer on the confidence monitor, video, blackout",
 	"version": "0.0.0",
 	"license": "MIT",
-	"repository": "git+https://github.com/ttpa3dhuk/CueDeck.git",
-	"bugs": "https://github.com/ttpa3dhuk/CueDeck/issues",
+	"repository": "git+https://github.com/bitfocus/companion-module-cuedeck-cuedeck.git",
+	"bugs": "https://github.com/bitfocus/companion-module-cuedeck-cuedeck/issues",
 	"maintainers": [
 		{
 			"name": "Azat Khusaenov",

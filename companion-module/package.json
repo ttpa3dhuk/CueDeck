@@ -1,13 +1,13 @@
 {
-	"name": "companion-module-cuedeck",
-	"version": "0.1.3",
+	"name": "companion-module-cuedeck-cuedeck",
+	"version": "0.1.0",
 	"description": "Bitfocus Companion module for CueDeck — presentation operator tool for live events",
 	"main": "dist/main.js",
 	"type": "module",
 	"scripts": {
 		"build": "rimraf dist && tsc -p tsconfig.build.json",
 		"dev": "tsc -p tsconfig.build.json --watch",
-		"package": "npm run build && companion-module-build",
+		"package": "run build && companion-module-build",
 		"check": "companion-module-check",
 		"lint": "eslint .",
 		"format": "prettier -w ."
@@ -16,10 +16,11 @@
 	"author": "Azat Khusaenov",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/ttpa3dhuk/CueDeck.git"
+		"url": "git+https://github.com/bitfocus/companion-module-cuedeck-cuedeck.git"
 	},
 	"engines": {
-		"node": "^22.20"
+		"node": "^22.20",
+		"yarn": "^4"
 	},
 	"dependencies": {
 		"@companion-module/base": "2.0.4"
@@ -33,5 +34,6 @@
 		"typescript": "~6.0.3",
 		"typescript-eslint": "^8.59.0"
 	},
-	"prettier": "@companion-module/tools/.prettierrc.json"
+	"prettier": "@companion-module/tools/.prettierrc.json",
+	"packageManager": "yarn@4.17.0"
 }

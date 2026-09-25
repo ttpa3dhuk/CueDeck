@@ -18,8 +18,8 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			label: '',
 			width: 12,
 			value:
-				'In CueDeck: ⚙ Settings → External control → ☑ Enable. ' +
-				'Companion on another computer — also ☑ “From network” and enter that computer’s IP here.<br>' +
+				'In CueDeck (Russian interface): ⚙ → «Внешнее управление» (External control) → ☑ «Включить» (Enable). ' +
+				'Companion on another computer — also ☑ «Из сети» (From network) and enter the CueDeck computer’s IP here.<br>' +
 				'В CueDeck: ⚙ Настройки → Внешнее управление → ☑ Включить. ' +
 				'Companion на другом компьютере — там же ☑ «Из сети», а здесь IP компьютера с CueDeck.',
 		},

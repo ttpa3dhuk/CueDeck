@@ -6,28 +6,28 @@ The module controls CueDeck from Stream Deck and shows its state on the buttons:
 
 ### Setup
 
-1. **CueDeck:** ⚙ Settings → **External control** → ☑ **Enable**. The status line should read `● Running — 127.0.0.1 · HTTP 9420`.
+1. **CueDeck** (its interface is in Russian): ⚙ button at the bottom → section **«Внешнее управление»** (External control) → ☑ **«Включить»** (Enable). The status line should read `● Работает — 127.0.0.1 · HTTP 9420` (Running).
 2. **Companion:** add the **CueDeck** connection. Same computer — leave `127.0.0.1` / `9420`.
 3. Open **Presets → CueDeck** and drag the buttons you need onto a page.
 
-**Companion on another computer:** in CueDeck also tick ☑ **From network**; in the connection enter the IP of the CueDeck computer.
+**Companion on another computer:** in CueDeck also tick ☑ **«Из сети»** (From network); in the connection enter the IP of the CueDeck computer.
 
 ### Presets
 
-| Section | Buttons |
-| --- | --- |
-| Timer | start/pause with live time (colour as on the monitor, flashes after zero), start, pause, restart, reset, ±1 / ±5 min, 5 / 10 / 15 / 20 min, presets 1–4 from CueDeck, “timer only” ⛶, mode |
-| Program | NEXT with slide counter (amber on the last slide), BACK, TAKE with preview name, BLACKOUT, “on air” display |
-| Video on air | play/pause with time left, from start, stop, ±10 s, sound on/off, loop |
-| Playlist | next / previous speaker into preview, speaker 1–8 into preview or straight on air — red when on air, green when in preview |
-| Speaker message | presets 1–4 (text from CueDeck), clear |
-| Preview | slide ▶ / ◀, video, clear |
+| Section         | Buttons                                                                                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Timer           | start/pause with live time (colour as on the monitor, flashes after zero), start, pause, restart, reset, ±1 / ±5 min, 5 / 10 / 15 / 20 min, presets 1–4 from CueDeck, “timer only” ⛶, mode |
+| Program         | NEXT with slide counter (amber on the last slide), BACK, TAKE with preview name, BLACKOUT, “on air” display                                                                                |
+| Video on air    | play/pause with time left, from start, stop, ±10 s, sound on/off, loop                                                                                                                     |
+| Playlist        | next / previous speaker into preview, speaker 1–8 into preview or straight on air — red when on air, green when in preview                                                                 |
+| Speaker message | presets 1–4 (text from CueDeck), clear                                                                                                                                                     |
+| Preview         | slide ▶ / ◀, video, clear                                                                                                                                                                  |
 
 Preset button language (Russian / English) — in the connection settings.
 
 ### Actions, feedbacks, variables
 
-- **Actions** cover every CueDeck command. For anything not listed use **Custom command** with a path from CueDeck → ⚙ Settings → External control → **Command list** (e.g. `timer/set/20`).
+- **Actions** cover every CueDeck command. For anything not listed use **Custom command** with a path from CueDeck → ⚙ → «Внешнее управление» → **«Список команд…»** (Command list), e.g. `timer/set/20`.
 - **Feedbacks:** no connection, timer colour, time is over (blink), timer running, “timer only”, blackout, video playing, muted, loop, message shown, last slide, preview loaded, entry N on air / in preview.
 - **Variables:** `$(cuedeck:timer)`, `$(cuedeck:slide)`, `$(cuedeck:preview)`, `$(cuedeck:next)`, `$(cuedeck:video_remaining)`, `$(cuedeck:speaker_1)`… — full list in **Variables → cuedeck**.
 
