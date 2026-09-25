@@ -13,7 +13,7 @@ import { configureCompanionPush } from './companion-push.js'
 import { store, type RemoteSettings, type RemoteStatus } from '../state.js'
 import { DEFAULT_REMOTE_SETTINGS } from '../../shared/types.js'
 import { elapsedMs, formatMs, remainingMs, timerView } from '../../renderer/shared/timer.js'
-import { programHasVideo, resolveRemote, type RemoteArg } from './commands.js'
+import { neighbour, programHasVideo, resolveRemote, type RemoteArg } from './commands.js'
 import { helpPage } from './help-page.js'
 import { parseOscPacket } from './osc.js'
 
@@ -128,6 +128,7 @@ function statusJson(): Record<string, unknown> {
     return i >= 0 ? i + 1 : null
   }
   const slides = s.totalSlides > 0
+  const next = neighbour(s, 1)
   return {
     ok: true,
     app: 'CueDeck',
@@ -171,8 +172,17 @@ function statusJson(): Record<string, unknown> {
       total: s.preview.totalSlides > 0 ? s.preview.totalSlides : null,
       playlistIndex: indexOf(s.preview.playlistId),
     },
-    playlist: { count: s.playlist.length },
+    playlist: {
+      count: s.playlist.length,
+      /** Имена записей по порядку карточек: names[0] — запись 1. */
+      names: s.playlist.map((e) => e.displayName || e.fileName),
+    },
+    /** Кого поставит в превью `playlist/next` (null — дальше некого). */
+    next: typeof next === 'string' ? null : { name: entryName(next.id, null), playlistIndex: indexOf(next.id) },
     speakerMessage: s.speakerMessage,
+    /** Минуты пресетов таймера (`timer/preset/N`) и тексты пресетов сообщений (`message/preset/N`). */
+    timerPresets: s.timerPresets,
+    messagePresets: s.speakerMsgPresets,
   }
 }
 

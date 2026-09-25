@@ -1,0 +1,39 @@
+{
+	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+	"type": "connection",
+	"id": "cuedeck",
+	"name": "CueDeck",
+	"shortname": "cuedeck",
+	"description": "CueDeck — presentation playout for live events: speaker playlist, preview/program, timer on the confidence monitor, video, blackout",
+	"version": "0.0.0",
+	"license": "MIT",
+	"repository": "git+https://github.com/ttpa3dhuk/CueDeck.git",
+	"bugs": "https://github.com/ttpa3dhuk/CueDeck/issues",
+	"maintainers": [
+		{
+			"name": "Azat Khusaenov",
+			"github": "ttpa3dhuk"
+		}
+	],
+	"runtime": {
+		"type": "node22",
+		"api": "nodejs-ipc",
+		"apiVersion": "0.0.0",
+		"entrypoint": "../dist/main.js"
+	},
+	"legacyIds": [],
+	"manufacturer": "CueDeck",
+	"products": ["CueDeck"],
+	"keywords": [
+		"presentation",
+		"slides",
+		"timer",
+		"countdown",
+		"confidence monitor",
+		"prompter",
+		"speaker",
+		"playlist",
+		"pdf",
+		"pptx"
+	]
+}
