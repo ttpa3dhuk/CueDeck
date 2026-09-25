@@ -53,10 +53,11 @@ PDF и картинки (PNG/JPG/WebP/GIF/BMP) открываются сразу
 
 ### ✨ Возможности
 
+- 🌍 **Английский и русский интерфейс** — язык спрашивается при первом запуске, меняется в ⚙️ Настройки → Интерфейс
 - 🎛 **Preview/Program** — эфирная модель как на видеопультах: превью (зелёная рамка) готовишь незаметно, **TAKE** (`Tab`) выдаёт в эфир (красная рамка). Эфир не рвётся, пока листаешь следующий файл
 - 🎚 Раскладка в стиле OBS Studio Mode — превью и эфир рядом, таймер и TAKE снизу, высота панели тянется мышью
 - 🎛 **Stream Deck, Companion, OSC** — эфир, ролики, спикеры и таймер с кнопок при любом активном окне; готовая страница Companion: время на кнопке мигает на нуле, «далее» показывает остаток слайдов ([подробно](#-stream-deck-companion-osc))
-- ⚙️ **Одно окно «Настройки»** (`Cmd+,`) — экраны, суфлёр, кликер, звук, клавиши, тема, LibreOffice, внешнее управление, MIDI
+- ⚙️ **Одно окно «Настройки»** (`Cmd+,`) — экраны, суфлёр, кликер, звук, клавиши, тема, язык, LibreOffice, внешнее управление, MIDI
 - 🖱 **Суфлёр мышкой** — на макете экрана суфлёра таймер и сообщение спикеру ставятся куда угодно, размер — уголком или колёсиком, свой цвет таймера, колонки «слайд / дальше / заметки» тянутся
 - 🎹 MIDI-устройства — выбор контроллеров (назначение кнопок — скоро)
 - 🖱 **Глобальный кликер** — PgUp/PgDn листают эфир, даже когда CueDeck не в фокусе; отдельная галка для кликеров, шлющих стрелки (Logitech Spotlight)
@@ -201,10 +202,11 @@ Rule of thumb: export to **MP4 (H.264 + AAC)**. Transcode ProRes/HEVC with [Hand
 
 ### ✨ Features
 
+- 🌍 **English and Russian interface** — chosen on first launch, switch any time in ⚙️ Settings → Interface
 - 🎛 **Preview/Program** — a video-switcher model: stage the preview (green frame) off-air, **TAKE** (`Tab`) sends it live (red frame). The program feed never breaks while you cue the next file
 - 🎚 OBS Studio-Mode layout — preview and program side by side, timer + TAKE below, drag-resizable
 - 🎛 **Stream Deck, Companion, OSC** — program, videos, speakers and timer from buttons, whatever window is focused; ready-made Companion page: live timer on the key that blinks at zero, slides left on "Next"
-- ⚙️ **One Settings window** (`Cmd+,`) — screens, prompter, clicker, audio, hotkeys, theme, LibreOffice, external control, MIDI
+- ⚙️ **One Settings window** (`Cmd+,`) — screens, prompter, clicker, audio, hotkeys, theme, language, LibreOffice, external control, MIDI
 - 🖱 **Prompter by mouse** — drag the timer and the speaker message anywhere on a mock of the prompter screen, resize by corner or wheel, custom timer colour, drag the column splits
 - 🎹 MIDI devices — pick your controllers (button mapping coming next)
 - 🖱 **Global clicker** — PgUp/PgDn flip the program deck even when CueDeck isn't focused; extra toggle for clickers that send arrow keys (Logitech Spotlight)
