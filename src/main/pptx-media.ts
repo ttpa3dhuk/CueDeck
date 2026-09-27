@@ -25,6 +25,11 @@ import { cachedPdfPathFor } from './pptx-converter.js'
  * emphasis / motion path игнорируются (элемент считается видимым с шага 0,
  * если у него нет entrance). Слайд, где есть и видео, и клики, НЕ
  * разворачивается — иначе клик-запуск ролика съедал бы шаги.
+ *
+ * 2.23 — заметки докладчика (ppt/notesSlides, плейсхолдер type="body") по
+ * страницам PDF: слайд с шагами отдаёт заметку каждому шагу. Скрытые слайды
+ * (show="0") LibreOffice в PDF не выводит (проверено) — страниц у них нет,
+ * ни видео, ни шагов, ни заметок.
  */
 
 /** Расширения, которые Chromium играет нативно — только их несём в manifest. */
@@ -32,12 +37,16 @@ const PLAYABLE_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm'])
 /** Всё видеообразное стрипаем из копии для LibreOffice (вес PDF). */
 const STRIP_EXTS = new Set([...PLAYABLE_EXTS, 'avi', 'wmv', 'mpg', 'mpeg', 'mkv', '3gp', 'asf'])
 
-const MANIFEST_VERSION = 2
+const MANIFEST_VERSION = 3
+/** Манифесты с этими версиями писались от той же пересборки — PDF в кэше годен. */
+const COMPATIBLE_PDF_VERSIONS = new Set([2, 3])
 
 const SLIDE_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'
 const SLIDE_REL_TYPE =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide'
+const NOTES_REL_TYPE =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide'
 
 /** Прозрачная заливка текста: ран есть, место занимает, не виден. */
 const HIDE_FILL = '<a:solidFill><a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr></a:solidFill>'
@@ -47,10 +56,14 @@ interface MediaManifest {
   /** Исходник пересобирался (стрип видео и/или шаги) → конвертируем копию. */
   rebuilt: boolean
   slideMedia: SlideMedia[]
+  /** Заметки докладчика: номер страницы PDF (1-based) → текст. */
+  pageNotes: Record<number, string>
 }
 
 export interface PreparedPptxMedia {
   slideMedia: SlideMedia[]
+  /** Заметки докладчика из PPTX по страницам PDF (1-based). */
+  pageNotes: Record<number, string>
   /** Что отдавать LibreOffice: пересобранная копия или оригинал. */
   convertSource: string
   /** convertSource — временный файл, удалить после конверсии. */
@@ -286,14 +299,35 @@ function attrsOf(tag: string): Record<string, string> {
   return out
 }
 
-/** Карта rId → Target из файла .rels. */
-function parseRels(xml: string): Map<string, string> {
+/** Карта rId → Target из файла .rels (с фильтром по Type — только нужные связи). */
+function parseRels(xml: string, type?: string): Map<string, string> {
   const map = new Map<string, string>()
   for (const m of xml.matchAll(/<Relationship\b[^>]*>/g)) {
     const a = attrsOf(m[0])
+    if (type && a.Type !== type) continue
     if (a.Id && a.Target) map.set(a.Id, a.Target)
   }
   return map
+}
+
+/** Текст XML без сущностей: &amp; &lt; &#1234; &#x41; … */
+function decodeXml(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_, e: string) => {
+    const k = e.toLowerCase()
+    if (k === 'amp') return '&'
+    if (k === 'lt') return '<'
+    if (k === 'gt') return '>'
+    if (k === 'quot') return '"'
+    if (k === 'apos') return "'"
+    const code = k.startsWith('#x') ? parseInt(k.slice(2), 16) : Number(k.slice(1))
+    return Number.isFinite(code) ? String.fromCodePoint(code) : ''
+  })
+}
+
+/** Скрытый слайд (show="0" на корневом p:sld) — в показе и в PDF его нет. */
+function isHiddenSlide(slideXml: string): boolean {
+  const root = slideXml.match(/<p:sld\b[^>]*>/)
+  return root ? attrsOf(root[0]).show === '0' : false
 }
 
 /** '../media/media1.mp4' (относительно ppt/slides/) → 'ppt/media/media1.mp4' */
@@ -353,6 +387,8 @@ function topLevelBlocks(fragment: string, tag: string): string[] {
 interface Presentation {
   /** Пути слайдов в порядке показа (p:sldIdLst). */
   slidePaths: string[]
+  /** Индексы скрытых слайдов — страниц в PDF у них нет. */
+  hidden: Set<number>
   slideW: number
   slideH: number
 }
@@ -375,7 +411,12 @@ function parsePresentation(text: (name: string) => string | null): Presentation 
     const target = relMap.get(m[1])
     if (target) slidePaths.push(target.replace(/^\//, '').replace(/^(?!ppt\/)/, 'ppt/'))
   }
-  return { slidePaths, slideW, slideH }
+  const hidden = new Set<number>()
+  slidePaths.forEach((path, idx) => {
+    const xml = text(path)
+    if (xml && isHiddenSlide(xml)) hidden.add(idx)
+  })
+  return { slidePaths, hidden, slideW, slideH }
 }
 
 // ── 2.10: видео на слайдах ───────────────────────────────────────────────────
@@ -394,6 +435,7 @@ function findSlideVideos(
 ): FoundVideo[] {
   const found: FoundVideo[] = []
   pres.slidePaths.forEach((slidePath, idx) => {
+    if (pres.hidden.has(idx)) return
     const slideXml = text(slidePath)
     if (!slideXml) return
     const relsXml = text(relsPathOf(slidePath))
@@ -589,6 +631,37 @@ function buildStepXml(slideXml: string, hidden: StepTarget[]): string {
   return xml
 }
 
+// ── 2.23: заметки докладчика ─────────────────────────────────────────────────
+
+/** Текст заметок слайда: плейсхолдер body в его notesSlide; нет — null. */
+function slideNotesText(slidePath: string, text: (name: string) => string | null): string | null {
+  const relsXml = text(relsPathOf(slidePath))
+  if (!relsXml) return null
+  const target = [...parseRels(relsXml, NOTES_REL_TYPE).values()][0]
+  if (!target) return null
+  const notesXml = text(normalizeSlideTarget(target))
+  if (!notesXml) return null
+
+  const parts: string[] = []
+  for (const sp of topLevelBlocks(notesXml, 'p:sp')) {
+    // Картинка слайда, номер, колонтитулы — мимо; текст докладчика только в body.
+    if (!/<p:ph\b[^>]*type="body"/.test(sp)) continue
+    const body = findBalanced(sp, 'p:txBody')
+    if (!body) continue
+    // Абзац = строка; внутри — раны (a:t, в т.ч. в полях a:fld) и мягкие переносы a:br.
+    const lines = topLevelBlocks(sp.slice(body.start, body.end), 'a:p').map((p) => {
+      let line = ''
+      for (const m of p.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>|<a:t\s*\/>|<a:br\b[^>]*>/g)) {
+        line += m[0].startsWith('<a:br') ? '\n' : decodeXml(m[1] ?? '')
+      }
+      return line
+    })
+    parts.push(lines.join('\n'))
+  }
+  const out = parts.join('\n').replace(/\s+$/, '')
+  return out.trim() ? out : null
+}
+
 // ── Трансформация PPTX целиком ───────────────────────────────────────────────
 
 interface TransformResult {
@@ -596,6 +669,7 @@ interface TransformResult {
   zip: Buffer | null
   slideMedia: SlideMedia[]
   videos: FoundVideo[]
+  pageNotes: Record<number, string>
 }
 
 function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
@@ -610,7 +684,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   }
 
   const pres = parsePresentation(text)
-  if (!pres) return { zip: null, slideMedia: [], videos: [] }
+  if (!pres) return { zip: null, slideMedia: [], videos: [], pageNotes: {} }
 
   const videos = findSlideVideos(pres, text, (n) => byName.has(n))
   const videoSlides = new Set(videos.map((v) => v.slideIdx))
@@ -619,7 +693,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   // конфликтовал бы с шагами).
   const stepsBySlide = new Map<number, StepTarget[][]>()
   pres.slidePaths.forEach((slidePath, idx) => {
-    if (videoSlides.has(idx)) return
+    if (videoSlides.has(idx) || pres.hidden.has(idx)) return
     const slideXml = text(slidePath)
     if (!slideXml) return
     const clicks = parseClickSteps(slideXml)
@@ -632,12 +706,19 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
       .map((e) => e.name),
   )
 
-  // Номера страниц после разворачивания: слайд idx начинается со страницы firstPage[idx].
+  // Номера страниц после разворачивания: слайд idx начинается со страницы
+  // firstPage[idx]. Скрытый слайд страниц не занимает (LibreOffice его не выводит).
   let page = 0
   const firstPage: number[] = []
-  pres.slidePaths.forEach((_, idx) => {
+  const pageNotes: Record<number, string> = {}
+  pres.slidePaths.forEach((slidePath, idx) => {
+    if (pres.hidden.has(idx)) return
     firstPage[idx] = page + 1
-    page += 1 + (stepsBySlide.get(idx)?.length ?? 0)
+    const pages = 1 + (stepsBySlide.get(idx)?.length ?? 0)
+    // Заметка слайда — на все его шаги: докладчик говорит одно и то же, пока идёт билд.
+    const note = slideNotesText(slidePath, text)
+    if (note) for (let k = 0; k < pages; k++) pageNotes[page + 1 + k] = note
+    page += pages
   })
 
   const slideMedia: SlideMedia[] = videos.map((v) => ({
@@ -646,7 +727,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
     file: v.mediaEntry.split('/').pop()!,
   }))
 
-  if (strip.size === 0 && stepsBySlide.size === 0) return { zip: null, slideMedia, videos }
+  if (strip.size === 0 && stepsBySlide.size === 0) return { zip: null, slideMedia, videos, pageNotes }
 
   const replace = new Map<string, Buffer>()
   const add: { name: string; data: Buffer }[] = []
@@ -713,19 +794,30 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
     replace.set('[Content_Types].xml', Buffer.from(contentTypes))
   }
 
-  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, videos }
+  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, videos, pageNotes }
 }
 
 // ── Публичный вход ───────────────────────────────────────────────────────────
 
-async function readManifest(sha1: string): Promise<MediaManifest | null> {
+/**
+ * Манифест из кэша. `current` — нашей версии, им можно пользоваться как есть;
+ * `pdfValid` — PDF в кэше собран от той же пересборки (старая версия
+ * манифеста без заметок), пересоздавать его не нужно.
+ */
+async function readManifest(
+  sha1: string,
+): Promise<{ current: MediaManifest | null; pdfValid: boolean }> {
   try {
     const raw = await readFile(manifestPathFor(sha1), 'utf8')
     const parsed = JSON.parse(raw) as MediaManifest
-    if (parsed.version !== MANIFEST_VERSION || !Array.isArray(parsed.slideMedia)) return null
-    return parsed
+    if (!Array.isArray(parsed.slideMedia)) return { current: null, pdfValid: false }
+    const current =
+      parsed.version === MANIFEST_VERSION && parsed.pageNotes && typeof parsed.pageNotes === 'object'
+        ? parsed
+        : null
+    return { current, pdfValid: COMPATIBLE_PDF_VERSIONS.has(parsed.version) }
   } catch {
-    return null
+    return { current: null, pdfValid: false }
   }
 }
 
@@ -744,22 +836,27 @@ async function writeRebuilt(sha1: string, zip: Buffer): Promise<string> {
  * старому поведению (конвертируем оригинал, без оверлеев и шагов).
  */
 export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<PreparedPptxMedia> {
-  const original: PreparedPptxMedia = { slideMedia: [], convertSource: pptxPath, temporary: false }
+  const original: PreparedPptxMedia = {
+    slideMedia: [],
+    pageNotes: {},
+    convertSource: pptxPath,
+    temporary: false,
+  }
   // Парсим только настоящие .pptx: ppt — OLE-бинарь, odp/key — другой XML.
   if (extOf(pptxPath) !== 'pptx') return original
 
   try {
-    const cached = await readManifest(sha1)
+    const { current: cached, pdfValid } = await readManifest(sha1)
     if (cached) {
-      if (!cached.rebuilt || existsSync(cachedPdfPathFor(sha1))) {
-        return { ...original, slideMedia: cached.slideMedia }
-      }
+      const fromCache = { ...original, slideMedia: cached.slideMedia, pageNotes: cached.pageNotes }
+      if (!cached.rebuilt || existsSync(cachedPdfPathFor(sha1))) return fromCache
       // PDF из кэша пропал — пересобираем копию заново.
       const data = await readFile(pptxPath)
       const t = transformPptx(data, parseZip(data))
-      if (!t.zip) return { ...original, slideMedia: cached.slideMedia }
+      if (!t.zip) return fromCache
       return {
         slideMedia: t.slideMedia,
+        pageNotes: t.pageNotes,
         convertSource: await writeRebuilt(sha1, t.zip),
         temporary: true,
       }
@@ -785,18 +882,18 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
       version: MANIFEST_VERSION,
       rebuilt: t.zip !== null,
       slideMedia: t.slideMedia,
+      pageNotes: t.pageNotes,
     }
     await writeFile(manifestPathFor(sha1), JSON.stringify(manifest))
 
-    if (!t.zip) return { ...original, slideMedia: t.slideMedia }
+    const parsed = { ...original, slideMedia: t.slideMedia, pageNotes: t.pageNotes }
+    if (!t.zip) return parsed
+    // Манифест прошлой версии: PDF собран от такой же пересборки — годен.
+    if (pdfValid && existsSync(cachedPdfPathFor(sha1))) return parsed
 
-    // Старый кэшированный PDF (до пересборки) — пересоздать.
+    // PDF в кэше сделан до пересборки (без шагов, с видео внутри) — пересоздать.
     await rm(cachedPdfPathFor(sha1), { force: true }).catch(() => undefined)
-    return {
-      slideMedia: t.slideMedia,
-      convertSource: await writeRebuilt(sha1, t.zip),
-      temporary: true,
-    }
+    return { ...parsed, convertSource: await writeRebuilt(sha1, t.zip), temporary: true }
   } catch (err) {
     console.warn('[pptx-media] разбор не удался, конвертирую оригинал:', (err as Error).message)
     return original

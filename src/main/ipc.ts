@@ -149,6 +149,24 @@ interface InspectedFile {
   slideMedia: SlideMedia[]
 }
 
+/**
+ * Заметки докладчика из PPTX (2.23) по sha1 файла. Нужны при записи заметок:
+ * в файл-спутник уходит только то, что оператор правил сам, — иначе копия
+ * заметок PowerPoint застряла бы в нём и перекрыла обновлённую презентацию.
+ */
+const pptxNotesBySha1 = new Map<string, Record<number, string>>()
+
+/** Что писать в файл-спутник: всё, кроме страниц, совпадающих с заметкой PPTX. */
+function ownNotes(sha1: string, notes: Record<number, string>): Record<number, string> {
+  const fromFile = pptxNotesBySha1.get(sha1)
+  if (!fromFile) return notes
+  const out: Record<number, string> = {}
+  for (const [k, v] of Object.entries(notes)) {
+    if (fromFile[Number(k)] !== v) out[Number(k)] = v
+  }
+  return out
+}
+
 /** Read a file's identity + page count + sidecar notes. Shared by both decks. */
 async function inspectFile(filePath: string): Promise<InspectedFile> {
   const kind = kindOf(filePath)
@@ -164,6 +182,7 @@ async function inspectFile(filePath: string): Promise<InspectedFile> {
   let sha1: string
   let totalSlides = 1
   let slideMedia: SlideMedia[] = []
+  let pptxNotes: Record<number, string> = {}
 
   if (kind === 'pdf') {
     // Single read: compute SHA1 and count pages from the same buffer.
@@ -176,6 +195,8 @@ async function inspectFile(filePath: string): Promise<InspectedFile> {
     // копию без видеофайлов — иначе он зашивает mp4 внутрь PDF целиком.
     const prepared = await preparePptxMedia(filePath, sha1)
     slideMedia = prepared.slideMedia
+    pptxNotes = prepared.pageNotes
+    pptxNotesBySha1.set(sha1, pptxNotes)
     try {
       const cachedPath = await convertPptxToPdf(prepared.convertSource, sha1)
       const buf = await readFile(cachedPath)
@@ -192,7 +213,16 @@ async function inspectFile(filePath: string): Promise<InspectedFile> {
   }
 
   const loaded = await loadNotes(filePath, sha1)
-  return { kind, sha1, totalSlides, notes: loaded.notes, sha1Mismatch: loaded.sha1Mismatch, slideMedia }
+  return {
+    kind,
+    sha1,
+    totalSlides,
+    // Своя правка оператора главнее, в том числе пустая (стёр заметку
+    // PowerPoint — не возвращаем); остальные страницы — из PPTX.
+    notes: { ...pptxNotes, ...loaded.notes },
+    sha1Mismatch: loaded.sha1Mismatch,
+    slideMedia,
+  }
 }
 
 /**
@@ -975,7 +1005,7 @@ export function registerIpcHandlers(): void {
     const { slide, text } = payload
     store.patchNotes(slide, text)
     const { pdfPath, pdfSha1, notes } = store.get()
-    if (pdfPath && pdfSha1) notesWriter.schedule(pdfPath, pdfSha1, notes)
+    if (pdfPath && pdfSha1) notesWriter.schedule(pdfPath, pdfSha1, ownNotes(pdfSha1, notes))
   })
 
   ipcMain.handle('timer:start', () => {
