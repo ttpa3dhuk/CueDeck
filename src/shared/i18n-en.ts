@@ -627,7 +627,7 @@ export const EN: Record<string, string> = {
   'Файл .cueprofile с другого компьютера или от коллеги': 'A .cueprofile file from another computer or a colleague',
   'Обновить': 'Update',
   'Переименовать': 'Rename',
-  'В файл…': 'To file…',
+  'Экспорт…': 'Export…',
   'Удалить профиль': 'Delete profile',
   '1 экран': '1 screen',
   '2 экрана': '2 screens',
