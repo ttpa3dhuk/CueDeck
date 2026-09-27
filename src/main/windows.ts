@@ -168,6 +168,20 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
   return activeWindows
 }
 
+/**
+ * Перезагрузить все окна на текущем языке (`lang=` в адресе). Нужно смене
+ * языка в dev-сборке — см. `app:relaunch` в index.ts. Скрытое окно суфлёра
+ * (монитор в solo) тоже здесь: берём все окна, а не только activeWindows.
+ */
+export function reloadAllWindowsForLang(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue
+    const url = win.webContents.getURL()
+    if (!/[?&]lang=/.test(url)) continue
+    void win.loadURL(url.replace(/([?&]lang=)[a-z]+/, `$1${getLang()}`))
+  }
+}
+
 export function getActiveWindows(): Map<Role, BrowserWindow> {
   return activeWindows
 }

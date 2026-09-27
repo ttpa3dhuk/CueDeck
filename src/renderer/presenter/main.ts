@@ -20,7 +20,7 @@ import { WINDOW_TITLES } from '../../shared/window-titles'
 import { getLang, t, type Lang } from '../../shared/i18n'
 import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
-import type { ListMode, RemoteStatus, UiTheme } from '../../shared/types'
+import type { ListMode, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
 import type {
   AppState,
@@ -2941,7 +2941,7 @@ function buildSetupModal(displays: DisplayInfo[]): void {
 // Разделы слева, содержимое справа. Всё применяется сразу, кроме раздела
 // «Экраны»: смена раскладки пересобирает окна — там своя кнопка «Применить».
 
-type SettingsSection = 'screens' | 'prompter' | 'clicker' | 'audio' | 'hotkeys' | 'ui' | 'lo' | 'remote' | 'midi'
+type SettingsSection = 'profiles' | 'screens' | 'prompter' | 'clicker' | 'audio' | 'hotkeys' | 'ui' | 'lo' | 'remote' | 'midi'
 let settingsWired = false
 
 function showSettingsSection(name: SettingsSection): void {
@@ -2959,6 +2959,363 @@ function showSettingsSection(name: SettingsSection): void {
   if (name === 'ui') renderUiSection()
   if (name === 'lo') void renderLoSection()
   if (name === 'midi') void renderMidiSection()
+  if (name === 'profiles') void renderProfilesSection()
+}
+
+// ── Профили площадки (раздел «Настройки → Профили площадки») ────────────────
+// Сохранение и применение — в main (profiles.ts), через те же обработчики, что
+// кнопки остальных разделов. Здесь только звук: выходы видит лишь рендерер, а
+// id устройства у каждого компьютера свой — выход ищется по имени.
+
+let profilesCache: VenueProfile[] = []
+let profileRenaming: string | null = null
+
+const PROFILE_GROUP_ORDER: ProfileGroup[] = ['screens', 'audio', 'prompter', 'timer', 'presets', 'take', 'clicker', 'remote', 'midi']
+const PROFILE_GROUPS_KEY = 'cuedeck.profileGroups'
+
+function groupLabel(g: ProfileGroup): string {
+  switch (g) {
+    case 'screens': return t('Экраны')
+    case 'audio': return t('Звук')
+    case 'prompter': return t('Суфлёр')
+    case 'timer': return t('Режим таймера')
+    case 'presets': return t('Пресеты')
+    case 'take': return t('Выдача')
+    case 'clicker': return t('Кликер')
+    case 'remote': return t('Внешнее управление')
+    case 'midi': return 'MIDI'
+  }
+}
+
+function groupHint(g: ProfileGroup): string {
+  switch (g) {
+    case 'screens': return t('Раскладка окон, зал в окне, мониторы выходов')
+    case 'audio': return t('Выход эфира и предпрослушки')
+    case 'prompter': return t('Таймер на суфлёре: место, размер, цвет; колонки; сообщение спикеру')
+    case 'timer': return t('Режим, тик, гонг, повтор')
+    case 'presets': return t('Кнопки пресетов таймера и тексты сообщений спикеру')
+    case 'take': return t('Как выдаются в эфир видео и слайды, автопереход')
+    case 'clicker': return t('Глобальный кликер и стрелки')
+    case 'remote': return t('Stream Deck / Companion / OSC')
+    case 'midi': return t('Какие MIDI-устройства слушать')
+  }
+}
+
+/** Отмеченные группы. Запоминается в окне (удобство оператора), по умолчанию — всё. */
+let profileGroupsSel: Set<ProfileGroup> = loadProfileGroupsSel()
+
+function loadProfileGroupsSel(): Set<ProfileGroup> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PROFILE_GROUPS_KEY) ?? 'null') as unknown
+    if (Array.isArray(raw)) return new Set(PROFILE_GROUP_ORDER.filter((g) => raw.includes(g)))
+  } catch {
+    /* нет хранилища — по умолчанию всё */
+  }
+  return new Set(PROFILE_GROUP_ORDER)
+}
+
+function storeProfileGroupsSel(): void {
+  try {
+    localStorage.setItem(PROFILE_GROUPS_KEY, JSON.stringify([...profileGroupsSel]))
+  } catch {
+    /* не страшно */
+  }
+}
+
+function selectedGroups(): ProfileGroup[] {
+  return PROFILE_GROUP_ORDER.filter((g) => profileGroupsSel.has(g))
+}
+
+function renderProfileGroups(): void {
+  const box = $('profile-groups')
+  box.innerHTML = ''
+  for (const g of PROFILE_GROUP_ORDER) {
+    const l = document.createElement('label')
+    l.title = groupHint(g)
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'
+    cb.checked = profileGroupsSel.has(g)
+    cb.addEventListener('change', () => {
+      if (cb.checked) profileGroupsSel.add(g)
+      else profileGroupsSel.delete(g)
+      storeProfileGroupsSel()
+      renderProfileGroups()
+    })
+    const span = document.createElement('span')
+    span.textContent = groupLabel(g)
+    l.append(cb, span)
+    box.appendChild(l)
+  }
+  const all = profileGroupsSel.size === PROFILE_GROUP_ORDER.length
+  const toggle = document.createElement('button')
+  toggle.className = 'profile-groups-all'
+  toggle.textContent = all ? t('Снять все') : t('Отметить все')
+  toggle.addEventListener('click', () => {
+    profileGroupsSel = all ? new Set() : new Set(PROFILE_GROUP_ORDER)
+    storeProfileGroupsSel()
+    renderProfileGroups()
+  })
+  box.appendChild(toggle)
+}
+
+function groupsText(groups: readonly ProfileGroup[]): string {
+  return groups.length === PROFILE_GROUP_ORDER.length ? t('всё') : groups.map(groupLabel).join(', ')
+}
+
+function profileStatus(text: string, error = false): void {
+  const el = $('profile-status')
+  el.textContent = text
+  el.classList.toggle('error', error)
+}
+
+async function renderProfilesSection(): Promise<void> {
+  profilesCache = await window.api.profiles.list()
+  renderProfileGroups()
+  renderProfilePicker()
+}
+
+/** Выбранный в списке профиль (запоминается между открытиями окна). */
+let profileSelectedId: string | null = null
+
+function selectedProfile(): VenueProfile | undefined {
+  return profilesCache.find((p) => p.id === profileSelectedId) ?? profilesCache[0]
+}
+
+/** Одна строка при любом числе профилей: список + «Применить» / «Обновить» / «⋯». */
+function renderProfilePicker(): void {
+  const select = $('profile-select') as HTMLSelectElement
+  const cur = selectedProfile()
+  profileSelectedId = cur?.id ?? null
+  select.innerHTML = ''
+  if (!cur) {
+    const o = document.createElement('option')
+    o.textContent = t('— профилей нет —')
+    select.appendChild(o)
+  }
+  for (const p of profilesCache) {
+    const o = document.createElement('option')
+    o.value = p.id
+    o.textContent = p.name
+    o.selected = p.id === cur?.id
+    select.appendChild(o)
+  }
+  const none = !cur
+  select.disabled = none
+  for (const id of ['profile-apply', 'profile-update', 'profile-more']) ($(id) as HTMLButtonElement).disabled = none
+  $('profile-meta').textContent = cur
+    ? profileMeta(cur)
+    : t('Настрой экраны, звук и суфлёр под площадку, впиши название внизу и нажми «Сохранить как новый».')
+  $('profile-menu').classList.add('hidden')
+  $('profile-rename-row').classList.toggle('hidden', profileRenaming === null)
+}
+
+function startProfileRename(): void {
+  const p = selectedProfile()
+  if (!p) return
+  profileRenaming = p.id
+  const input = $('profile-rename-input') as HTMLInputElement
+  input.value = p.name
+  renderProfilePicker()
+  input.focus()
+  input.select()
+}
+
+async function finishProfileRename(save: boolean): Promise<void> {
+  const id = profileRenaming
+  profileRenaming = null
+  const name = ($('profile-rename-input') as HTMLInputElement).value.trim()
+  if (save && id && name) {
+    const r = await window.api.profiles.rename(id, name)
+    if (r.ok) profilesCache = r.profiles
+    else profileStatus(r.error, true)
+  }
+  renderProfilePicker()
+}
+
+function layoutName(l: Layout): string {
+  if (l === 'solo') return t('1 экран')
+  if (l === 'presenter-audience') return t('2 экрана')
+  return t('3 экрана')
+}
+
+function profileMeta(p: VenueProfile): string {
+  const parts = [t('в профиле: {groups}', { groups: groupsText(p.groups) })]
+  if (p.groups.includes('screens')) parts.push(layoutName(p.settings.layout))
+  const d = p.savedAt ? new Date(p.savedAt) : null
+  if (d && !Number.isNaN(d.getTime())) parts.push(d.toLocaleDateString(getLang() === 'ru' ? 'ru-RU' : 'en-GB'))
+  return parts.join(' · ')
+}
+
+/**
+ * Имена выбранных сейчас звуковых выходов — для записи в профиль. Выбранный
+ * выход сейчас не подключён — имени не узнать: в профиль уйдёт «системный» /
+ * «выключена», и об этом надо сказать (`missing`).
+ */
+async function currentAudioLabels(): Promise<{ main: string | null; preview: string | null; missing: string[] }> {
+  const s = getState()
+  if (!s.audioOutputId && !s.previewAudioOutputId) return { main: null, preview: null, missing: [] }
+  const outs = await listAudioOutputs().catch(() => [] as MediaDeviceInfo[])
+  const labelOf = (id: string | null): string | null => (id ? outs.find((d) => d.deviceId === id)?.label || null : null)
+  const main = labelOf(s.audioOutputId)
+  const preview = labelOf(s.previewAudioOutputId)
+  const missing: string[] = []
+  if (s.audioOutputId && !main) missing.push(t('Выход эфира сейчас не подключён — в профиле будет системный выход'))
+  if (s.previewAudioOutputId && !preview) missing.push(t('Выход предпрослушки сейчас не подключён — в профиле она будет выключена'))
+  return { main, preview, missing }
+}
+
+async function saveNewProfile(): Promise<void> {
+  const input = $('profile-name') as HTMLInputElement
+  const name = input.value.trim()
+  if (!name) {
+    profileStatus(t('Впиши название площадки'), true)
+    input.focus()
+    return
+  }
+  const groups = selectedGroups()
+  if (!groups.length) return profileStatus(t('Отметь, что сохранять'), true)
+  const labels = await currentAudioLabels()
+  if (!groups.includes('audio')) labels.missing = []
+  const r = await window.api.profiles.save(name, labels, undefined, groups)
+  if (!r.ok) return profileStatus(r.error, true)
+  profilesCache = r.profiles
+  profileSelectedId = r.profiles[r.profiles.length - 1].id
+  input.value = ''
+  renderProfilePicker()
+  const saved = t('✅ Сохранён профиль «{name}»', { name: r.profiles[r.profiles.length - 1].name })
+  profileStatus([saved, ...labels.missing.map((m) => '⚠ ' + m)].join('\n'))
+}
+
+async function overwriteProfile(p: VenueProfile): Promise<void> {
+  const groups = selectedGroups()
+  if (!groups.length) return profileStatus(t('Отметь, что сохранять'), true)
+  const msg = t('Записать в профиль «{name}» текущие настройки: {groups}? Остальное в профиле останется как было.', {
+    name: p.name,
+    groups: groupsText(groups),
+  })
+  if (!window.confirm(msg)) return
+  const labels = await currentAudioLabels()
+  if (!groups.includes('audio')) labels.missing = []
+  const r = await window.api.profiles.save(p.name, labels, p.id, groups)
+  if (!r.ok) return profileStatus(r.error, true)
+  profilesCache = r.profiles
+  renderProfilePicker()
+  profileStatus([t('✅ Профиль «{name}» обновлён', { name: p.name }), ...labels.missing.map((m) => '⚠ ' + m)].join('\n'))
+}
+
+async function deleteProfile(p: VenueProfile): Promise<void> {
+  if (!window.confirm(t('Удалить профиль «{name}»?', { name: p.name }))) return
+  const r = await window.api.profiles.remove(p.id)
+  if (r.ok) profilesCache = r.profiles
+  profileSelectedId = null
+  renderProfilePicker()
+  profileStatus('')
+}
+
+async function exportProfile(p: VenueProfile): Promise<void> {
+  const r = await window.api.profiles.exportFile(p.id)
+  if (r.ok && r.path) profileStatus(t('✅ Сохранено: {path}', { path: r.path }))
+  else if (r.error) profileStatus(r.error, true)
+}
+
+async function importProfiles(): Promise<void> {
+  const r = await window.api.profiles.importFile()
+  if (r.profiles) {
+    profilesCache = r.profiles
+    if (r.added) profileSelectedId = r.profiles[r.profiles.length - 1].id
+  }
+  renderProfilePicker()
+  const lines: string[] = []
+  if (r.added) lines.push(t('✅ Загружено профилей: {n}', { n: r.added }))
+  if (r.errors?.length) lines.push(...r.errors.map((e) => '⚠ ' + e))
+  profileStatus(lines.join('\n'), !r.added && Boolean(r.errors?.length))
+}
+
+async function applyProfile(p: VenueProfile): Promise<void> {
+  const s = getState()
+  const groups = p.groups.filter((g) => profileGroupsSel.has(g))
+  if (!groups.length) return profileStatus(t('В профиле нет ничего из отмеченного'), true)
+  const screens = groups.includes('screens')
+  if (screens && (s.layout !== p.settings.layout || s.audienceWindowed !== p.settings.audienceWindowed)) {
+    const ok = window.confirm(
+      t('Профиль «{name}» меняет раскладку экранов — окна зала и суфлёра пересоздадутся. Применить?', { name: p.name }),
+    )
+    if (!ok) return
+  }
+  profileStatus(t('Применяю…'))
+  const r = await window.api.profiles.apply(p.id, groups)
+  if (!r.ok) return profileStatus(r.error, true)
+  const warnings = r.audio ? await applyProfileAudio(r.audioMain, r.audioPreview) : []
+  const done = t('✅ Из профиля «{name}» применено: {groups}', { name: r.name, groups: groupsText(r.groups) })
+  profileStatus([done, ...warnings.map((w) => '⚠ ' + w)].join('\n'))
+}
+
+/**
+ * Звук из профиля: выход ищется по имени (id — только если совпало и имя).
+ * Не нашёлся — не трогаем, как решил Азат: лучше старый выход и предупреждение,
+ * чем эфир, внезапно ушедший в системный динамик.
+ */
+async function applyProfileAudio(
+  main: ProfileAudioOutput | null,
+  preview: ProfileAudioOutput | null,
+): Promise<string[]> {
+  const warnings: string[] = []
+  const outs = main || preview ? await listAudioOutputs().catch(() => [] as MediaDeviceInfo[]) : []
+  const find = (want: ProfileAudioOutput): MediaDeviceInfo | undefined =>
+    outs.find((d) => d.deviceId === want.id && d.label === want.label) ?? outs.find((d) => d.label === want.label)
+  if (!main) await window.api.audio.setOutput(null)
+  else {
+    const d = find(main)
+    if (d) await window.api.audio.setOutput(d.deviceId)
+    else warnings.push(t('Нет выхода «{name}» — звук эфира оставлен как был', { name: main.label }))
+  }
+  if (!preview) await window.api.audio.setPreviewOutput(null)
+  else {
+    const d = find(preview)
+    if (d) await window.api.audio.setPreviewOutput(d.deviceId)
+    else warnings.push(t('Нет выхода «{name}» — предпрослушка оставлена как была', { name: preview.label }))
+  }
+  return warnings
+}
+
+function wireProfilesSection(): void {
+  $('profile-save').addEventListener('click', () => void saveNewProfile())
+  $('profile-name').addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if ((e as KeyboardEvent).key === 'Enter') void saveNewProfile()
+  })
+  $('profile-import').addEventListener('click', () => void importProfiles())
+  $('profile-select').addEventListener('change', (e) => {
+    profileSelectedId = (e.target as HTMLSelectElement).value
+    renderProfilePicker()
+  })
+  const withSelected = (fn: (p: VenueProfile) => Promise<void>) => () => {
+    const p = selectedProfile()
+    if (p) void fn(p)
+  }
+  $('profile-apply').addEventListener('click', withSelected(applyProfile))
+  $('profile-update').addEventListener('click', withSelected(overwriteProfile))
+  const menu = $('profile-menu')
+  $('profile-more').addEventListener('click', (e) => {
+    e.stopPropagation()
+    menu.classList.toggle('hidden')
+  })
+  settingsModal.addEventListener('click', () => menu.classList.add('hidden'))
+  menu.addEventListener('click', (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLButtonElement>('button')?.dataset.act
+    menu.classList.add('hidden')
+    if (act === 'rename') startProfileRename()
+    else if (act === 'export') withSelected(exportProfile)()
+    else if (act === 'delete') withSelected(deleteProfile)()
+  })
+  const rename = $('profile-rename-input')
+  rename.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if ((e as KeyboardEvent).key === 'Enter') void finishProfileRename(true)
+    if ((e as KeyboardEvent).key === 'Escape') void finishProfileRename(false)
+  })
+  $('profile-rename-ok').addEventListener('click', () => void finishProfileRename(true))
+  $('profile-rename-cancel').addEventListener('click', () => void finishProfileRename(false))
 }
 
 function closeSettings(): void {
@@ -3002,6 +3359,7 @@ function openSettings(section: SettingsSection = 'screens'): void {
       b.addEventListener('click', () => showSettingsSection(b.dataset.section as SettingsSection))
     })
     $('settings-close').addEventListener('click', closeSettings)
+    wireProfilesSection()
     settingsModal.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeSettings()
     })

@@ -12,6 +12,8 @@ import type {
   MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
+  ProfileApplyResult,
+  ProfileGroup,
   RemoteSettings,
   RemoteStatus,
   ReportResult,
@@ -19,6 +21,7 @@ import type {
   TimerMode,
   TimerPosition,
   UiTheme,
+  VenueProfile,
   VideoTakeMode,
 } from '../shared/types.js'
 import type { LiveSource } from '../shared/live.js'
@@ -41,6 +44,8 @@ export type {
   MonitorRole,
   OpenPdfResult,
   PlaylistEntry,
+  ProfileApplyResult,
+  ProfileGroup,
   RemoteSettings,
   RemoteStatus,
   ReportResult,
@@ -51,6 +56,7 @@ export type {
   TimerMode,
   TimerPosition,
   TimerState,
+  VenueProfile,
   UiTheme,
   VideoState,
   VideoTakeMode,
@@ -196,6 +202,23 @@ export interface PresenterApi {
     getEnabled(): Promise<string[]>
     setEnabled(names: string[]): Promise<void>
   }
+  /** Профили площадки (main/profiles.ts). Звук применяет окно оператора — по именам выходов. */
+  profiles: {
+    list(): Promise<VenueProfile[]>
+    /** Сохранить текущие настройки: новый (name) или поверх профиля id. labels — имена выбранных звуковых выходов. */
+    save(
+      name: string,
+      labels: { main: string | null; preview: string | null },
+      id?: string,
+      groups?: ProfileGroup[],
+    ): Promise<ProfileListResult>
+    rename(id: string, name: string): Promise<ProfileListResult>
+    remove(id: string): Promise<ProfileListResult>
+    /** groups — что вгрузить; не передали — весь профиль. */
+    apply(id: string, groups?: ProfileGroup[]): Promise<ProfileApplyResult>
+    exportFile(id: string): Promise<{ ok: boolean; path?: string; error?: string }>
+    importFile(): Promise<{ ok: boolean; added?: number; errors?: string[]; profiles?: VenueProfile[] }>
+  }
   /** Внешнее управление: Stream Deck / Companion / OSC (main/remote/). */
   remote: {
     /** Сохранить настройки и перезапустить слушатели; статус приходит и в state.remote. */
@@ -333,3 +356,5 @@ declare global {
     api: PresenterApi
   }
 }
+
+export type ProfileListResult = { ok: true; profiles: VenueProfile[] } | { ok: false; error: string }

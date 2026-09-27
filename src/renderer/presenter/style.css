@@ -1811,6 +1811,56 @@ body[data-role="operator"] #current-slide {
 .midi-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background 0.25s; }
 .midi-dot.hit { background: var(--timer-green); transition: none; }
 
+/* Профили площадки — раздел окна «Настройки» */
+.profile-name-input {
+  flex: 1;
+  min-width: 180px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.profile-groups { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.profile-groups label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
+.profile-groups .profile-groups-all { margin-left: auto; }
+.profile-pick { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.profile-pick button { white-space: nowrap; flex-shrink: 0; }
+.profile-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.profile-more-wrap { position: relative; }
+.profile-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.profile-menu button { text-align: left; border: none; background: transparent; padding: 6px 10px; }
+.profile-menu button:hover { background: var(--panel-2); }
+.profile-menu .profile-menu-danger { color: var(--danger); }
+#profile-meta { margin-top: 4px; min-height: 1.2em; }
+#profile-status { white-space: pre-line; }
+#profile-status.error { color: var(--danger); }
+
 /* Внешнее управление (Stream Deck / Companion / OSC) — раздел окна «Настройки» */
 .remote-row {
   display: flex;

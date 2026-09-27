@@ -127,6 +127,15 @@ const api: PresenterApi = {
     getEnabled: () => ipcRenderer.invoke('midi:get-enabled'),
     setEnabled: (names) => ipcRenderer.invoke('midi:set-enabled', names),
   },
+  profiles: {
+    list: () => ipcRenderer.invoke('profiles:list'),
+    save: (name, labels, id, groups) => ipcRenderer.invoke('profiles:save', name, labels, id, groups),
+    rename: (id, name) => ipcRenderer.invoke('profiles:rename', id, name),
+    remove: (id) => ipcRenderer.invoke('profiles:delete', id),
+    apply: (id, groups) => ipcRenderer.invoke('profiles:apply', id, groups),
+    exportFile: (id) => ipcRenderer.invoke('profiles:export', id),
+    importFile: () => ipcRenderer.invoke('profiles:import'),
+  },
   remote: {
     configure: (settings) => ipcRenderer.invoke('remote:configure', settings),
     openHelp: () => ipcRenderer.invoke('remote:open-help'),

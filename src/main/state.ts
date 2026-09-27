@@ -22,6 +22,7 @@ export type {
   TimerState,
   UiTheme,
   VideoState,
+  VenueProfile,
   VideoTakeMode,
 } from '../shared/types.js'
 export { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'

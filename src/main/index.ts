@@ -7,13 +7,14 @@ import { DONATE_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
 import { initDiag, instrumentIpc, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
 import { captureIpcHandlers, initRemote, registerRemoteIpc } from './remote/server.js'
+import { registerProfileIpc } from './profiles.js'
 import { askBootLayout } from './boot-dialog.js'
 import { askUiLang } from './lang-dialog.js'
 import { DEFAULT_LANG, setLang, t } from '../shared/i18n.js'
 import { showNagDialog } from './nag-dialog.js'
 import { attachOperatorCloseGuard, requestQuit } from './quit-guard.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
-import { applyLayout, getOperatorWindow, setOperatorWindowHook } from './windows.js'
+import { applyLayout, getOperatorWindow, reloadAllWindowsForLang, setOperatorWindowHook } from './windows.js'
 import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf, applyClickerShortcuts } from './ipc.js'
 import { mediaDirFor } from './pptx-media.js'
 import {
@@ -336,6 +337,7 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
   registerDiagIpc()
   registerRemoteIpc()
+  registerProfileIpc()
 
   // Язык — раньше меню и любых окон: всё дальше рисуется уже на нём. Не
   // выбран ни разу (первый запуск) — спросить (lang-dialog.ts).
@@ -374,6 +376,17 @@ app.whenReady().then(async () => {
 
   // Смена языка в «Настройках» — через перезапуск; спросит о сохранении, как обычный выход.
   ipcMain.handle('app:relaunch', () => {
+    // dev-сборка: окна грузятся с dev-сервера electron-vite, а его держит
+    // `npm run dev` ровно до выхода этого процесса. После app.relaunch() новый
+    // процесс открыл бы окна на мёртвом localhost:5173 — пустой экран. Поэтому
+    // здесь без выхода: язык, меню и окна пересобираются на месте.
+    if (process.env['ELECTRON_RENDERER_URL']) {
+      const lang = getUiLang()
+      if (lang) setLang(lang)
+      buildMenu()
+      reloadAllWindowsForLang()
+      return
+    }
     void requestQuit({ relaunch: true })
   })
 

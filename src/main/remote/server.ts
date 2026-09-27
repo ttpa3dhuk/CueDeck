@@ -56,6 +56,16 @@ export function captureIpcHandlers(): void {
 /** Обработчики из ipc.ts event не трогают; окна-отправителя у нас нет. */
 const REMOTE_EVENT = { sender: null, frameId: -1, processId: -1 } as unknown as IpcMainInvokeEvent
 
+/**
+ * Вызвать обработчик ipc так же, как его вызвала бы кнопка оператора. Нужен
+ * профилям площадки: они применяют настройки теми же функциями, что «Настройки».
+ */
+export async function callIpcHandler(channel: string, ...args: unknown[]): Promise<unknown> {
+  const h = handlers.get(channel)
+  if (!h) throw new Error(`no ipc handler: ${channel}`)
+  return h(REMOTE_EVENT, ...args)
+}
+
 // Команды исполняются строго по очереди: «restart» = reset + start, а toggle
 // должен видеть состояние после предыдущего нажатия, даже если Stream Deck
 // прислал два запроса подряд.

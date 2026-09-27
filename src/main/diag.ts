@@ -150,6 +150,7 @@ const QUIET_CHANNELS = new Set([
   'session:has-last',
   'layout:get-ask-on-startup',
   'diag:info',
+  'profiles:list',
 ])
 /** Каналы с системным диалогом: их длительность — время раздумий оператора, не тормоза. */
 const DIALOG_CHANNELS = new Set([
@@ -165,6 +166,8 @@ const DIALOG_CHANNELS = new Set([
   'project:open',
   'project:save',
   'project:consolidate',
+  'profiles:export',
+  'profiles:import',
 ])
 const SLOW_MS = 1000
 

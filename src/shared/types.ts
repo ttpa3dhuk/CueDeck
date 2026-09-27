@@ -419,3 +419,84 @@ export interface DiagInfo {
 }
 
 export type ReportResult = { ok: true; path: string } | { ok: false; error: string }
+
+// ── Профили площадки (PLAN 2.18, шаг 6) ──────────────────────────────────────
+
+/**
+ * Звуковой выход в профиле. id устройства у Chromium свой на каждом компьютере
+ * (и меняется после переустановки драйвера), поэтому главное — имя: по нему
+ * выход ищется при применении. id — подсказка для той же машины.
+ * null — «системный по умолчанию» у эфира и «выключена» у предпрослушки.
+ */
+export interface ProfileAudioOutput {
+  id: string
+  label: string
+}
+
+/**
+ * Настройки площадки: всё, что оператор выставляет под конкретный зал и
+ * конкретные экраны. НЕ входят: плейлист и заставка (это проект), тема, язык,
+ * кегль заметок и горячие клавиши (это вкусы оператора, а не площадка), путь к
+ * LibreOffice (это компьютер), длительность таймера (она у каждого спикера своя —
+ * профиль, применённый посреди выступления, не должен её трогать).
+ */
+export interface VenueProfileSettings {
+  layout: Layout
+  audienceWindowed: boolean
+  outputMonitorsEnabled: boolean
+  audioMain: ProfileAudioOutput | null
+  audioPreview: ProfileAudioOutput | null
+  timerMode: TimerMode
+  timerPosition: TimerPosition
+  timerScale: number
+  timerFree: { x: number; y: number }
+  timerColor: string | null
+  timerWarnColors: boolean
+  timerTickEnabled: boolean
+  timerGongEnabled: boolean
+  timerLoop: boolean
+  timerPresets: number[]
+  speakerLayout: { sidebarPct: number; nextPct: number | null }
+  speakerMsgLayout: { pos: { x: number; y: number } | null; scale: number }
+  speakerMsgPresets: string[]
+  videoTakeMode: VideoTakeMode
+  slideTakeMode: SlideTakeMode
+  autoAdvance: boolean
+  clickerGlobal: boolean
+  clickerGlobalArrows: boolean
+  remote: RemoteSettings
+  midiInputs: string[]
+}
+
+/**
+ * Группы настроек профиля — оператор выбирает, какие сохранять: «обновить в
+ * своём профиле только пресеты, не трогая звук и экраны» (Азат 2026-09-28).
+ * Применяются только группы, которые в профиле есть.
+ */
+export type ProfileGroup = 'screens' | 'audio' | 'prompter' | 'timer' | 'presets' | 'take' | 'clicker' | 'remote' | 'midi'
+
+export interface VenueProfile {
+  id: string
+  name: string
+  /** Какие группы профиль хранит; остальные поля settings при применении не трогаются. */
+  groups: ProfileGroup[]
+  /** Когда сохранён (ISO). */
+  savedAt: string
+  settings: VenueProfileSettings
+}
+
+/** Что осталось сделать окну оператора после применения профиля (звук — там). */
+export type ProfileApplyResult =
+  | {
+      ok: true
+      name: string
+      /** Что применено на самом деле: отмеченное ∩ то, что есть в профиле. */
+      groups: ProfileGroup[]
+      /** Применять ли звук; нет — окно оператора звук не трогает. */
+      audio: boolean
+      audioMain: ProfileAudioOutput | null
+      audioPreview: ProfileAudioOutput | null
+      /** Раскладка отличалась — окна зала/суфлёра пересобраны. */
+      layoutChanged: boolean
+    }
+  | { ok: false; error: string }

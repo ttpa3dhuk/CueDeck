@@ -412,6 +412,7 @@
         <h2>Настройки</h2>
         <div class="settings-layout">
           <nav class="settings-nav">
+            <button data-section="profiles">Профили площадки</button>
             <button data-section="screens" class="active">Экраны</button>
             <button data-section="prompter">Суфлёр</button>
             <button data-section="clicker">Кликер</button>
@@ -423,6 +424,41 @@
             <button data-section="midi">MIDI</button>
           </nav>
           <div class="settings-body">
+            <section class="settings-section hidden" data-section="profiles">
+              <p class="audio-hint">Профиль запоминает настройки площадки — все или только отмеченные ниже.</p>
+              <div class="profile-pick">
+                <select id="profile-select" class="profile-select" aria-label="Профиль"></select>
+                <button id="profile-apply" class="primary" title="Выставить настройки этой площадки — только отмеченное ниже">Применить</button>
+                <button id="profile-update" title="Записать в профиль текущие настройки — только отмеченное ниже">Обновить</button>
+                <div class="profile-more-wrap">
+                  <button id="profile-more" title="Ещё">⋯</button>
+                  <div id="profile-menu" class="profile-menu hidden">
+                    <button data-act="rename">Переименовать</button>
+                    <button data-act="export">В файл…</button>
+                    <button data-act="delete" class="profile-menu-danger">Удалить</button>
+                  </div>
+                </div>
+              </div>
+              <div id="profile-rename-row" class="profile-pick hidden">
+                <input id="profile-rename-input" type="text" class="profile-name-input" spellcheck="false" maxlength="80" />
+                <button id="profile-rename-ok" class="primary">Готово</button>
+                <button id="profile-rename-cancel">Отмена</button>
+              </div>
+              <p id="profile-meta" class="audio-hint compact"></p>
+              <div class="live-field">
+                <span class="live-field-label">Что сохранять и применять</span>
+                <div id="profile-groups" class="profile-groups"></div>
+              </div>
+              <div class="profile-pick">
+                <input id="profile-name" type="text" class="profile-name-input" placeholder="Название новой площадки" spellcheck="false" maxlength="80" />
+                <button id="profile-save">Сохранить как новый</button>
+              </div>
+              <p id="profile-status" class="audio-hint compact"></p>
+              <div class="remote-row">
+                <span class="modal-actions-spacer"></span>
+                <button id="profile-import" title="Файл .cueprofile с другого компьютера или от коллеги">Загрузить из файла…</button>
+              </div>
+            </section>
             <section id="setup-section" class="settings-section" data-section="screens">
               <p class="audio-hint">Раскладка окон и экраны. Применяется кнопкой ниже: окна зала и суфлёра при этом пересоздаются.</p>
               <div class="layout-picker">
@@ -455,7 +491,7 @@
               </div>
             </section>
             <section class="settings-section hidden" data-section="prompter">
-              <p class="audio-hint">Экран суфлёра в его пропорциях. Таймер и красную плашку сообщения спикеру можно двигать мышкой, размер — за уголок или колёсиком над ними; границы колонок тоже тянутся. Суфлёр повторяет вживую.</p>
+              <p class="audio-hint">Экран суфлёра в его пропорциях.</p>
               <div id="prompter-stage" class="prompter-stage">
                 <div class="ps-zone ps-slide">слайд</div>
                 <div class="ps-zone ps-next">дальше</div>
@@ -526,17 +562,15 @@
             <section class="settings-section hidden" data-section="audio">
               <div class="live-field">
                 <span class="live-field-label">Эфир (MAIN)</span>
-                <p class="audio-hint compact">Куда отдавать звук роликов и внешних входов: звуковая карта, миниджек ноута, HDMI на vMix-машину. Идёт на выход того окна, что озвучивает зал.</p>
                 <div id="audio-device-list" class="audio-device-list"></div>
               </div>
               <div class="live-field">
                 <span class="live-field-label">Предпрослушка (SOLO, наушники)</span>
-                <p class="audio-hint compact">Отдельный выход, чтобы послушать принесённый ролик или захват в превью до выдачи в зал. Пока выключено — превью немое.</p>
                 <div id="audio-preview-list" class="audio-device-list"></div>
               </div>
             </section>
             <section class="settings-section hidden" data-section="hotkeys">
-              <p class="audio-hint">Нажми на клавишу справа от действия, затем нажми нужную кнопку на клавиатуре. Клавиши кликера (PgUp / PgDn / точка) и комбинации с Shift/Ctrl работают всегда.</p>
+              <p class="audio-hint">Нажми на клавишу, чтобы изменить.</p>
               <div id="hotkeys-list" class="hotkeys-list"></div>
               <div class="modal-actions">
                 <button id="hotkeys-reset">Сбросить по умолчанию</button>
@@ -544,8 +578,7 @@
             </section>
             <section class="settings-section hidden" data-section="ui">
               <div class="live-field">
-                <span class="live-field-label">Тема окна оператора</span>
-                <p class="audio-hint compact">Суфлёр и зал всегда тёмные — это выходы, их тема не меняет.</p>
+                <span class="live-field-label">Тема окна</span>
                 <label class="windowed-label"><input type="radio" name="ui-theme" value="dark" /> <span>Тёмная</span></label>
                 <label class="windowed-label"><input type="radio" name="ui-theme" value="light" /> <span>Светлая</span></label>
               </div>

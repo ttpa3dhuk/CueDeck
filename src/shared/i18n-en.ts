@@ -276,7 +276,6 @@ export const EN: Record<string, string> = {
   'Раскладка экранов изменилась. ⚙️ Настройки → Экраны (Cmd+,) — переназначить.': 'The screen setup has changed. ⚙️ Settings → Screens (Cmd+,) to reassign.',
 
   // ── Настройки → Суфлёр ──
-  'Экран суфлёра в его пропорциях. Таймер и красную плашку сообщения спикеру можно двигать мышкой, размер — за уголок или колёсиком над ними; границы колонок тоже тянутся. Суфлёр повторяет вживую.': 'The prompter screen in its proportions. Drag the timer and the red speaker-message banner with the mouse, resize by the corner or with the wheel over them; column borders can be dragged too. The prompter follows live.',
   'слайд': 'slide',
   'дальше': 'next',
   'заметки': 'notes',
@@ -327,15 +326,12 @@ export const EN: Record<string, string> = {
 
   // ── Настройки → Звук ──
   'Эфир (MAIN)': 'Program (MAIN)',
-  'Куда отдавать звук роликов и внешних входов: звуковая карта, миниджек ноута, HDMI на vMix-машину. Идёт на выход того окна, что озвучивает зал.': 'Where clip and live-input audio goes: sound card, the laptop’s mini-jack, HDMI to the vMix machine. It plays through the window that feeds the audience.',
   'Предпрослушка (SOLO, наушники)': 'Cue (SOLO, headphones)',
-  'Отдельный выход, чтобы послушать принесённый ролик или захват в превью до выдачи в зал. Пока выключено — превью немое.': 'A separate output to listen to a brought-in clip or a capture in preview before it goes to the audience. While off, the preview is muted.',
   'Системный выход по умолчанию': 'System default output',
   'Выключена (превью без звука)': 'Off (preview muted)',
   'Устройство {id}…': 'Device {id}…',
 
   // ── Настройки → Горячие клавиши ──
-  'Нажми на клавишу справа от действия, затем нажми нужную кнопку на клавиатуре. Клавиши кликера (PgUp / PgDn / точка) и комбинации с Shift/Ctrl работают всегда.': 'Click the key to the right of an action, then press the key you want. Clicker keys (PgUp / PgDn / period) and Shift/Ctrl combos always work.',
   'Сбросить по умолчанию': 'Reset to defaults',
   'ЭФИР / take (превью → эфир)': 'TAKE (preview → program)',
   'Эфир: следующий слайд': 'Program: next slide',
@@ -348,7 +344,6 @@ export const EN: Record<string, string> = {
 
   // ── Настройки → Интерфейс ──
   'Тема окна оператора': 'Operator window theme',
-  'Суфлёр и зал всегда тёмные — это выходы, их тема не меняет.': 'The prompter and audience screens are always dark — they are outputs, the theme doesn’t change them.',
   'Тёмная': 'Dark',
   'Светлая': 'Light',
   'Язык / Language': 'Language / Язык',
@@ -625,6 +620,72 @@ export const EN: Record<string, string> = {
   'в Companion нет переменной {name} — импортируй страницу CueDeck': 'Companion has no variable {name} — import the CueDeck page',
   'Companion не отвечает на {host} — он запущен?': 'Companion doesn’t respond at {host} — is it running?',
   'Companion на {host} не ответил вовремя': 'Companion at {host} didn’t respond in time',
+  // ── Профили площадки («Настройки → Профили площадки», main/profiles.ts) ──
+  'Профили площадки': 'Venue profiles',
+  'Сохранить текущие': 'Save current',
+  'Загрузить из файла…': 'Load from file…',
+  'Файл .cueprofile с другого компьютера или от коллеги': 'A .cueprofile file from another computer or a colleague',
+  'Обновить': 'Update',
+  'Переименовать': 'Rename',
+  'В файл…': 'To file…',
+  'Удалить профиль': 'Delete profile',
+  '1 экран': '1 screen',
+  '2 экрана': '2 screens',
+  '3 экрана': '3 screens',
+  'Впиши название площадки': 'Type the venue name',
+  '✅ Сохранён профиль «{name}»': '✅ Profile saved: “{name}”',
+  '✅ Профиль «{name}» обновлён': '✅ Profile updated: “{name}”',
+  'Удалить профиль «{name}»?': 'Delete profile “{name}”?',
+  '✅ Сохранено: {path}': '✅ Saved: {path}',
+  '✅ Загружено профилей: {n}': '✅ Profiles loaded: {n}',
+  'Профиль «{name}» меняет раскладку экранов — окна зала и суфлёра пересоздадутся. Применить?':
+    'Profile “{name}” changes the screen layout — the audience and prompter windows will be recreated. Apply?',
+  'Применяю…': 'Applying…',
+  'Нет выхода «{name}» — звук эфира оставлен как был': 'Output “{name}” not found — program audio left as it was',
+  'Нет выхода «{name}» — предпрослушка оставлена как была': 'Output “{name}” not found — preview monitoring left as it was',
+  'Назови профиль': 'Name the profile',
+  'Профиль не найден': 'Profile not found',
+  'Слишком много профилей': 'Too many profiles',
+  'Сохранить профиль в файл': 'Save profile to file',
+  'Загрузить профиль из файла': 'Load profile from file',
+  'файл из более новой версии CueDeck — обнови программу': 'the file is from a newer CueDeck version — update the app',
+  'это не профиль CueDeck': 'not a CueDeck profile',
+  'Выход эфира сейчас не подключён — в профиле будет системный выход': 'The program output is not connected now — the profile will use the system output',
+  'Выход предпрослушки сейчас не подключён — в профиле она будет выключена': 'The preview output is not connected now — preview monitoring will be off in the profile',
+  'Что сохранять и применять': 'What to save and apply',
+  'Записать в профиль «{name}» текущие настройки: {groups}? Остальное в профиле останется как было.':
+    'Store the current settings in “{name}”: {groups}? The rest of the profile stays as it was.',
+  '✅ Из профиля «{name}» применено: {groups}': '✅ Applied from “{name}”: {groups}',
+  'В профиле нет ничего из отмеченного': 'The profile has none of the ticked groups',
+  'Отметь, что сохранять': 'Tick what to save',
+  'Выдача': 'Take',
+  'Режим таймера': 'Timer mode',
+  'Пресеты': 'Presets',
+  'Отметить все': 'Tick all',
+  'Снять все': 'Untick all',
+  'в профиле: {groups}': 'contains: {groups}',
+  'всё': 'everything',
+  'Раскладка окон, зал в окне, мониторы выходов': 'Window layout, windowed audience, output monitors',
+  'Выход эфира и предпрослушки': 'Program and preview outputs',
+  'Таймер на суфлёре: место, размер, цвет; колонки; сообщение спикеру': 'Prompter timer: position, size, colour; columns; speaker message',
+  'Режим, тик, гонг, повтор': 'Mode, tick, gong, loop',
+  'Кнопки пресетов таймера и тексты сообщений спикеру': 'Timer preset buttons and speaker message texts',
+  'Как выдаются в эфир видео и слайды, автопереход': 'How video and slides go on air, auto-advance',
+  'Глобальный кликер и стрелки': 'Global clicker and arrow keys',
+  'Какие MIDI-устройства слушать': 'Which MIDI devices to listen to',
+  'Профиль запоминает настройки площадки — все или только отмеченные ниже.': 'A profile remembers the venue setup — all of it or only what is ticked below.',
+  'Экран суфлёра в его пропорциях.': 'The prompter screen in its proportions.',
+  'Нажми на клавишу, чтобы изменить.': 'Click a key to change it.',
+  'Тема окна': 'Window theme',
+  'Профиль': 'Profile',
+  'Выставить настройки этой площадки — только отмеченное ниже': 'Apply this venue’s settings — only what is ticked below',
+  'Записать в профиль текущие настройки — только отмеченное ниже': 'Store the current settings in this profile — only what is ticked below',
+  'Ещё': 'More',
+  'Название новой площадки': 'New venue name',
+  'Удалить': 'Delete',
+  'Сохранить как новый': 'Save as new',
+  '— профилей нет —': '— no profiles —',
+  'Настрой экраны, звук и суфлёр под площадку, впиши название внизу и нажми «Сохранить как новый».': 'Set up screens, audio and the prompter for the venue, type a name below and press “Save as new”.',
 }
 
 /**
@@ -646,4 +707,5 @@ export const EN_HTML: Record<string, string> = {
   loPickHint:
     'If LibreOffice is installed in a non-standard folder (for example, on drive D), show where it is. ' +
     'You need <code>soffice.com</code> or <code>soffice.exe</code> in the <code>program</code> subfolder.',
+
 }

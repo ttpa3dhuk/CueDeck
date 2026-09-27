@@ -1,7 +1,7 @@
 import Store from 'electron-store'
 import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
-import type { PlaylistEntry, RemoteSettings, SlideTakeMode, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
+import type { PlaylistEntry, RemoteSettings, VenueProfile, SlideTakeMode, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
 import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 import { DEFAULT_REMOTE_SETTINGS } from '../shared/types.js'
 import { EN } from '../shared/i18n-en.js'
@@ -58,6 +58,8 @@ interface PersistedShape {
   remote: RemoteSettings
   /** MIDI-входы, которые слушает CueDeck — имена устройств («Настройки → MIDI»). */
   midiInputs: string[]
+  /** Профили площадки (profiles.ts) — список, новые в конце. */
+  venueProfiles: VenueProfile[]
   /** Время прошлого запуска — по нему пропускаем плашку при быстром рестарте. */
   lastLaunchAt: number
   /**
@@ -106,6 +108,7 @@ const STORE_DEFAULTS: PersistedShape = {
   uiTheme: 'light',
   remote: { ...DEFAULT_REMOTE_SETTINGS },
   midiInputs: [],
+  venueProfiles: [],
   lastLaunchAt: 0,
   cleanExit: true,
 }
@@ -537,4 +540,12 @@ export function getMidiInputs(): string[] {
 
 export function setMidiInputs(names: string[]): void {
   store().set('midiInputs', [...new Set(names.filter((x) => typeof x === 'string' && x.length > 0))].slice(0, 32))
+}
+
+export function getVenueProfiles(): unknown {
+  return store().get('venueProfiles')
+}
+
+export function setVenueProfiles(list: VenueProfile[]): void {
+  store().set('venueProfiles', list)
 }
