@@ -567,7 +567,11 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
    его можно в обычном режиме или из транспорта. */
 .playlist-list.compact .playlist-item .speaker-name,
 .playlist-list.compact .playlist-item .duration-row,
-.playlist-list.compact .list-controls {
+.playlist-list.compact .playlist-item .loop-btn {
+  display: none;
+}
+/* Строка «Режим / Секунд на фото / FADE» в редакторе списка. */
+.list-controls {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -669,9 +673,6 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 .add-menu button span { color: var(--muted); font-size: 11px; }
 .add-menu button:hover { background: var(--panel-2); }
 
-.playlist-item .loop-btn {
-  display: none;
-}
 .playlist-list {
   list-style: none;
   padding: 0;
@@ -723,7 +724,7 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   background: rgba(46, 160, 67, 0.13);
 }
 .playlist-item.in-preview::before {
-  content: '○ превью';
+  content: var(--t-badge-preview, '○ превью');
   position: absolute;
   top: 6px;
   right: 8px;
@@ -740,7 +741,7 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   background: rgba(214, 64, 69, 0.14);
 }
 .playlist-item.on-air::after {
-  content: '● ЭФИР';
+  content: var(--t-badge-program, '● ЭФИР');
   position: absolute;
   top: 6px;
   right: 8px;
@@ -1109,7 +1110,7 @@ body[data-role="speaker"] .playlist { display: none !important; }
   position: relative;
 }
 .kv-preview.kv-video::after {
-  content: '▶ ВИДЕО';
+  content: var(--t-kv-video, '▶ ВИДЕО');
   position: absolute;
   inset: 0;
   display: flex;
@@ -2096,3 +2097,12 @@ body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--a
    Геометрия та же, что у основного слоя, — иначе кадры «прыгнут». */
 .slide-image.fade-under { z-index: 0; }
 .slide-image.fade-under.hidden { display: none; }
+
+/* ── Английский интерфейс (i18n.ts): надписи из CSS `content`. Русский —
+   запасное значение прямо в правиле, английский — здесь. translateDom()
+   ставит <html lang="en">. ── */
+html[lang="en"] {
+  --t-badge-preview: '○ preview';
+  --t-badge-program: '● ON AIR';
+  --t-kv-video: '▶ VIDEO';
+}

@@ -1,4 +1,5 @@
 import type { AppState, TimerMode, TimerPosition } from '../../shared/types.js'
+import { t } from '../../shared/i18n.js'
 
 /**
  * Таблица команд внешнего управления (PLAN 2.18) — без Electron, покрыта
@@ -57,7 +58,10 @@ export interface RemoteCommand {
   arg: ArgKind
   values?: readonly string[]
   group: Group
+  /** Русское название — ключ словаря; на экран — через commandTitle(). */
   title: string
+  /** У вкл/выкл-команд — чем управляют («Заставка / blackout»), title тогда — действие. */
+  what?: string
   /** Пример аргумента для справочной страницы. */
   example?: string
   build(arg: RemoteArg, s: RemoteStateView): IpcCall[] | string
@@ -145,19 +149,17 @@ export function programHasVideo(s: RemoteStateView): boolean {
   return s.fileKind === 'pptx' && s.slideMedia.some((m) => m.slide === s.currentSlide)
 }
 
-const NO_VIDEO = 'в эфире нет ролика'
-
 const withVideo =
   (build: (s: RemoteStateView) => IpcCall[]) =>
   (_a: RemoteArg, s: RemoteStateView): IpcCall[] | string =>
-    programHasVideo(s) ? build(s) : NO_VIDEO
+    programHasVideo(s) ? build(s) : t('в эфире нет ролика')
 
 /** Запись плейлиста по номеру карточки (с единицы, как подписано у оператора). */
 function entryAt(a: RemoteArg, s: RemoteStateView): { id: string } | string {
   const i = parseIndex(a)
-  if (i === null) return 'нужен номер записи с единицы'
+  if (i === null) return t('нужен номер записи с единицы')
   const e = s.playlist[i]
-  if (!e) return s.playlist.length ? `в плейлисте ${s.playlist.length} записей` : 'плейлист пуст'
+  if (!e) return s.playlist.length ? t('в плейлисте {n} записей', { n: s.playlist.length }) : t('плейлист пуст')
   return e
 }
 
@@ -169,7 +171,7 @@ function entryAt(a: RemoteArg, s: RemoteStateView): { id: string } | string {
  */
 export function neighbour(s: RemoteStateView, dir: 1 | -1): { id: string } | string {
   const n = s.playlist.length
-  if (!n) return 'плейлист пуст'
+  if (!n) return t('плейлист пуст')
   const at = (id: string | null): number => (id ? s.playlist.findIndex((e) => e.id === id) : -1)
   const prog = at(s.currentPlaylistId)
   const prev = at(s.preview.playlistId)
@@ -183,7 +185,7 @@ export function neighbour(s: RemoteStateView, dir: 1 | -1): { id: string } | str
     if (i === prog && prog >= 0) i -= 1
   }
   const e = s.playlist[i]
-  return e ?? (dir === 1 ? 'это последняя запись' : 'это первая запись')
+  return e ?? (dir === 1 ? t('это последняя запись') : t('это первая запись'))
 }
 
 const onOff = (
@@ -198,21 +200,24 @@ const onOff = (
     aliases: [base],
     arg: 'none',
     group,
-    title: `${what}: переключить`,
+    what,
+    title: 'переключить',
     build: (_a, s) => channelFor(!current(s), s),
   },
   {
     path: `${base}/on`,
     arg: 'none',
     group,
-    title: `${what}: включить`,
+    what,
+    title: 'включить',
     build: (_a, s) => (current(s) ? [] : channelFor(true, s)),
   },
   {
     path: `${base}/off`,
     arg: 'none',
     group,
-    title: `${what}: выключить`,
+    what,
+    title: 'выключить',
     build: (_a, s) => (current(s) ? channelFor(false, s) : []),
   },
 ]
@@ -243,7 +248,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     example: '1',
     build: (a) => {
       const n = parsePositive(a)
-      return n === null ? 'нужен номер слайда' : [call('nav:goto', n)]
+      return n === null ? t('нужен номер слайда') : [call('nav:goto', n)]
     },
   },
   {
@@ -252,7 +257,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     arg: 'none',
     group: 'Эфир',
     title: 'ЭФИР — выдать превью в зал',
-    build: (_a, s) => (s.preview.path ? [call('preview:take')] : 'превью пустое — выдавать нечего'),
+    build: (_a, s) => (s.preview.path ? [call('preview:take')] : t('превью пустое — выдавать нечего')),
   },
   ...onOff('blackout', 'Эфир', 'Заставка / blackout', () => [call('blackout:toggle')], (s) => s.blackout),
 
@@ -300,8 +305,8 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     example: '10',
     build: (a, s) => {
       const sec = parseSeconds(a)
-      if (sec === null) return 'нужны секунды: 10, 2.5, 1:30'
-      return programHasVideo(s) ? [call('video:seek-by', sec)] : NO_VIDEO
+      if (sec === null) return t('нужны секунды: 10, 2.5, 1:30')
+      return programHasVideo(s) ? [call('video:seek-by', sec)] : t('в эфире нет ролика')
     },
   },
   {
@@ -312,8 +317,8 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     example: '10',
     build: (a, s) => {
       const sec = parseSeconds(a)
-      if (sec === null) return 'нужны секунды: 10, 2.5, 1:30'
-      return programHasVideo(s) ? [call('video:seek-by', -sec)] : NO_VIDEO
+      if (sec === null) return t('нужны секунды: 10, 2.5, 1:30')
+      return programHasVideo(s) ? [call('video:seek-by', -sec)] : t('в эфире нет ролика')
     },
   },
   ...onOff('video/mute', 'Видео в эфире', 'Звук эфира выкл', (want) => [call('video:set-muted', want)], (s) => s.video.muted),
@@ -321,7 +326,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     'video/loop',
     'Видео в эфире',
     'Цикл ролика',
-    (want, s) => (s.fileKind === 'video' ? [call('video:set-loop', want)] : 'цикл есть только у ролика в эфире'),
+    (want, s) => (s.fileKind === 'video' ? [call('video:set-loop', want)] : t('цикл есть только у ролика в эфире')),
     (s) => s.videoLoop,
   ),
 
@@ -392,7 +397,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     example: '1',
     build: (a) => {
       const n = parsePositive(a)
-      return n === null ? 'нужен номер слайда' : [call('preview:goto', n)]
+      return n === null ? t('нужен номер слайда') : [call('preview:goto', n)]
     },
   },
   {
@@ -400,7 +405,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     arg: 'none',
     group: 'Превью',
     title: 'Превью: ролик пуск / пауза',
-    build: (_a, s) => (s.preview.kind === 'video' ? [call('preview:video:toggle')] : 'в превью нет ролика'),
+    build: (_a, s) => (s.preview.kind === 'video' ? [call('preview:video:toggle')] : t('в превью нет ролика')),
   },
   {
     path: 'preview/clear',
@@ -455,7 +460,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     example: '15',
     build: (a) => {
       const ms = parseDurationMs(a)
-      return ms === null ? 'нужна длительность: 15 (минуты), 1:30, 90s' : [call('timer:set-duration', ms)]
+      return ms === null ? t('нужна длительность: 15 (минуты), 1:30, 90s') : [call('timer:set-duration', ms)]
     },
   },
   {
@@ -466,7 +471,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     example: '1',
     build: (a) => {
       const ms = parseDurationMs(a, true)
-      return ms === null ? 'нужна длительность: 1 (минута), 0:30, 30s' : [call('timer:adjust', ms)]
+      return ms === null ? t('нужна длительность: 1 (минута), 0:30, 30s') : [call('timer:adjust', ms)]
     },
   },
   {
@@ -477,7 +482,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     example: '1',
     build: (a) => {
       const ms = parseDurationMs(a, true)
-      return ms === null ? 'нужна длительность: 1 (минута), 0:30, 30s' : [call('timer:adjust', -ms)]
+      return ms === null ? t('нужна длительность: 1 (минута), 0:30, 30s') : [call('timer:adjust', -ms)]
     },
   },
   {
@@ -489,7 +494,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     build: (a, s) => {
       const i = parseIndex(a)
       const min = i === null ? undefined : s.timerPresets[i]
-      if (i === null || typeof min !== 'number') return `нет пресета с таким номером (есть 1–${s.timerPresets.length})`
+      if (i === null || typeof min !== 'number') return t('нет пресета с таким номером (есть 1–{n})', { n: s.timerPresets.length })
       return [call('timer:set-duration', min * 60_000)]
     },
   },
@@ -504,7 +509,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
       const v = typeof a === 'string' ? a.trim().toLowerCase() : ''
       return (TIMER_MODES as readonly string[]).includes(v)
         ? [call('timer:set-mode', v)]
-        : `режим: ${TIMER_MODES.join(' / ')}`
+        : t('режим: {values}', { values: TIMER_MODES.join(' / ') })
     },
   },
   {
@@ -518,7 +523,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
       const v = typeof a === 'string' ? a.trim().toLowerCase() : ''
       return (TIMER_POSITIONS as readonly string[]).includes(v)
         ? [call('timer:set-position', v)]
-        : `положение: ${TIMER_POSITIONS.join(' / ')}`
+        : t('положение: {values}', { values: TIMER_POSITIONS.join(' / ') })
     },
   },
   {
@@ -537,7 +542,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     build: (a, s) => {
       const i = parseIndex(a)
       const text = i === null ? '' : (s.speakerMsgPresets[i] ?? '').trim()
-      return text ? [call('speaker-message:set', text)] : 'пресет пустой или нет такого номера'
+      return text ? [call('speaker-message:set', text)] : t('пресет пустой или нет такого номера')
     },
   },
   {
@@ -548,7 +553,7 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     example: 'Вопросы из зала',
     build: (a) => {
       const text = typeof a === 'string' ? a.trim() : ''
-      return text ? [call('speaker-message:set', text)] : 'нужен текст сообщения'
+      return text ? [call('speaker-message:set', text)] : t('нужен текст сообщения')
     },
   },
   {
@@ -559,6 +564,11 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     build: () => [call('speaker-message:set', null)],
   },
 ]
+
+/** Название команды на языке интерфейса (справочная страница). */
+export function commandTitle(c: RemoteCommand): string {
+  return c.what ? `${t(c.what)}: ${t(c.title)}` : t(c.title)
+}
 
 export type ResolveResult =
   | { ok: true; command: string; calls: IpcCall[] }
@@ -589,12 +599,12 @@ export function resolveRemote(
 ): ResolveResult {
   const lower = segments.map((x) => x.toLowerCase())
   const hit = INDEX.find(({ segs }) => segs.every((seg, i) => lower[i] === seg))
-  if (!hit) return { ok: false, error: `неизвестная команда: ${segments.join('/') || '(пусто)'}` }
+  if (!hit) return { ok: false, error: t('неизвестная команда: {cmd}', { cmd: segments.join('/') || t('(пусто)') }) }
   const { cmd, segs } = hit
   const tail = segments.slice(segs.length)
 
   if (cmd.arg === 'none') {
-    if (tail.length) return { ok: false, error: `${cmd.path}: лишний хвост «${tail.join('/')}»` }
+    if (tail.length) return { ok: false, error: `${cmd.path}: ${t('лишний хвост «{tail}»', { tail: tail.join('/') })}` }
     if (extra[0] === 0 || extra[0] === false) return { ok: true, command: cmd.path, calls: [], ignored: true }
     const r = cmd.build(null, s)
     return typeof r === 'string' ? { ok: false, error: `${cmd.path}: ${r}` } : { ok: true, command: cmd.path, calls: r }
@@ -603,7 +613,7 @@ export function resolveRemote(
   let arg: RemoteArg
   if (tail.length) arg = cmd.arg === 'text' ? tail.join('/') : tail.length === 1 ? tail[0] : tail.join('/')
   else arg = extra[0] ?? null
-  if (arg === null || arg === '') return { ok: false, error: `${cmd.path}: нужен аргумент` }
+  if (arg === null || arg === '') return { ok: false, error: `${cmd.path}: ${t('нужен аргумент')}` }
   const r = cmd.build(arg, s)
   return typeof r === 'string' ? { ok: false, error: `${cmd.path}: ${r}` } : { ok: true, command: cmd.path, calls: r }
 }

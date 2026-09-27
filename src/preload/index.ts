@@ -116,6 +116,9 @@ const api: PresenterApi = {
   },
   ui: {
     setTheme: (theme) => ipcRenderer.invoke('ui:set-theme', theme),
+    getLang: () => ipcRenderer.invoke('ui:get-lang'),
+    setLang: (lang) => ipcRenderer.invoke('ui:set-lang', lang),
+    relaunch: () => ipcRenderer.invoke('app:relaunch'),
   },
   prompter: {
     setLayout: (layout) => ipcRenderer.invoke('prompter:set-layout', layout),

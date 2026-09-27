@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isLiveUri, makeLiveUri, parseLiveUri, liveDisplayName, liveFitFor } from '../src/shared/live'
+import { t } from '../src/shared/i18n'
 
 describe('live URI', () => {
   it('round-trip с аудио и без', () => {
@@ -55,6 +56,6 @@ describe('live URI', () => {
     const uri = makeLiveUri({ videoLabel: 'Cam Link 4K', audioLabel: null })
     expect(liveDisplayName(uri)).toBe('Cam Link 4K')
     // Битый путь не должен оставлять запись без названия.
-    expect(liveDisplayName('live://device')).toBe('Внешний вход')
+    expect(liveDisplayName('live://device')).toBe(t('Внешний вход'))
   })
 })

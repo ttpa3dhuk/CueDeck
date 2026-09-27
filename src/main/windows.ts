@@ -5,6 +5,7 @@ import type { DisplayMap, Layout, Role } from './layout.js'
 import { rolesForLayout } from './layout.js'
 import { store } from './state.js'
 import { WINDOW_TITLES } from '../shared/window-titles.js'
+import { getLang } from '../shared/i18n.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -23,7 +24,8 @@ function rendererForRole(role: Role): RendererTarget {
 
 function loadRenderer(win: BrowserWindow, target: RendererTarget): void {
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
-  const query = `role=${target.role}`
+  // Язык окна — в адресе: рендерер знает его до первой строки своего кода (i18n.ts).
+  const query = `role=${target.role}&lang=${getLang()}`
   if (devServerUrl) {
     win.loadURL(`${devServerUrl}/${target.entry}/index.html?${query}`)
   } else {

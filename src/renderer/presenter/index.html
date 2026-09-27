@@ -163,7 +163,7 @@
           <div id="video-error" class="video-error hidden">
             <div class="ve-icon">🎞️</div>
             <div class="ve-title">Не удалось воспроизвести видео</div>
-            <div class="ve-body">
+            <div class="ve-body" data-i18n-html="videoErrorBody">
               Формат или кодек не поддерживается — чаще всего это <b>ProRes</b> или <b>HEVC&nbsp;(H.265)</b>.<br/>
               Перекодируй ролик в <b>MP4 (H.264&nbsp;+&nbsp;AAC)</b> — бесплатной программой <b>HandBrake</b>,
               пресет «Fast 1080p30».
@@ -172,7 +172,7 @@
           </div>
           <div id="slide-placeholder" class="slide-placeholder">
             <div class="placeholder-title">В эфире пусто</div>
-            <div class="placeholder-hint">Подготовь файл в превью справа,<br/>затем кнопка ЭФИР (Enter), чтобы выдать в зал</div>
+            <div class="placeholder-hint" data-i18n-html="programEmptyHint">Подготовь файл в превью справа,<br/>затем кнопка ЭФИР (Enter), чтобы выдать в зал</div>
           </div>
           <div id="blackout-indicator" class="blackout-banner hidden">
             <span class="bo-badge">BLACKOUT</span>
@@ -215,14 +215,14 @@
           <div id="preview-video-error" class="video-error hidden">
             <div class="ve-icon">🎞️</div>
             <div class="ve-title">Не удалось воспроизвести видео</div>
-            <div class="ve-body">
+            <div class="ve-body" data-i18n-html="previewVideoErrorBody">
               Формат или кодек не поддерживается — чаще всего <b>ProRes</b> или <b>HEVC&nbsp;(H.265)</b>.<br/>
               Перекодируй в <b>MP4 (H.264&nbsp;+&nbsp;AAC)</b>.
             </div>
           </div>
           <div id="preview-placeholder" class="slide-placeholder">
             <div class="placeholder-title">Превью пусто</div>
-            <div class="placeholder-hint">Кликни спикера в списке слева<br/>или открой файл — он появится здесь, не в зале</div>
+            <div class="placeholder-hint" data-i18n-html="previewEmptyHint">Кликни спикера в списке слева<br/>или открой файл — он появится здесь, не в зале</div>
           </div>
           <div class="preview-nav">
             <button id="preview-prev" title="Превью: предыдущий слайд">◀</button>
@@ -291,7 +291,7 @@
         <div class="bottombar-left">
         </div>
         <div class="bottombar-right">
-          <button id="settings-btn" class="icon-btn" title="Настройки: экраны, звук, клавиши, тема, LibreOffice, внешнее управление, MIDI (Cmd+,)" aria-label="Настройки">⚙️</button>
+          <button id="settings-btn" class="icon-btn" title="Настройки: экраны, звук, клавиши, тема и язык, LibreOffice, внешнее управление, MIDI (Cmd+,)" aria-label="Настройки">⚙️</button>
           <button id="help-btn" class="icon-btn" title="Справка по клавишам (?)" aria-label="Справка">?</button>
         </div>
       </footer>
@@ -307,7 +307,7 @@
     <div id="list-modal" class="modal hidden">
       <div class="modal-content">
         <h2>Список</h2>
-        <p class="audio-hint">
+        <p class="audio-hint" data-i18n-html="listHint">
           Пачка фото и роликов, которую крутят на сборе гостей или в перерыве. Ролик играет целиком,
           фотография держится заданное время. <b>Порядок меняется перетаскиванием</b>; выбранную строку
           двигают клавиши ↑/↓.
@@ -549,6 +549,15 @@
                 <label class="windowed-label"><input type="radio" name="ui-theme" value="dark" /> <span>Тёмная</span></label>
                 <label class="windowed-label"><input type="radio" name="ui-theme" value="light" /> <span>Светлая</span></label>
               </div>
+              <div class="live-field">
+                <span class="live-field-label">Язык / Language</span>
+                <label class="windowed-label"><input type="radio" name="ui-lang" value="en" /> <span translate="no">English</span></label>
+                <label class="windowed-label"><input type="radio" name="ui-lang" value="ru" /> <span translate="no">Русский</span></label>
+                <div id="ui-lang-restart-row" class="remote-row hidden">
+                  <span class="audio-hint compact">Язык сменится после перезапуска CueDeck.</span>
+                  <button id="ui-lang-restart">Перезапустить</button>
+                </div>
+              </div>
             </section>
             <section class="settings-section hidden" data-section="lo">
               <p class="audio-hint">LibreOffice превращает PPTX, PPT, ODP и KEY в PDF. Без него открываются только PDF, картинки и видео.</p>
@@ -649,7 +658,7 @@
         <div class="lo-install-option">
           <div class="lo-option-label">Уже установлен, но не находится?</div>
           <button id="lo-pick-btn" class="lo-pick-btn">Указать папку вручную…</button>
-          <p class="audio-hint compact">Если LibreOffice стоит не в стандартной папке (например, на диске D) — покажи, где он лежит. Нужен файл <code>soffice.com</code> или <code>soffice.exe</code> в подпапке <code>program</code>.</p>
+          <p class="audio-hint compact" data-i18n-html="loPickHint">Если LibreOffice стоит не в стандартной папке (например, на диске D) — покажи, где он лежит. Нужен файл <code>soffice.com</code> или <code>soffice.exe</code> в подпапке <code>program</code>.</p>
         </div>
         <p id="lo-paths" class="lo-modal-note lo-paths hidden"></p>
         <div class="modal-actions">
