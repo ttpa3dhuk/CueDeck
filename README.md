@@ -58,6 +58,7 @@ PDF и картинки (PNG/JPG/WebP/GIF/BMP) открываются сразу
 - 🎚 Раскладка в стиле OBS Studio Mode — превью и эфир рядом, таймер и TAKE снизу, высота панели тянется мышью
 - 🎛 **Stream Deck, Companion, OSC** — эфир, ролики, спикеры и таймер с кнопок при любом активном окне; готовая страница Companion: время на кнопке мигает на нуле, «далее» показывает остаток слайдов ([подробно](#-stream-deck-companion-osc))
 - ⚙️ **Одно окно «Настройки»** (`Cmd+,`) — экраны, суфлёр, кликер, звук, клавиши, тема, язык, LibreOffice, внешнее управление, MIDI
+- 🗂 **Профили площадки** — настройки под зал (экраны, суфлёр, звук, кликер, Stream Deck…) одним выбором из списка; файл профиля переносится на другой компьютер
 - 🖱 **Суфлёр мышкой** — на макете экрана суфлёра таймер и сообщение спикеру ставятся куда угодно, размер — уголком или колёсиком, свой цвет таймера, колонки «слайд / дальше / заметки» тянутся
 - 🎹 MIDI-устройства — выбор контроллеров (назначение кнопок — скоро)
 - 🖱 **Глобальный кликер** — PgUp/PgDn листают эфир, даже когда CueDeck не в фокусе; отдельная галка для кликеров, шлющих стрелки (Logitech Spotlight)
@@ -73,7 +74,7 @@ PDF и картинки (PNG/JPG/WebP/GIF/BMP) открываются сразу
 - 🎧 **Предпрослушка (SOLO)** — слушаешь принесённый ролик или захват в наушниках, пока в зале идёт другое
 - 📊 Индикаторы уровня звука под превью и эфиром
 - 🔊 Выбор аудиовыхода — куда отдавать звук эфира (звуковая карта, HDMI на vMix, NDI и т.п.), отдельно для предпрослушки
-- 📝 **Заметки оператора → суфлёр** — текст появляется на экране суфлёра мгновенно
+- 📝 **Заметки оператора → суфлёр** — текст появляется на экране суфлёра мгновенно; заметки докладчика из PowerPoint подставляются сами
 - 💬 Флэш-сообщение спикеру — готовые пресеты или свой текст, крупно и мигает
 - ⬛ **Blackout/Key Visual** (`B`) — зал видит заставку или чёрный фон, звук глушится, слайды листаются незаметно для зала
 - ⌨️ Настраиваемые горячие клавиши
@@ -207,6 +208,7 @@ Rule of thumb: export to **MP4 (H.264 + AAC)**. Transcode ProRes/HEVC with [Hand
 - 🎚 OBS Studio-Mode layout — preview and program side by side, timer + TAKE below, drag-resizable
 - 🎛 **Stream Deck, Companion, OSC** — program, videos, speakers and timer from buttons, whatever window is focused; ready-made Companion page: live timer on the key that blinks at zero, slides left on "Next"
 - ⚙️ **One Settings window** (`Cmd+,`) — screens, prompter, clicker, audio, hotkeys, theme, language, LibreOffice, external control, MIDI
+- 🗂 **Venue profiles** — settings for a venue (screens, prompter, audio, clicker, Stream Deck…) in one pick from a list; a profile file moves to another computer
 - 🖱 **Prompter by mouse** — drag the timer and the speaker message anywhere on a mock of the prompter screen, resize by corner or wheel, custom timer colour, drag the column splits
 - 🎹 MIDI devices — pick your controllers (button mapping coming next)
 - 🖱 **Global clicker** — PgUp/PgDn flip the program deck even when CueDeck isn't focused; extra toggle for clickers that send arrow keys (Logitech Spotlight)
@@ -222,7 +224,7 @@ Rule of thumb: export to **MP4 (H.264 + AAC)**. Transcode ProRes/HEVC with [Hand
 - 🎧 **Cue/SOLO monitoring** — audition an incoming clip or capture in headphones while something else is on air
 - 📊 Audio level meters under preview and program
 - 🔊 Audio output selection — where program sound goes (sound card, HDMI to vMix, NDI, etc.), separate for cue monitoring
-- 📝 **Operator notes → confidence monitor** — text appears on the speaker's screen instantly
+- 📝 **Operator notes → confidence monitor** — text appears on the speaker's screen instantly; PowerPoint speaker notes are filled in automatically
 - 💬 Flash message to the speaker — presets or custom text, large and blinking
 - ⬛ **Blackout/Key Visual** (`B`) — audience sees a still or black screen, audio muted, slides change unseen
 - ⌨️ Customizable hotkeys
