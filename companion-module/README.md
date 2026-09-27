@@ -32,7 +32,7 @@ License: MIT, see [LICENSE](LICENSE).
 | `src/actions.ts` / `feedbacks.ts` / `presets.ts` | действия, фидбеки, «книга» кнопок (RU/EN)                                                                                                         |
 | `companion/manifest.json`, `HELP.md`             | паспорт модуля для Companion и справка                                                                                                            |
 
-Модуль говорит с CueDeck по тому же HTTP API, что и родная программа Stream Deck, поэтому работает с любой версией CueDeck, где есть внешнее управление (0.7.0+). Имена спикеров, следующий спикер и тексты пресетов на кнопках — с версии после 0.7.0 (поля `playlist.names`, `next`, `timerPresets`, `messagePresets` в `/api/state`).
+Модуль говорит с CueDeck по тому же HTTP API, что и родная программа Stream Deck, поэтому работает с любой версией CueDeck, где есть внешнее управление (0.7.0+). Имена спикеров, следующий спикер и тексты пресетов на кнопках — с версии после 0.8.0 (поля `playlist.names`, `next`, `timerPresets`, `messagePresets` в `/api/state`).
 
 ### Сборка
 
