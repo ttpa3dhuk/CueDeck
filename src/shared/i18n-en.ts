@@ -623,7 +623,7 @@ export const EN: Record<string, string> = {
   // ── Профили площадки («Настройки → Профили площадки», main/profiles.ts) ──
   'Профили площадки': 'Venue profiles',
   'Сохранить текущие': 'Save current',
-  'Загрузить из файла…': 'Load from file…',
+  'Импорт…': 'Import…',
   'Файл .cueprofile с другого компьютера или от коллеги': 'A .cueprofile file from another computer or a colleague',
   'Обновить': 'Update',
   'Переименовать': 'Rename',
