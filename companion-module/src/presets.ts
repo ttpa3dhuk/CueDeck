@@ -24,6 +24,7 @@ const T = {
 	ru: {
 		sTimer: 'Таймер',
 		sProgram: 'Эфир',
+		sStream: 'Трансляция',
 		sVideo: 'Ролик в эфире',
 		sPlaylist: 'Плейлист',
 		sMessage: 'Сообщение спикеру',
@@ -51,6 +52,7 @@ const T = {
 		take: 'ЭФИР ▶',
 		blackout: 'ЗАСТАВКА',
 		onAir: 'В ЭФИРЕ',
+		stream: 'СТРИМ',
 		video: 'РОЛИК ▶⏸',
 		videoRestart: 'РОЛИК\nс начала',
 		videoStop: 'РОЛИК\nстоп',
@@ -73,6 +75,7 @@ const T = {
 	en: {
 		sTimer: 'Timer',
 		sProgram: 'Program',
+		sStream: 'Stream',
 		sVideo: 'Video on air',
 		sPlaylist: 'Playlist',
 		sMessage: 'Speaker message',
@@ -100,6 +103,7 @@ const T = {
 		take: 'TAKE ▶',
 		blackout: 'BLACKOUT',
 		onAir: 'ON AIR',
+		stream: 'STREAM',
 		video: 'VIDEO ▶⏸',
 		videoRestart: 'VIDEO\nfrom start',
 		videoStop: 'VIDEO\nstop',
@@ -255,6 +259,20 @@ export function UpdatePresets(self: ModuleInstance): void {
 		add('on_air', 'On air (display only)', `${t.onAir}\n${v('program')}`, [], [], { color: C.red }),
 	]
 
+	// ── Трансляция ──
+	const stream = [
+		add(
+			'stream_toggle',
+			'Start / stop broadcast — live/enabled destinations below',
+			`${t.stream}\n${v('stream_live')}/${v('stream_total')}`,
+			[a('stream', { mode: 'toggle' })],
+			[
+				{ feedbackId: 'stream_running', options: {}, style: { bgcolor: C.redBg } },
+				{ feedbackId: 'stream_warn', options: { blink: true }, style: { bgcolor: C.amberBg } },
+			],
+		),
+	]
+
 	// ── Ролик ──
 	const video = [
 		add(
@@ -361,6 +379,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 			],
 		},
 		{ id: 'program', name: t.sProgram, definitions: program },
+		{ id: 'stream', name: t.sStream, definitions: stream },
 		{ id: 'video', name: t.sVideo, definitions: video },
 		{
 			id: 'playlist',

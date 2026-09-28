@@ -10,6 +10,7 @@ export type ActionsSchema = {
 	program_goto: { options: { slide: number } }
 	take: { options: Record<string, never> }
 	blackout: { options: { mode: OnOff } }
+	stream: { options: { mode: OnOff } }
 	video: { options: { cmd: string } }
 	video_seek: { options: { direction: 'forward' | 'back'; seconds: number } }
 	video_mute: { options: { mode: OnOff } }
@@ -70,6 +71,12 @@ export function UpdateActions(self: ModuleInstance): void {
 		},
 		blackout: {
 			name: 'Program: Blackout / holding slide',
+			options: [{ id: 'mode', type: 'dropdown', label: 'Mode', default: 'toggle', choices: onOffChoices }],
+			callback: async (e) => run(e.actionId, e.options),
+		},
+		stream: {
+			name: 'Stream: Start / stop broadcast',
+			description: 'Same as the STREAM button in CueDeck — sends to all enabled destinations set up in the app.',
 			options: [{ id: 'mode', type: 'dropdown', label: 'Mode', default: 'toggle', choices: onOffChoices }],
 			callback: async (e) => run(e.actionId, e.options),
 		},

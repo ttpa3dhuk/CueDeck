@@ -64,6 +64,8 @@ export function commandFor(actionId: string, o: Options): Command | null {
 			return { path: 'take' }
 		case 'blackout':
 			return { path: `blackout/${oneOf(ON_OFF, o.mode, 'toggle')}` }
+		case 'stream':
+			return { path: `stream/${oneOf(ON_OFF, o.mode, 'toggle')}` }
 
 		case 'video': {
 			const cmd = oneOf(VIDEO_CMDS, o.cmd, 'toggle')

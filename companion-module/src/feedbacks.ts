@@ -24,6 +24,8 @@ export type FeedbacksSchema = {
 	timer_running: { type: 'boolean'; options: NoOptions }
 	timer_fullscreen: { type: 'boolean'; options: NoOptions }
 	blackout: { type: 'boolean'; options: NoOptions }
+	stream_running: { type: 'boolean'; options: NoOptions }
+	stream_warn: { type: 'boolean'; options: { blink: boolean } }
 	video_playing: { type: 'boolean'; options: NoOptions }
 	muted: { type: 'boolean'; options: NoOptions }
 	video_loop: { type: 'boolean'; options: NoOptions }
@@ -92,6 +94,25 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 			defaultStyle: { bgcolor: C.redBg, color: C.white },
 			options: [],
 			callback: () => !!st()?.program.blackout,
+		},
+		stream_running: {
+			type: 'boolean',
+			name: 'Stream: broadcasting',
+			description: 'Same colour as the STREAM button in CueDeck — red while live.',
+			defaultStyle: { bgcolor: C.redBg, color: C.white },
+			options: [],
+			callback: () => !!st()?.stream?.running,
+		},
+		stream_warn: {
+			type: 'boolean',
+			name: 'Stream: something is wrong',
+			description: 'A destination is reconnecting, no picture, or the network can’t keep up. With “Blink” the style flashes every half second.',
+			defaultStyle: { bgcolor: C.amberBg, color: C.white },
+			options: [{ id: 'blink', type: 'checkbox', label: 'Blink', default: true }],
+			callback: (fb) => {
+				const s = st()
+				return !!s?.stream?.running && !!s.stream.warn && (!fb.options.blink || blinkOn())
+			},
 		},
 		video_playing: {
 			type: 'boolean',

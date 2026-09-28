@@ -54,6 +54,8 @@ export interface CueDeckState {
 	speakerMessage: string | null
 	timerPresets?: number[]
 	messagePresets?: string[]
+	/** Появилось после 0.8.1 (PLAN 2.21) — с более старыми версиями просто отсутствует. */
+	stream?: { running: boolean; live: number; total: number; warn: boolean }
 }
 
 export type VarValue = string | number | boolean
@@ -112,6 +114,10 @@ export function variableNames(s: CueDeckState | null): Record<string, string> {
 		blackout: 'Blackout / holding slide is on (true / false)',
 		message: 'Message to the speaker on the confidence monitor (empty — none)',
 		playlist_count: 'Number of playlist entries',
+		stream_running: 'Streaming is on (true / false)',
+		stream_warn: 'Something is wrong with the stream — reconnecting, no picture, network can’t keep up (true / false)',
+		stream_live: 'Destinations live right now',
+		stream_total: 'Destinations enabled in total',
 	}
 	for (let i = 1; i <= speakerCount(s); i++) out[`speaker_${i}`] = `Playlist entry ${i}: name`
 	const p = presetCounts(s)
@@ -135,6 +141,8 @@ export function variableValues(s: CueDeckState | null): Record<string, VarValue>
 			muted: false,
 			loop: false,
 			blackout: false,
+			stream_running: false,
+			stream_warn: false,
 		}
 	}
 	const v: Record<string, VarValue> = {
@@ -165,6 +173,10 @@ export function variableValues(s: CueDeckState | null): Record<string, VarValue>
 		blackout: s.program.blackout,
 		message: s.speakerMessage ?? '',
 		playlist_count: s.playlist.count,
+		stream_running: s.stream?.running ?? false,
+		stream_warn: !!s.stream?.running && !!s.stream.warn,
+		stream_live: s.stream ? s.stream.live : '',
+		stream_total: s.stream ? s.stream.total : '',
 	}
 	for (let i = 1; i <= speakerCount(s); i++) v[`speaker_${i}`] = shortName(s.playlist.names?.[i - 1])
 	const p = presetCounts(s)

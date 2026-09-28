@@ -67,6 +67,7 @@ const ALL: [string, Record<string, unknown>][] = [
   ['program_goto', { slide: 3 }],
   ['take', {}],
   ...each(ON_OFF, (mode) => ['blackout', { mode }]),
+  ...each(ON_OFF, (mode) => ['stream', { mode }]),
   ...each(VIDEO_CMDS, (cmd) => ['video', { cmd }]),
   ['video_seek', { direction: 'forward', seconds: 10 }],
   ['video_seek', { direction: 'back', seconds: 2.5 }],
@@ -171,7 +172,22 @@ describe('модуль Companion: /api/state → переменные', () => {
       speaker_8: '',
       timer_preset_2: 10,
       message_preset_6: '',
+      // Объект s без поля stream — как /api/state у CueDeck до 0.8.1 (PLAN 2.21): не ломается, просто пусто.
+      stream_running: false,
+      stream_warn: false,
+      stream_live: '',
+      stream_total: '',
     })
+  })
+
+  it('трансляция: идёт, площадка не в порядке', () => {
+    const v = variableValues({ ...s, stream: { running: true, live: 1, total: 2, warn: true } })
+    expect(v).toMatchObject({ stream_running: true, stream_warn: true, stream_live: 1, stream_total: 2 })
+  })
+
+  it('трансляция выключена — предупреждение не горит, даже если warn пришёл true', () => {
+    const v = variableValues({ ...s, stream: { running: false, live: 0, total: 2, warn: true } })
+    expect(v).toMatchObject({ stream_running: false, stream_warn: false })
   })
 
   it('у каждого значения есть определение, и наоборот', () => {

@@ -34,6 +34,10 @@ export const COMPANION_VARS = {
   cuedeck_muted: 'Звук эфира выключен: 1 / 0',
   cuedeck_blackout: 'Заставка / blackout включены: 1 / 0',
   cuedeck_message: 'Сообщение спикеру на суфлёре (пусто — нет)',
+  cuedeck_stream_running: 'Трансляция включена (кнопка STREAM нажата): 1 / 0',
+  cuedeck_stream_warn: 'С трансляцией что-то не так — площадка переподключается, нет картинки, сеть не успевает: 1 / 0',
+  cuedeck_stream_live: 'Сколько площадок сейчас в эфире: 2',
+  cuedeck_stream_total: 'Сколько площадок включено всего: 3',
 } as const
 
 export type CompanionVarName = keyof typeof COMPANION_VARS
@@ -57,6 +61,10 @@ export const COMPANION_VARS_EN: Record<CompanionVarName, string> = {
   cuedeck_muted: 'Program sound is off: 1 / 0',
   cuedeck_blackout: 'Blackout / key visual on: 1 / 0',
   cuedeck_message: 'Speaker message on the prompter (empty — none)',
+  cuedeck_stream_running: 'Streaming is on (the STREAM button is pressed): 1 / 0',
+  cuedeck_stream_warn: 'Something is wrong with the stream — a destination is reconnecting, no picture, or the network can’t keep up: 1 / 0',
+  cuedeck_stream_live: 'How many destinations are live right now: 2',
+  cuedeck_stream_total: 'How many destinations are enabled in total: 3',
 }
 export type CompanionVars = Record<CompanionVarName, string>
 
@@ -105,6 +113,10 @@ export function companionVars(s: CompanionStateView, now: number, videoPosSec: n
     cuedeck_muted: flag(s.video.muted),
     cuedeck_blackout: flag(s.blackout),
     cuedeck_message: s.speakerMessage ?? '',
+    cuedeck_stream_running: flag(s.stream.running),
+    cuedeck_stream_warn: flag(s.stream.running && s.stream.warn),
+    cuedeck_stream_live: String(s.stream.destinations.filter((d) => d.state === 'live').length),
+    cuedeck_stream_total: String(s.stream.destinations.length),
   }
 }
 
@@ -117,6 +129,8 @@ export function companionOfflineVars(): Partial<CompanionVars> {
     cuedeck_timer_running: '0',
     cuedeck_video: '',
     cuedeck_video_playing: '0',
+    cuedeck_stream_running: '0',
+    cuedeck_stream_warn: '0',
   }
 }
 

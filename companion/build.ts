@@ -79,6 +79,8 @@ const LABELS = {
     reset: 'ТАЙМЕР\nсброс',
     speaker: 'СПИКЕР',
     speakerNotes: 'CueDeck: запись {n} плейлиста — в превью (номер на карточке)',
+    stream: 'СТРИМ',
+    streamNotes: 'CueDeck: старт/стоп трансляции. Внизу — площадок в эфире/включено; фон жёлтый — проблема (сеть, площадка, картинка).',
     vars: COMPANION_VARS as Record<string, string>,
   },
   en: {
@@ -111,6 +113,8 @@ const LABELS = {
     reset: 'TIMER\nreset',
     speaker: 'SPEAKER',
     speakerNotes: 'CueDeck: playlist entry {n} — to preview (number on the card)',
+    stream: 'STREAM',
+    streamNotes: 'CueDeck: start/stop the broadcast. Bottom line — destinations live/enabled; amber background — something is wrong (network, destination, no picture).',
     vars: COMPANION_VARS_EN as Record<string, string>,
   },
 } satisfies Record<Lang, Record<string, unknown>>
@@ -319,8 +323,20 @@ function build(lang: Lang, file: string): void {
         bg: when(`${cv('cuedeck_video_playing')} == '1'`, C.greenBg, C.black),
         notes: T.videoNotes,
       }),
-      // 5, 6 — свободны: листание превью с деки убрано (Азат 2026-09-24 — превью
+      // 6 — свободна: листание превью с деки убрано (Азат 2026-09-24 — превью
       // оператор листает у себя на экране; команды preview/* в API остались).
+      5: button({
+        cmd: 'stream/toggle',
+        label: T.stream,
+        value: x(
+          `${cv('cuedeck_stream_total')} == '0' ? '' : concat(${cv('cuedeck_stream_live')}, concat('/', ${cv('cuedeck_stream_total')}))`,
+        ),
+        bg: x(
+          `${cv('cuedeck_stream_running')} == '1' && ${cv('cuedeck_stream_warn')} == '1' && blink(500) ? '${C.amberBg}' : ` +
+            `${cv('cuedeck_stream_running')} == '1' ? '${C.redBg}' : '${C.black}'`,
+        ),
+        notes: T.streamNotes,
+      }),
       7: button({ cmd: 'playlist/prev', label: T.prevSpeaker }),
     },
     2: {
