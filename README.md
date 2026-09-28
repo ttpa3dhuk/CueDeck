@@ -56,6 +56,7 @@ PDF и картинки (PNG/JPG/WebP/GIF/BMP) открываются сразу
 - 🌍 **Английский и русский интерфейс** — язык спрашивается при первом запуске, меняется в ⚙️ Настройки → Интерфейс
 - 🎛 **Preview/Program** — эфирная модель как на видеопультах: превью (зелёная рамка) готовишь незаметно, **TAKE** (`Tab`) выдаёт в эфир (красная рамка). Эфир не рвётся, пока листаешь следующий файл
 - 🎚 Раскладка в стиле OBS Studio Mode — превью и эфир рядом, таймер и TAKE снизу, высота панели тянется мышью
+- 📡 **Трансляция без OBS и vMix** — кнопка STREAM: картинка и звук зала сразу на YouTube, VK, Telegram (до 5 площадок одновременно, RTMP/RTMPS). Площадку можно включить или отключить прямо в эфире; статистика подсказывает, где проблема — компьютер, сеть или площадка; журнал каждого эфира сохраняется в файл
 - 🎛 **Stream Deck, Companion, OSC** — эфир, ролики, спикеры и таймер с кнопок при любом активном окне; готовая страница Companion: время на кнопке мигает на нуле, «далее» показывает остаток слайдов ([подробно](#-stream-deck-companion-osc))
 - ⚙️ **Одно окно «Настройки»** (`Cmd+,`) — экраны, суфлёр, кликер, звук, клавиши, тема, язык, LibreOffice, внешнее управление, MIDI
 - 🗂 **Профили площадки** — настройки под зал (экраны, суфлёр, звук, кликер, Stream Deck…) одним выбором из списка; файл профиля переносится на другой компьютер
@@ -206,6 +207,7 @@ Rule of thumb: export to **MP4 (H.264 + AAC)**. Transcode ProRes/HEVC with [Hand
 - 🌍 **English and Russian interface** — chosen on first launch, switch any time in ⚙️ Settings → Interface
 - 🎛 **Preview/Program** — a video-switcher model: stage the preview (green frame) off-air, **TAKE** (`Tab`) sends it live (red frame). The program feed never breaks while you cue the next file
 - 🎚 OBS Studio-Mode layout — preview and program side by side, timer + TAKE below, drag-resizable
+- 📡 **Streaming without OBS or vMix** — the STREAM button sends the audience picture and sound to YouTube, VK, Telegram (up to 5 destinations at once, RTMP/RTMPS). Add or drop a destination while live; stats show where a problem is — computer, network or platform; every broadcast log is saved to a file
 - 🎛 **Stream Deck, Companion, OSC** — program, videos, speakers and timer from buttons, whatever window is focused; ready-made Companion page: live timer on the key that blinks at zero, slides left on "Next"
 - ⚙️ **One Settings window** (`Cmd+,`) — screens, prompter, clicker, audio, hotkeys, theme, language, LibreOffice, external control, MIDI
 - 🗂 **Venue profiles** — settings for a venue (screens, prompter, audio, clicker, Stream Deck…) in one pick from a list; a profile file moves to another computer
