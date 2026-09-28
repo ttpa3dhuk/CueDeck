@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, screen, shell, type WebContents } from 'electron'
 import log from 'electron-log/main'
 import { existsSync } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import os from 'node:os'
 import { deflateRawSync } from 'node:zlib'
@@ -362,6 +362,21 @@ export async function buildReport(comment: string): Promise<ReportResult> {
       if (existsSync(p)) push(name, await readFile(p))
     }
 
+    // Последние эфиры (main/stream/streamer.ts пишет их отдельно, streams/<файл>.log) —
+    // самые свежие 5, не все 30: в отчёт нужен последний случай, а не архив.
+    try {
+      const streamsPath = join(logDir, 'streams')
+      const files = existsSync(streamsPath)
+        ? (await readdir(streamsPath))
+            .filter((f) => f.endsWith('.log'))
+            .sort()
+            .slice(-5)
+        : []
+      for (const name of files) push(`streams/${name}`, await readFile(join(streamsPath, name)))
+    } catch (err) {
+      log.warn('report: журналы эфиров не добавились:', err)
+    }
+
     for (const [role, win] of getActiveWindows()) {
       if (win.isDestroyed()) continue
       try {
@@ -432,9 +447,15 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   })
 }
 
-function fileStamp(d: Date): string {
+/** Штамп для имён файлов (отчёт, журналы эфиров) — тоже используется stream/streamer.ts. */
+export function fileStamp(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`
+}
+
+/** Папка с журналами (`~/Library/Logs/CueDeck` на маке) — там же живёт `streams/` с журналами эфиров. */
+export function logsDir(): string {
+  return dirname(logFilePath())
 }
 
 // ── Минимальный zip-writer (deflate, без zip64) ───────────────────────────────

@@ -2224,6 +2224,9 @@ body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--a
 }
 .stream-log-row.warn { color: var(--warning); }
 .stream-log-row.error { color: var(--danger); }
+.stream-log-save-result { font-size: 12px; }
+.stream-log-save-result.ok { color: var(--timer-green); }
+.stream-log-save-result.err { color: var(--danger); }
 .stream-meter { display: flex; flex-direction: column; gap: 3px; }
 .stream-meter-track { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
 .stream-meter-bar { height: 100%; width: 0; background: var(--timer-green); transition: width 80ms linear; }

@@ -431,6 +431,7 @@ export const EN: Record<string, string> = {
   ', пропущено ненайденных: {n}': ', skipped missing: {n}',
   'Проект собран в {name}: скопировано файлов {n}': 'Project collected into {name}: files copied: {n}',
   'Сохранено: {name}': 'Saved: {name}',
+  'Сохраняю…': 'Saving…',
   'Ошибка сохранения: {error}': 'Save error: {error}',
   'Не удалось открыть: {error}': 'Could not open: {error}',
   'Заметки в sidecar-файле относятся к другому PDF. Перезаписать их.': 'The notes in the sidecar file belong to a different PDF. They will be overwritten.',
@@ -738,6 +739,8 @@ export const EN: Record<string, string> = {
   'Отключить трансляцию на «{name}»? Остальные площадки продолжат.': 'Stop streaming to “{name}”? Other destinations keep going.',
   'Копировать': 'Copy',
   'Скопировать журнал — прислать в поддержку площадки или Азату': 'Copy the log — send it to the platform support or to Azat',
+  'Сохранить…': 'Save…',
+  'Сохранить файл журнала эфира на рабочий стол': 'Save the broadcast log file to the desktop',
   'Компьютер': 'Computer',
   'Сеть': 'Network',
   'Площадка': 'Platform',
@@ -773,6 +776,11 @@ export const EN: Record<string, string> = {
   'старт: {w}×{h}, {fps} к/с, видео {v} кбит/с, звук {a} кбит/с, площадок {n}': 'start: {w}×{h}, {fps} fps, video {v} kbps, audio {a} kbps, destinations: {n}',
   'стоп: в эфире {min} мин, потеряно кадров: {n}': 'stop: live for {min} min, frames dropped: {n}',
   'Площадка не приняла ключ потока — проверь ключ и что трансляция создана': 'The destination rejected the stream key — check the key and that the broadcast is created',
+  'итог {name}: кадров {frames}, потеряно {dropped}, переподключений {reconnects}, сервер принял {acked} МБ':
+    'summary {name}: frames {frames}, dropped {dropped}, reconnects {reconnects}, server acked {acked} MB',
+  '{name}: площадка обрывает соединение сразу — похоже, эфир там завершён или ключ сменился':
+    '{name}: the destination keeps closing the connection right away — the broadcast there is likely over, or the key changed',
+  'Ещё не было ни одного эфира': 'No broadcast has run yet',
 }
 
 /**

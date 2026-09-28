@@ -269,6 +269,7 @@ const api: PresenterApi = {
     setSettings: (patch) => ipcRenderer.invoke('stream:set-settings', patch),
     start: () => ipcRenderer.invoke('stream:start'),
     stop: () => ipcRenderer.invoke('stream:stop'),
+    saveLog: () => ipcRenderer.invoke('stream:save-log'),
     onLevel: (cb) => {
       const listener = (_e: Electron.IpcRendererEvent, level: [number, number]) => cb(level)
       ipcRenderer.on('stream:level', listener)

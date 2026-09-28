@@ -1,5 +1,8 @@
-import { BrowserWindow, ipcMain, session } from 'electron'
+import { app, BrowserWindow, ipcMain, session, shell } from 'electron'
 import log from 'electron-log/main'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { copyFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type {
   StreamDestination,
   StreamDestState,
@@ -13,6 +16,7 @@ import type {
   StreamStatus,
 } from '../../shared/types.js'
 import { t } from '../../shared/i18n.js'
+import { fileStamp, logsDir } from '../diag.js'
 import { store } from '../state.js'
 import { getStreamSettings, sanitizeStreamSettings, setStreamSettings } from '../display-mapping.js'
 import {
@@ -66,7 +70,15 @@ interface Dest {
   /** Сейчас идёт эпизод потерь (для журнала: начало и конец одной строкой). */
   dropping: boolean
   dropEpisodeStart: number
+  /** Подряд разрывы сразу после (не)подключения — площадка не держит соединение, не сеть. */
+  quickFails: number
+  /** Пояснение про «сразу рвёт» уже дано в журнал — не повторять на каждой попытке. */
+  warnedFlapping: boolean
 }
+
+/** Разрыв быстрее этого после входа в эфир считаем «сразу» — не успела пойти ни секунда картинки. */
+const QUICK_FAIL_MS = 3000
+const QUICK_FAIL_STREAK = 3
 
 const dests = new Map<string, Dest>()
 let enc: BrowserWindow | null = null
@@ -82,9 +94,13 @@ let encRestartTimer: ReturnType<typeof setTimeout> | null = null
 /** Последняя метка, ушедшая в поток: после перезапуска кодировщика время не должно идти назад. */
 let lastTs = 0
 let journal: StreamLogEntry[] = []
+/** Файл журнала текущего/последнего эфира — переживает вылет и перезапуск программы (LESSONS: в памяти терялся). */
+let logPath: string | null = null
 
 const RETRY_MS = [2000, 4000, 8000, 15000]
 const LOG_MAX = 200
+/** Файлов эфиров хранить в `streams/`: по одному на эфир, старые подчищаются. */
+const STREAM_LOG_FILES_KEEP = 30
 
 function settings(): StreamSettings {
   return store.get().stream.settings
@@ -94,13 +110,53 @@ function patchStream(p: Partial<StreamStatus>): void {
   store.patch({ stream: { ...store.get().stream, ...p } })
 }
 
-/** Строка в журнал трансляции (окно оператора) и в общий журнал программы. */
+/** Строка в журнал трансляции (окно оператора), в общий журнал программы и в файл этого эфира. */
 function note(level: StreamLogEntry['level'], text: string, side?: StreamSide): void {
   journal = [{ at: Date.now(), level, side, text }, ...journal].slice(0, LOG_MAX)
   const line = `stream: ${side ? `[${side}] ` : ''}${text}`
   if (level === 'info') log.info(line)
   else if (level === 'warn') log.warn(line)
   else log.error(line)
+  writeToLogFile(level, side, text)
+}
+
+function streamsDir(): string {
+  const dir = join(logsDir(), 'streams')
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+/** Свой файл на каждый эфир — 200-строчный журнал в памяти теряется при вылете/перезапуске. */
+function openLogFile(): void {
+  try {
+    const dir = streamsDir()
+    logPath = join(dir, `stream-${fileStamp(new Date())}.log`)
+    const old = readdirSync(dir)
+      .filter((f) => f.endsWith('.log'))
+      .sort()
+    for (const f of old.slice(0, Math.max(0, old.length - STREAM_LOG_FILES_KEEP + 1))) {
+      try {
+        unlinkSync(join(dir, f))
+      } catch {
+        // не критично — подчистим в следующий раз
+      }
+    }
+  } catch (err) {
+    logPath = null
+    log.warn('stream: не открылась папка журналов эфиров:', err)
+  }
+}
+
+function writeToLogFile(level: StreamLogEntry['level'], side: StreamSide | undefined, text: string): void {
+  if (!logPath) return
+  try {
+    const tm = new Date().toISOString().replace('T', ' ').slice(0, 23)
+    appendFileSync(logPath, `${tm} [${level}]${side ? ` [${side}]` : ''} ${text}\n`, 'utf8')
+  } catch (err) {
+    // Само сообщение об ошибке файла в файл уже не уйдёт — только в общий журнал.
+    log.warn('stream: журнал эфира не записался:', err)
+    logPath = null
+  }
 }
 
 function bytesPerSec(): number {
@@ -159,6 +215,8 @@ function newDest(cfg: StreamDestination): Dest {
     lastDropAt: 0,
     dropping: false,
     dropEpisodeStart: 0,
+    quickFails: 0,
+    warnedFlapping: false,
   }
 }
 
@@ -188,10 +246,12 @@ function connectDest(d: Dest): void {
     if (d.pub !== pub) return
     d.pub = null
     retirePublisher(d, pub)
+    const quick = d.liveSince !== null && Date.now() - d.liveSince < QUICK_FAIL_MS
     d.liveSince = null
     if (!store.get().stream.running) return
     const why = explainError(err ?? t('Соединение закрыто'))
     note('warn', t('{name}: связь оборвалась — {why}', { name: label(d), why: why.text }), why.side)
+    noteFlapping(d, quick)
     scheduleRetry(d, why)
   })
   note('info', t('{name}: подключение к {url}', { name: label(d), url: target.tcUrl }))
@@ -215,9 +275,24 @@ function connectDest(d: Dest): void {
       pub.close()
       const why = explainError(e.message)
       note('warn', t('{name}: не подключились — {why}', { name: label(d), why: why.text }), why.side)
+      noteFlapping(d, true)
       scheduleRetry(d, why)
     },
   )
+}
+
+/** Несколько разрывов подряд сразу после подключения — не сеть, а площадка не держит соединение (ключ, завершённый эфир). Один раз, не на каждую попытку. */
+function noteFlapping(d: Dest, quick: boolean): void {
+  if (!quick) {
+    d.quickFails = 0
+    d.warnedFlapping = false
+    return
+  }
+  d.quickFails++
+  if (d.quickFails >= QUICK_FAIL_STREAK && !d.warnedFlapping) {
+    d.warnedFlapping = true
+    note('warn', t('{name}: площадка обрывает соединение сразу — похоже, эфир там завершён или ключ сменился', { name: label(d) }), 'remote')
+  }
 }
 
 function scheduleRetry(d: Dest, why: { side: StreamSide; text: string }): void {
@@ -444,6 +519,7 @@ export function startStream(): { ok: boolean; error?: string } {
   if (bad) return { ok: false, error: destProblem(bad) }
 
   journal = []
+  openLogFile()
   const { width, height } = streamSize(s.height)
   note(
     'info',
@@ -475,6 +551,21 @@ export function stopStream(): void {
   const dur = Math.round((Date.now() - runStartedAt) / 1000)
   const lost = [...dests.values()].reduce((n, d) => n + d.dropped, 0)
   note('info', t('стоп: в эфире {min} мин, потеряно кадров: {n}', { min: Math.round(dur / 60), n: lost }))
+  // Итог по каждой площадке — в файл эфира, для отправки площадке/заказчику.
+  for (const d of dests.values()) {
+    const frames = d.prevFrames + (d.pub?.stats.framesSent ?? 0)
+    const acked = Math.round(((d.prevAcked + (d.pub?.stats.acked ?? 0)) / 1_000_000) * 10) / 10
+    note(
+      'info',
+      t('итог {name}: кадров {frames}, потеряно {dropped}, переподключений {reconnects}, сервер принял {acked} МБ', {
+        name: label(d),
+        frames,
+        dropped: d.dropped,
+        reconnects: d.reconnects,
+        acked,
+      }),
+    )
+  }
   patchStream({ running: false, startedAt: null })
   for (const d of dests.values()) closeDest(d)
   dests.clear()
@@ -547,6 +638,31 @@ function syncDests(): void {
   pushStatus()
 }
 
+/** «Сохранить…» в окне трансляции: журнал текущего или последнего эфира → рабочий стол. */
+async function saveLog(): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+  let src = logPath
+  if (!src) {
+    try {
+      const dir = streamsDir()
+      const files = readdirSync(dir)
+        .filter((f) => f.endsWith('.log'))
+        .sort()
+      src = files.length ? join(dir, files[files.length - 1]) : null
+    } catch {
+      src = null
+    }
+  }
+  if (!src || !existsSync(src)) return { ok: false, error: t('Ещё не было ни одного эфира') }
+  try {
+    const out = join(app.getPath('desktop'), `CueDeck-${src.split(/[/\\]/).pop()}`)
+    await copyFile(src, out)
+    shell.showItemInFolder(out)
+    return { ok: true, path: out }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 export function toggleStream(): { ok: boolean; error?: string } {
   if (store.get().stream.running) {
     stopStream()
@@ -585,6 +701,7 @@ export function initStream(): void {
   ipcMain.handle('stream:start', () => startStream())
   ipcMain.handle('stream:stop', () => stopStream())
   ipcMain.handle('stream:toggle', () => toggleStream())
+  ipcMain.handle('stream:save-log', () => saveLog())
 
   ipcMain.handle('stream-enc:init', (e) => (isEncoder(e) ? settings() : null))
   ipcMain.on('stream-enc:config', (e, cfg: StreamEncoderConfig) => {

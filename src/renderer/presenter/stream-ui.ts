@@ -19,6 +19,7 @@ import { getState, subscribe } from '../shared/bus'
  */
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T
+const baseName = (p: string): string => p.split(/[\\/]/).pop() ?? ''
 
 let modalOpen = false
 
@@ -399,6 +400,24 @@ function setMeter(el: HTMLElement, v: number): void {
   el.classList.toggle('hot', db > -3)
 }
 
+async function saveLogClicked(): Promise<void> {
+  const btn = $<HTMLButtonElement>('stream-log-save')
+  const result = $('stream-log-save-result')
+  btn.disabled = true
+  result.className = 'stream-log-save-result'
+  result.textContent = t('Сохраняю…')
+  result.classList.remove('hidden')
+  const res = await window.api.stream.saveLog()
+  btn.disabled = false
+  if (res.ok) {
+    result.classList.add('ok')
+    result.textContent = t('Сохранено: {name}', { name: baseName(res.path) })
+  } else {
+    result.classList.add('err')
+    result.textContent = res.error
+  }
+}
+
 export function initStreamUi(): void {
   $('stream-btn').addEventListener('click', openModal)
   $('stream-close').addEventListener('click', closeModal)
@@ -412,7 +431,10 @@ export function initStreamUi(): void {
   $('stream-log-toggle').addEventListener('click', () => {
     const box = $('stream-log')
     box.classList.toggle('hidden')
-    $('stream-log-copy').classList.toggle('hidden', box.classList.contains('hidden'))
+    const shown = !box.classList.contains('hidden')
+    $('stream-log-copy').classList.toggle('hidden', !shown)
+    $('stream-log-save').classList.toggle('hidden', !shown)
+    $('stream-log-save-result').classList.add('hidden')
     render(getState())
   })
   $('stream-log-copy').addEventListener('click', () => {
@@ -422,6 +444,7 @@ export function initStreamUi(): void {
       .join('\n')
     void navigator.clipboard.writeText(text)
   })
+  $('stream-log-save').addEventListener('click', () => void saveLogClicked())
   $('stream-add').addEventListener('click', () => {
     const list = getState().stream.settings.destinations
     if (list.length >= STREAM_MAX_DESTINATIONS) return

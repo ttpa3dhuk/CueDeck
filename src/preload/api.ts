@@ -349,6 +349,8 @@ export interface PresenterApi {
     setSettings(patch: Partial<StreamSettings>): Promise<StreamSettings>
     start(): Promise<{ ok: boolean; error?: string }>
     stop(): Promise<void>
+    /** Журнал текущего/последнего эфира → рабочий стол (main/stream/streamer.ts пишет файл на каждый эфир). */
+    saveLog(): Promise<{ ok: true; path: string } | { ok: false; error: string }>
     /** Уровень звука, уходящего в трансляцию (L, R: 0..1), ~10 раз в секунду. */
     onLevel(cb: (level: [number, number]) => void): Unsubscribe
   }
