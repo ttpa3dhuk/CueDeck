@@ -7,6 +7,7 @@ import { DONATE_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
 import { initDiag, instrumentIpc, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
 import { captureIpcHandlers, initRemote, registerRemoteIpc } from './remote/server.js'
+import { initStream } from './stream/streamer.js'
 import { registerProfileIpc } from './profiles.js'
 import { askBootLayout } from './boot-dialog.js'
 import { askUiLang } from './lang-dialog.js'
@@ -218,6 +219,9 @@ function buildMenu(): void {
         },
       ],
     },
+    // Без меню «Правка» на маке Cmd+V/C/X/A/Z не работают ни в одном поле
+    // ввода — вставить ключ трансляции было нельзя (2026-09-28).
+    { role: 'editMenu' },
     {
       label: 'View',
       submenu: [
@@ -338,6 +342,7 @@ app.whenReady().then(async () => {
   registerDiagIpc()
   registerRemoteIpc()
   registerProfileIpc()
+  initStream()
 
   // Язык — раньше меню и любых окон: всё дальше рисуется уже на нём. Не
   // выбран ни разу (первый запуск) — спросить (lang-dialog.ts).

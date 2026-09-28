@@ -289,6 +289,7 @@
 
       <footer class="bottombar op-only">
         <div class="bottombar-left">
+          <button id="stream-btn" class="stream-btn" title="Трансляция: площадки, ключи, качество"><span class="stream-btn-label">STREAM</span><span id="stream-btn-time" class="stream-btn-time"></span></button>
         </div>
         <div class="bottombar-right">
           <button id="settings-btn" class="icon-btn" title="Настройки: экраны, звук, клавиши, тема и язык, LibreOffice, внешнее управление, MIDI (Cmd+,)" aria-label="Настройки">⚙️</button>
@@ -665,6 +666,59 @@
           <button id="report-close">Закрыть</button>
           <button id="report-reveal" class="hidden">Показать файл</button>
           <button id="report-save" class="primary">Сохранить отчёт</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="stream-modal" class="modal hidden">
+      <div class="modal-content stream-modal-content">
+        <div class="stream-head">
+          <h2>Трансляция</h2>
+          <span id="stream-status" class="stream-status"></span>
+          <span class="modal-actions-spacer"></span>
+          <button id="stream-go" class="primary">Начать трансляцию</button>
+        </div>
+        <p id="stream-start-error" class="stream-error hidden"></p>
+        <p id="stream-error" class="stream-error hidden"></p>
+        <div id="stream-why" class="stream-why hidden"></div>
+        <div id="stream-enc" class="stream-enc"></div>
+        <div class="stream-block">
+          <div class="stream-block-title">Площадки</div>
+          <div id="stream-dests" class="stream-dests"></div>
+          <div><button id="stream-add">+ Площадка</button></div>
+        </div>
+        <div class="stream-block">
+          <div class="stream-block-title">Качество</div>
+          <div class="stream-quality">
+            <label>Разрешение <select id="stream-height"></select></label>
+            <label>Кадров/с <select id="stream-fps"></select></label>
+            <label>Видео <select id="stream-vkbps"></select></label>
+            <label>Ключевой кадр <select id="stream-key"></select></label>
+            <label>Звук <select id="stream-akbps"></select></label>
+          </div>
+        </div>
+        <div class="stream-block">
+          <div class="stream-block-title">Звук в трансляции</div>
+          <div class="stream-audio-row">
+            <label class="windowed-label"><input id="stream-prog-on" type="checkbox" /><span>Эфир</span></label>
+            <span class="stream-audio-src"></span>
+            <input id="stream-prog-gain" type="range" min="-60" max="12" step="1" title="Двойной клик — 0 dB" />
+            <span id="stream-prog-db" class="stream-db"></span>
+          </div>
+          <div class="stream-audio-row">
+            <label class="windowed-label"><input id="stream-in-on" type="checkbox" /><span>Пульт</span></label>
+            <select id="stream-in-dev" class="stream-audio-src"></select>
+            <input id="stream-in-gain" type="range" min="-60" max="12" step="1" title="Двойной клик — 0 dB" />
+            <span id="stream-in-db" class="stream-db"></span>
+          </div>
+          <div class="stream-meter"><div class="stream-meter-track"><div id="stream-meter-l" class="stream-meter-bar"></div></div><div class="stream-meter-track"><div id="stream-meter-r" class="stream-meter-bar"></div></div></div>
+        </div>
+        <div id="stream-log" class="stream-log hidden"></div>
+        <div class="modal-actions">
+          <button id="stream-log-toggle">Журнал</button>
+          <button id="stream-log-copy" class="hidden" title="Скопировать журнал — прислать в поддержку площадки или Азату">Копировать</button>
+          <span class="modal-actions-spacer"></span>
+          <button id="stream-close">Закрыть</button>
         </div>
       </div>
     </div>

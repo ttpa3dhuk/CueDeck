@@ -48,6 +48,7 @@ const busy: RemoteStateView = {
     slideMedia: [],
     video,
   } as unknown as RemoteStateView['preview'],
+  stream: { running: false } as unknown as RemoteStateView['stream'],
 }
 
 /** Как server.ts разбирает запрос: `/api/` + сегменты (decodeURIComponent) + `?value=`. */

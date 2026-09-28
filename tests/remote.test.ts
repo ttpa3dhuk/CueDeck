@@ -33,11 +33,23 @@ const state = (over: Partial<RemoteStateView> = {}): RemoteStateView => ({
   playlist: [],
   currentPlaylistId: null,
   preview: emptyDeck,
+  stream: { running: false } as RemoteStateView['stream'],
   ...over,
 })
 const channels = (r: ReturnType<typeof resolveRemote>) => (r.ok ? r.calls.map((c) => c.channel) : r.error)
 
 const seg = (p: string): string[] => p.split('/').filter(Boolean)
+
+describe('трансляция', () => {
+  it('toggle/on/off по текущему состоянию', () => {
+    const off = state()
+    const on = state({ stream: { running: true } as RemoteStateView['stream'] })
+    expect(channels(resolveRemote(seg('stream/toggle'), [], off))).toEqual(['stream:start'])
+    expect(channels(resolveRemote(seg('stream/toggle'), [], on))).toEqual(['stream:stop'])
+    expect(channels(resolveRemote(seg('stream/on'), [], on))).toEqual([])
+    expect(channels(resolveRemote(seg('stream/off'), [], on))).toEqual(['stream:stop'])
+  })
+})
 
 describe('OSC', () => {
   it('сообщение без аргументов', () => {

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { PresenterApi } from './api'
+import type { StreamSettings } from '../shared/types'
 
 // Роль окна — метка строк журнала, которые шлёт этот рендерер.
 const ROLE = new URLSearchParams(location.search).get('role') ?? 'unknown'
@@ -263,6 +264,34 @@ const api: PresenterApi = {
       ipcRenderer.on('meter:program-level', listener)
       return () => ipcRenderer.removeListener('meter:program-level', listener)
     },
+  },
+  stream: {
+    setSettings: (patch) => ipcRenderer.invoke('stream:set-settings', patch),
+    start: () => ipcRenderer.invoke('stream:start'),
+    stop: () => ipcRenderer.invoke('stream:stop'),
+    onLevel: (cb) => {
+      const listener = (_e: Electron.IpcRendererEvent, level: [number, number]) => cb(level)
+      ipcRenderer.on('stream:level', listener)
+      return () => ipcRenderer.removeListener('stream:level', listener)
+    },
+  },
+  streamEnc: {
+    init: () => ipcRenderer.invoke('stream-enc:init'),
+    onSettings: (cb) => {
+      const listener = (_e: Electron.IpcRendererEvent, s: StreamSettings) => cb(s)
+      ipcRenderer.on('stream-enc:settings', listener)
+      return () => ipcRenderer.removeListener('stream-enc:settings', listener)
+    },
+    onKeyframe: (cb) => {
+      const listener = () => cb()
+      ipcRenderer.on('stream-enc:keyframe', listener)
+      return () => ipcRenderer.removeListener('stream-enc:keyframe', listener)
+    },
+    config: (cfg) => ipcRenderer.send('stream-enc:config', cfg),
+    video: (ts, key, data) => ipcRenderer.send('stream-enc:video', ts, key, data),
+    audio: (ts, data) => ipcRenderer.send('stream-enc:audio', ts, data),
+    status: (st) => ipcRenderer.send('stream-enc:status', st),
+    level: (l) => ipcRenderer.send('stream-enc:level', l),
   },
   platform: process.platform,
   external: {

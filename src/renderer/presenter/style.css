@@ -2124,6 +2124,111 @@ body[data-theme="light"] .lo-code-block code { color: #1c7a3d; }
 body[data-theme="light"] .op-bottombar-handle::after { background: rgba(0, 0, 0, 0.25); }
 body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--accent); }
 
+/* ── Трансляция (PLAN 2.21): кнопка STREAM и окно ── */
+.bottombar .stream-btn {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 12px;
+  padding: 4px 12px;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.stream-btn-time:empty { display: none; }
+.stream-btn-time { font-variant-numeric: tabular-nums; font-weight: 600; }
+.bottombar .stream-btn.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+.bottombar .stream-btn.warn { animation: stream-warn 1s steps(1, end) infinite; }
+@keyframes stream-warn {
+  0% { background: var(--warning); border-color: var(--warning); color: #111; }
+  50% { background: var(--danger); border-color: var(--danger); color: #fff; }
+}
+.stream-modal-content { width: 860px; gap: 14px; }
+.stream-head { display: flex; align-items: center; gap: 14px; }
+.stream-status { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stream-status.on { color: var(--danger); font-weight: 600; }
+.stream-status.warn { color: var(--warning); }
+#stream-go.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.stream-error { margin: 0; color: var(--warning); font-size: 13px; }
+.stream-block { display: flex; flex-direction: column; gap: 8px; }
+.stream-block-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.stream-dests { display: flex; flex-direction: column; gap: 6px; }
+.stream-empty { color: var(--muted); font-size: 13px; }
+.stream-dest {
+  display: grid;
+  grid-template-columns: auto 110px 1fr 180px auto auto;
+  grid-template-areas: 'on name url key eye del' '. status status status status status';
+  gap: 4px 6px;
+  align-items: center;
+}
+.stream-dest > input[type='checkbox'] { grid-area: on; }
+.stream-dest .sd-name { grid-area: name; }
+.stream-dest .sd-url { grid-area: url; }
+.stream-dest .sd-key { grid-area: key; }
+.stream-dest .sd-eye { grid-area: eye; padding: 2px 6px; }
+.stream-dest .sd-del { grid-area: del; padding: 2px 8px; }
+.stream-dest input[type='text'], .stream-dest input:not([type]), .stream-dest input[type='password'] {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13px;
+  min-width: 0;
+}
+.sd-status { grid-area: status; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sd-status:empty { display: none; }
+.sd-status.live { color: var(--timer-green); }
+.sd-status.connecting, .sd-status.reconnecting { color: var(--warning); }
+.sd-status.error { color: var(--danger); }
+.stream-quality { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.stream-quality label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.stream-quality select, .stream-audio-row select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+}
+.stream-audio-row { display: grid; grid-template-columns: 90px 1fr 200px 56px; gap: 10px; align-items: center; }
+.stream-audio-row select { min-width: 0; }
+.stream-db { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.sd-status { display: flex; flex-wrap: wrap; gap: 0 10px; white-space: normal; }
+.sd-status .sd-nums { color: var(--muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.sd-status.lossy .sd-nums { color: var(--warning); }
+.stream-enc { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stream-enc:empty { display: none; }
+.stream-why {
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.stream-why-row b { font-weight: 700; }
+.stream-why-row.side-local b { color: var(--accent); }
+.stream-why-row.side-network b { color: var(--warning); }
+.stream-why-row.side-remote b { color: var(--danger); }
+.stream-log {
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.stream-log-row.warn { color: var(--warning); }
+.stream-log-row.error { color: var(--danger); }
+.stream-meter { display: flex; flex-direction: column; gap: 3px; }
+.stream-meter-track { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.stream-meter-bar { height: 100%; width: 0; background: var(--timer-green); transition: width 80ms linear; }
+.stream-meter-bar.hot { background: var(--danger); }
+
 /* Вспышка на суфлёре в конце отсчёта (3 импульса ~1.2с) */
 .timer-flash {
   position: fixed;

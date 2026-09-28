@@ -18,6 +18,10 @@ import type {
   RemoteStatus,
   ReportResult,
   SlideTakeMode,
+  StreamEncoderConfig,
+  StreamEncoderStatus,
+  StreamSettings,
+  StreamStatus,
   TimerMode,
   TimerPosition,
   UiTheme,
@@ -53,6 +57,10 @@ export type {
   SlideMedia,
   SlideMediaRect,
   SlideTakeMode,
+  StreamDestination,
+  StreamDestStatus,
+  StreamSettings,
+  StreamStatus,
   TimerMode,
   TimerPosition,
   TimerState,
@@ -334,6 +342,27 @@ export interface PresenterApi {
     report(level: number): void
     /** Только у оператора: уровень звука, реально уходящего в зал. */
     onProgramLevel(cb: (level: number) => void): Unsubscribe
+  }
+  /** Встроенная трансляция RTMP (main/stream/). Статус — в state.stream. */
+  stream: {
+    /** Частичная правка настроек; применяется сразу, качество — со следующего старта. */
+    setSettings(patch: Partial<StreamSettings>): Promise<StreamSettings>
+    start(): Promise<{ ok: boolean; error?: string }>
+    stop(): Promise<void>
+    /** Уровень звука, уходящего в трансляцию (L, R: 0..1), ~10 раз в секунду. */
+    onLevel(cb: (level: [number, number]) => void): Unsubscribe
+  }
+  /** Только для скрытого окна-кодировщика трансляции. */
+  streamEnc: {
+    init(): Promise<StreamSettings>
+    onSettings(cb: (s: StreamSettings) => void): Unsubscribe
+    /** Площадка (пере)подключилась — нужен ключевой кадр вне очереди. */
+    onKeyframe(cb: () => void): Unsubscribe
+    config(cfg: StreamEncoderConfig): void
+    video(ts: number, key: boolean, data: Uint8Array): void
+    audio(ts: number, data: Uint8Array): void
+    status(st: StreamEncoderStatus): void
+    level(l: [number, number]): void
   }
   /** Журнал и отчёт о проблеме (main/diag.ts). */
   diag: {

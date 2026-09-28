@@ -27,6 +27,7 @@ export default defineConfig({
         input: {
           presenter: resolve(__dirname, 'src/renderer/presenter/index.html'),
           audience: resolve(__dirname, 'src/renderer/audience/index.html'),
+          stream: resolve(__dirname, 'src/renderer/stream/index.html'),
         },
       },
     },

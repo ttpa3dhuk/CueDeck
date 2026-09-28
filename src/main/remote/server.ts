@@ -195,6 +195,14 @@ function statusJson(): Record<string, unknown> {
     /** Минуты пресетов таймера (`timer/preset/N`) и тексты пресетов сообщений (`message/preset/N`). */
     timerPresets: s.timerPresets,
     messagePresets: s.speakerMsgPresets,
+    /** Трансляция: идёт ли, сколько площадок в эфире, есть ли проблемы (кнопка мигает). */
+    stream: {
+      running: s.stream.running,
+      live: s.stream.destinations.filter((d) => d.state === 'live').length,
+      total: s.stream.destinations.length,
+      warn: s.stream.warn,
+      uptimeSec: s.stream.startedAt ? Math.floor((now - s.stream.startedAt) / 1000) : 0,
+    },
   }
 }
 

@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import { DEFAULT_REMOTE_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'
+import { DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'
 import type { AppState, DeckState, Role, TimerState, VideoState } from '../shared/types.js'
 
 // Canonical definitions live in src/shared/types.ts (shared with preload/renderer).
@@ -19,6 +19,9 @@ export type {
   TimerMode,
   TimerPosition,
   SlideTakeMode,
+  StreamDestination,
+  StreamSettings,
+  StreamStatus,
   TimerState,
   UiTheme,
   VideoState,
@@ -107,6 +110,20 @@ export function initialState(): AppState {
       hosts: [],
       companion: 'off',
       companionError: null,
+    },
+    stream: {
+      settings: { ...DEFAULT_STREAM_SETTINGS, destinations: [] },
+      running: false,
+      startedAt: null,
+      encoder: 'off',
+      encoderError: null,
+      fps: 0,
+      destinations: [],
+      warn: false,
+      reasons: [],
+      encoderSkipped: 0,
+      capture: false,
+      log: [],
     },
   }
 }

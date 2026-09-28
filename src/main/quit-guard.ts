@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, globalShortcut } from 'electron'
 import { companionGoodbye } from './remote/companion-push.js'
+import { shutdownStream } from './stream/streamer.js'
 import { flushPendingWrites, saveProject } from './ipc.js'
 import { markCleanExit } from './diag.js'
 import { t } from '../shared/i18n.js'
@@ -72,6 +73,7 @@ export async function requestQuit(opts: { relaunch?: boolean } = {}): Promise<vo
   }
   globalShortcut.unregisterAll()
   // Погасить таймер на кнопках Stream Deck (Companion), пока сеть ещё жива.
+  shutdownStream()
   await companionGoodbye()
   await flushPendingWrites()
   markCleanExit()

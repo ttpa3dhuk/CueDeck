@@ -14,8 +14,8 @@ const PRELOAD = resolve(__dirname, '../preload/index.cjs')
 const DEV_TILE = process.env.PRESENTER_DEV_TILE === '1'
 
 interface RendererTarget {
-  entry: 'presenter' | 'audience'
-  role: Role
+  entry: 'presenter' | 'audience' | 'stream'
+  role: Role | 'stream'
 }
 
 function rendererForRole(role: Role): RendererTarget {
@@ -216,5 +216,56 @@ export function createHiddenSpeakerWindow(): BrowserWindow {
   })
   loadRenderer(win, { entry: 'presenter', role: 'speaker' })
   store.registerWindow('speaker', win)
+  return win
+}
+
+/**
+ * Скрытое окно зала на время трансляции в solo: настоящего зала нет, а
+ * трансляция снимает именно окно зала. Регистрируется в store как audience —
+ * и тогда звук эфира играет оно, а не оператор (audioRole в shared/video.ts).
+ * Жизненным циклом управляет stream/streamer.ts.
+ */
+export function createHiddenAudienceWindow(width: number, height: number): BrowserWindow {
+  const win = new BrowserWindow({
+    width,
+    height,
+    show: false,
+    backgroundColor: '#000000',
+    title: 'CueDeck (stream)',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+      autoplayPolicy: 'no-user-gesture-required',
+    },
+  })
+  loadRenderer(win, { entry: 'audience', role: 'audience' })
+  store.registerWindow('audience', win)
+  return win
+}
+
+/**
+ * Окно-кодировщик трансляции: никогда не показывается. Снимает окно зала
+ * (getDisplayMedia → захват вкладки внутри Chromium, прав на запись экрана не
+ * нужно), кодирует WebCodecs и отдаёт пакеты в main (stream/streamer.ts).
+ */
+export function createStreamEncoderWindow(): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 320,
+    height: 180,
+    show: false,
+    title: 'CueDeck (encoder)',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+      autoplayPolicy: 'no-user-gesture-required',
+    },
+  })
+  loadRenderer(win, { entry: 'stream', role: 'stream' })
   return win
 }

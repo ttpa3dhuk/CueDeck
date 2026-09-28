@@ -324,6 +324,8 @@ export interface AppState {
   uiTheme: UiTheme
   /** Внешнее управление (Stream Deck / Companion / OSC): настройки + живой статус. */
   remote: RemoteStatus
+  /** Встроенная трансляция: настройки + живой статус. */
+  stream: StreamStatus
 }
 
 /**
@@ -364,6 +366,145 @@ export const DEFAULT_REMOTE_SETTINGS: RemoteSettings = {
   lan: false,
   companionPush: true,
   companionHost: '127.0.0.1:8000',
+}
+
+/**
+ * Встроенная трансляция RTMP/RTMPS (PLAN 2.21, main/stream/). Кодирует окно
+ * зала (аппаратный H.264 + AAC средствами Chromium, без ffmpeg) и раздаёт
+ * одни и те же пакеты на несколько площадок сразу.
+ */
+export interface StreamDestination {
+  id: string
+  /** Подпись для оператора: «VK», «YouTube»… */
+  name: string
+  /** Адрес сервера: rtmp://… или rtmps://… (без ключа). */
+  url: string
+  /** Ключ потока. Секрет: в отчёт о проблеме не попадает. */
+  key: string
+  enabled: boolean
+}
+
+export interface StreamSettings {
+  destinations: StreamDestination[]
+  /** Высота кадра, ширина — по 16:9: 480/720/1080/1440/2160. */
+  height: number
+  /** 25/30/50/60. */
+  fps: number
+  videoKbps: number
+  audioKbps: number
+  /** Интервал ключевых кадров, с: 2 — стандарт, 1 — просит Rutube. */
+  keyframeSec: number
+  /** Звук эфира (ролики, живой вход — то, что звучит в зале). */
+  programOn: boolean
+  programGainDb: number
+  /** Аудиовход с пульта — по метке устройства (id меняется при перевтыкании). */
+  inputLabel: string | null
+  inputOn: boolean
+  inputGainDb: number
+}
+
+export const STREAM_HEIGHTS = [480, 720, 1080, 1440, 2160] as const
+export const STREAM_FPS = [25, 30, 50, 60] as const
+export const STREAM_VIDEO_KBPS = [1500, 2500, 3000, 4500, 6000, 8000, 10000, 12000, 16000, 20000, 30000, 40000] as const
+export const STREAM_AUDIO_KBPS = [96, 128, 160, 192, 256, 320] as const
+export const STREAM_KEYFRAME_SEC = [1, 2, 4] as const
+export const STREAM_MAX_DESTINATIONS = 5
+
+export const DEFAULT_STREAM_SETTINGS: StreamSettings = {
+  destinations: [],
+  height: 1080,
+  fps: 30,
+  videoKbps: 6000,
+  audioKbps: 160,
+  keyframeSec: 2,
+  programOn: true,
+  programGainDb: 0,
+  inputLabel: null,
+  inputOn: true,
+  inputGainDb: 0,
+}
+
+/** Параметры кодеков от окна-кодировщика: из них main строит заголовки FLV. */
+export interface StreamEncoderConfig {
+  width: number
+  height: number
+  fps: number
+  /** AVCDecoderConfigurationRecord (decoderConfig.description). */
+  avcC: Uint8Array
+  sampleRate: number
+  channels: number
+  /** AudioSpecificConfig AAC. */
+  asc: Uint8Array
+  /** Date.now() в момент, от которого кодировщик считает метки времени. */
+  t0: number
+}
+
+export interface StreamEncoderStatus {
+  state: 'starting' | 'ok' | 'error'
+  error?: string
+  fps: number
+  /** Кадров за секунду пропущено: кодер не успевал. */
+  skipped: number
+  /** Есть ли картинка с окна зала (false — шлём последний кадр/чёрный). */
+  video: boolean
+}
+
+export type StreamDestState = 'off' | 'connecting' | 'live' | 'reconnecting' | 'error'
+
+export interface StreamDestStatus {
+  id: string
+  state: StreamDestState
+  error: string | null
+  /** Фактический поток на площадку, кбит/с. */
+  kbps: number
+  /** Сколько кадров выброшено из-за медленной сети (с начала трансляции). */
+  dropped: number
+  /** Кадров видео отправлено в это соединение. */
+  framesSent: number
+  /** Очередь отправки в сокете, мс потока: растёт — канал не успевает. */
+  backlogMs: number
+  /** Сколько байт сервер подтвердил (RTMP Acknowledgement), МБ; null — сервер не шлёт. */
+  ackedMB: number | null
+  reconnects: number
+  /** С какого момента в эфире (текущее соединение). */
+  liveSince: number | null
+}
+
+/** Чья сторона: компьютер (кодирование, захват), сеть (канал), площадка (сервер). */
+export type StreamSide = 'local' | 'network' | 'remote'
+
+export interface StreamLogEntry {
+  at: number
+  level: 'info' | 'warn' | 'error'
+  side?: StreamSide
+  text: string
+}
+
+export interface StreamReason {
+  side: StreamSide
+  text: string
+}
+
+export interface StreamStatus {
+  settings: StreamSettings
+  /** Оператор нажал «Старт» и ещё не нажал «Стоп». */
+  running: boolean
+  startedAt: number | null
+  encoder: 'off' | 'starting' | 'ok' | 'error'
+  encoderError: string | null
+  /** Фактическая частота кодирования. */
+  fps: number
+  destinations: StreamDestStatus[]
+  /** Кнопке Stream мигать жёлтым: ошибка, переподключение, потери кадров за последние секунды. */
+  warn: boolean
+  /** Почему мигает — с пометкой, чья сторона. */
+  reasons: StreamReason[]
+  /** Кадров/с пропущено кодировщиком (компьютер не успевает). */
+  encoderSkipped: number
+  /** Захвачено ли окно зала. */
+  capture: boolean
+  /** Журнал событий трансляции, новые сверху (до 200). */
+  log: StreamLogEntry[]
 }
 
 /** Slots 4–6 are empty by default — free rows the user fills in via ПКМ. */

@@ -22,6 +22,7 @@ import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
 import type { ListMode, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
+import { initStreamUi } from './stream-ui'
 import type {
   AppState,
   DisplayInfo,
@@ -4094,6 +4095,7 @@ async function bootstrap(): Promise<void> {
   if (isOperator) {
     buildOperatorBottomBar()
     setupBottomBarResize()
+    initStreamUi()
     // Кадры мониторов выходов (~2 fps с окон суфлёра/зала)
     window.api.monitor.onFrame(({ role: monRole, dataUrl }) => {
       const tile = document.getElementById(`monitor-${monRole}`)

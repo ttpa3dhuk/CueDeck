@@ -66,6 +66,7 @@ const RU_FILES: Record<string, string> = {
   'src/main/pptx-media.ts': 'внутренние ошибки разбора PPTX — только в журнал, разбор откатывается',
   'src/main/remote/osc.ts': 'ошибки разбора OSC-пакета — только в журнал',
   'src/main/lang-dialog.ts': 'окно выбора языка двуязычное по замыслу',
+  'src/renderer/stream/main.ts': 'скрытое окно-кодировщик: только журнал для разработчика',
   'src/main/remote/companion-vars.ts': 'описания переменных — ключи словаря, переводятся при сборке страницы Companion',
 }
 

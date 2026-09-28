@@ -3,7 +3,17 @@ import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
 import type { PlaylistEntry, RemoteSettings, VenueProfile, SlideTakeMode, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
 import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
-import { DEFAULT_REMOTE_SETTINGS } from '../shared/types.js'
+import {
+  DEFAULT_REMOTE_SETTINGS,
+  DEFAULT_STREAM_SETTINGS,
+  STREAM_AUDIO_KBPS,
+  STREAM_FPS,
+  STREAM_HEIGHTS,
+  STREAM_KEYFRAME_SEC,
+  STREAM_MAX_DESTINATIONS,
+  type StreamDestination,
+  type StreamSettings,
+} from '../shared/types.js'
 import { EN } from '../shared/i18n-en.js'
 import { parseLang, t, type Lang } from '../shared/i18n.js'
 
@@ -56,6 +66,8 @@ interface PersistedShape {
   uiLang?: Lang
   /** Внешнее управление (remote/server.ts). */
   remote: RemoteSettings
+  /** Встроенная трансляция (stream/streamer.ts); ключи площадок — здесь же, как у OBS. */
+  stream: StreamSettings
   /** MIDI-входы, которые слушает CueDeck — имена устройств («Настройки → MIDI»). */
   midiInputs: string[]
   /** Профили площадки (profiles.ts) — список, новые в конце. */
@@ -107,6 +119,7 @@ const STORE_DEFAULTS: PersistedShape = {
   // файл настроек явно, их это не переключит.
   uiTheme: 'light',
   remote: { ...DEFAULT_REMOTE_SETTINGS },
+  stream: { ...DEFAULT_STREAM_SETTINGS },
   midiInputs: [],
   venueProfiles: [],
   lastLaunchAt: 0,
@@ -519,6 +532,55 @@ export function validHost(v: unknown): string | null {
   if (typeof v !== 'string') return null
   const t = v.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '')
   return /^[a-z0-9.-]+(:\d{2,5})?$/i.test(t) ? t : null
+}
+
+function oneOf<T extends number>(v: unknown, allowed: readonly T[], def: T): T {
+  return allowed.includes(Number(v) as T) ? (Number(v) as T) : def
+}
+
+function clampNum(v: unknown, min: number, max: number, def: number): number {
+  const n = Number(v)
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def
+}
+
+function str(v: unknown, max = 2048): string {
+  return typeof v === 'string' ? v.slice(0, max) : ''
+}
+
+/** Приводит что угодно (файл настроек, IPC) к допустимым настройкам трансляции. */
+export function sanitizeStreamSettings(raw: Partial<StreamSettings> | undefined): StreamSettings {
+  const d = DEFAULT_STREAM_SETTINGS
+  const r = raw ?? {}
+  const dests: StreamDestination[] = Array.isArray(r.destinations)
+    ? r.destinations.slice(0, STREAM_MAX_DESTINATIONS).map((x, i) => ({
+        id: str(x?.id, 64) || `d${Date.now().toString(36)}${i}`,
+        name: str(x?.name, 64),
+        url: str(x?.url).trim(),
+        key: str(x?.key).trim(),
+        enabled: x?.enabled !== false,
+      }))
+    : []
+  return {
+    destinations: dests,
+    height: oneOf(r.height, STREAM_HEIGHTS, d.height as (typeof STREAM_HEIGHTS)[number]),
+    fps: oneOf(r.fps, STREAM_FPS, d.fps as (typeof STREAM_FPS)[number]),
+    videoKbps: Math.round(clampNum(r.videoKbps, 300, 60000, d.videoKbps)),
+    audioKbps: oneOf(r.audioKbps, STREAM_AUDIO_KBPS, d.audioKbps as (typeof STREAM_AUDIO_KBPS)[number]),
+    keyframeSec: oneOf(r.keyframeSec, STREAM_KEYFRAME_SEC, d.keyframeSec as (typeof STREAM_KEYFRAME_SEC)[number]),
+    programOn: r.programOn !== false,
+    programGainDb: clampNum(r.programGainDb, -60, 12, d.programGainDb),
+    inputLabel: typeof r.inputLabel === 'string' && r.inputLabel ? r.inputLabel.slice(0, 256) : null,
+    inputOn: r.inputOn !== false,
+    inputGainDb: clampNum(r.inputGainDb, -60, 12, d.inputGainDb),
+  }
+}
+
+export function getStreamSettings(): StreamSettings {
+  return sanitizeStreamSettings(store().get('stream') as Partial<StreamSettings> | undefined)
+}
+
+export function setStreamSettings(value: StreamSettings): void {
+  store().set('stream', value)
 }
 
 export function setRemoteSettings(value: RemoteSettings): void {

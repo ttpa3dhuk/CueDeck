@@ -215,6 +215,10 @@ function describeArgs(channel: string, args: unknown[]): string {
     const p = args[0] as { slide?: number; text?: string } | undefined
     return ` slide=${p?.slide} len=${p?.text?.length ?? 0}`
   }
+  // Ключи потоков — секрет площадки: в журнал только адреса.
+  if (channel === 'stream:set-settings') {
+    return ' ' + describeValue(hideStreamKeys(args[0]))
+  }
   return ' ' + args.map(describeValue).join(' ')
 }
 
@@ -349,7 +353,7 @@ export async function buildReport(comment: string): Promise<ReportResult> {
   try {
     push('report.txt', reportText(comment, stamp))
     push('state.json', JSON.stringify(redactState(store.get()), null, 2))
-    push('prefs.json', JSON.stringify(dumpPrefs(), null, 2))
+    push('prefs.json', JSON.stringify({ ...dumpPrefs(), stream: hideStreamKeys(dumpPrefs().stream) }, null, 2))
 
     const logPath = logFilePath()
     const logDir = dirname(logPath)
@@ -402,6 +406,13 @@ function reportText(comment: string, stamp: Date): string {
   return lines.join('\n')
 }
 
+/** Ключ потока → «***»: его увидел бы любой, кому тестер перешлёт отчёт. */
+function hideStreamKeys<T>(v: T): T {
+  const o = v as { destinations?: Array<{ key?: string }> } | null
+  if (!o || typeof o !== 'object' || !Array.isArray(o.destinations)) return v
+  return { ...o, destinations: o.destinations.map((d) => ({ ...d, key: d.key ? '***' : '' })) } as T
+}
+
 /** Текст заметок спикера → длина: в отчёте им делать нечего. */
 function redactState(s: AppState): unknown {
   const redactNotes = (notes: Record<number, string>): Record<number, string> =>
@@ -410,6 +421,7 @@ function redactState(s: AppState): unknown {
     ...s,
     notes: redactNotes(s.notes),
     preview: { ...s.preview, notes: redactNotes(s.preview.notes) },
+    stream: { ...s.stream, settings: hideStreamKeys(s.stream.settings) },
   }
 }
 

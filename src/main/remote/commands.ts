@@ -39,6 +39,7 @@ export type RemoteStateView = Pick<
   | 'playlist'
   | 'currentPlaylistId'
   | 'preview'
+  | 'stream'
 >
 
 type ArgKind = 'none' | 'duration' | 'index' | 'number' | 'seconds' | 'enum' | 'text'
@@ -50,6 +51,7 @@ type Group =
   | 'Превью'
   | 'Таймер'
   | 'Сообщение спикеру'
+  | 'Трансляция'
 
 export interface RemoteCommand {
   /** Путь без префикса: `timer/start`. */
@@ -563,6 +565,9 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     title: 'Убрать сообщение',
     build: () => [call('speaker-message:set', null)],
   },
+
+  // ── Трансляция ──
+  ...onOff('stream', 'Трансляция', 'Трансляция', (want) => [call(want ? 'stream:start' : 'stream:stop')], (s) => s.stream.running),
 ]
 
 /** Название команды на языке интерфейса (справочная страница). */
