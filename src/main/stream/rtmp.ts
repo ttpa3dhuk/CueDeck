@@ -88,9 +88,12 @@ const MSG_COMMAND = 20
 
 const CSID_CONTROL = 2
 const CSID_COMMAND = 3
-const CSID_AUDIO = 4
-const CSID_DATA = 5
-const CSID_VIDEO = 6
+/**
+ * Звук, видео и метаданные — одним chunk stream, как у OBS (librtmp) и ffmpeg.
+ * Telegram (rtmps://…rtmp.t.me) медиа из разных каналов не собирает: соединение
+ * есть, байты подтверждаются, а зрителям — серая заглушка (LESSONS 2026-09-29).
+ */
+const CSID_MEDIA = 4
 
 /** Сообщение → чанки (заголовок fmt 0, дальше fmt 3). */
 export function encodeMessage(
@@ -314,7 +317,7 @@ export class RtmpPublisher extends EventEmitter {
   }
 
   sendMeta(payload: Buffer): void {
-    this.write(encodeMessage(CSID_DATA, MSG_DATA, this.streamId, 0, payload))
+    this.write(encodeMessage(CSID_MEDIA, MSG_DATA, this.streamId, 0, payload))
   }
 
   /**
@@ -336,12 +339,12 @@ export class RtmpPublisher extends EventEmitter {
     }
     this.waitKey = false
     this.stats.framesSent++
-    this.write(encodeMessage(CSID_VIDEO, MSG_VIDEO, this.streamId, ts, payload))
+    this.write(encodeMessage(CSID_MEDIA, MSG_VIDEO, this.streamId, ts, payload))
   }
 
   sendAudio(ts: number, payload: Buffer, maxBacklog: number, force = false): void {
     if (!force && this.backlog > maxBacklog * 3) return
-    this.write(encodeMessage(CSID_AUDIO, MSG_AUDIO, this.streamId, ts, payload))
+    this.write(encodeMessage(CSID_MEDIA, MSG_AUDIO, this.streamId, ts, payload))
   }
 
   close(): void {

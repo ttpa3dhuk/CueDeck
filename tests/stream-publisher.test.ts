@@ -101,3 +101,19 @@ describe('RtmpPublisher против сервера', () => {
     await expect(pub.connect()).rejects.toThrow(/stream key|ключ/)
   })
 })
+
+describe('RtmpPublisher: каналы медиа', () => {
+  it('звук, видео и метаданные идут одним chunk stream — иначе Telegram показывает серую заглушку', () => {
+    const pub = new RtmpPublisher(target(1))
+    const first: number[] = []
+    // Подставной сокет: смотрим только первый байт каждого сообщения (fmt 0 + csid).
+    Object.assign(pub as unknown as Record<string, unknown>, {
+      sock: { destroyed: false, writableLength: 0, write: (b: Buffer) => first.push(b[0] & 0x3f) },
+    })
+    pub.sendMeta(Buffer.from([2, 0, 0]))
+    pub.sendVideo(0, Buffer.alloc(10), true, 1e9)
+    pub.sendAudio(0, Buffer.alloc(10), 1e9)
+    expect(first).toHaveLength(3)
+    expect(new Set(first).size).toBe(1)
+  })
+})
