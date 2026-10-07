@@ -107,9 +107,21 @@ class OmtSender {
   private inst: unknown = null
   private vmx: unknown = null
   private vmxSize = { width: 0, height: 0 }
-  /** Свежий кадр, ещё не сжатый (пока кодек занят предыдущим). */
-  private pendingRaw: RawFrame | null = null
+  /**
+   * Свежий кадр, ещё не сжатый. Хранится как NativeImage и превращается в байты
+   * (копия ~8 МБ на 1080p, в главном процессе) только когда кодек свободен:
+   * подписка на окно приносит до 60 кадров в секунду, а сжать успеваем меньше —
+   * копировать те, что всё равно выбросим, нельзя (на i3 это съедало ядро).
+   */
+  private pendingImage: NativeImage | null = null
   private encoding = false
+  /** Когда принят прошлый кадр от источника — чаще частоты выхода не берём. */
+  private lastAcceptAt = 0
+  /** Буфер под сжатый кадр — один на отправителя, а не 8 МБ на каждый кадр. */
+  private scratch: Buffer | null = null
+  /** Счётчики за окно журнала (раз в 10 с, пока есть получатели). */
+  private stats = { pushed: 0, encoded: 0, encodeMs: 0, sent: 0, since: 0 }
+  private receivers = 0
   /** Последний сжатый кадр — уходит получателям с постоянной частотой. */
   private current: VmxFrame | null = null
   private sending: VmxFrame | null = null
@@ -165,6 +177,8 @@ class OmtSender {
       lib.sendGetTally(this.inst, 0, tally)
       // Получатель открывает два соединения: видео+метаданные и звук.
       const s = { receivers: Math.ceil(Math.max(0, conns) / 2), program: tally.program === 1, preview: tally.preview === 1 }
+      this.receivers = s.receivers
+      this.logStats()
       const key = `${s.receivers}|${s.program}|${s.preview}`
       if (key !== lastKey) {
         lastKey = key
@@ -187,29 +201,61 @@ class OmtSender {
     this.pump = setTimeout(() => this.tickPump(), Math.max(0, this.nextAt - now))
   }
 
+  /**
+   * Раз в 10 с, пока кто-то смотрит: сколько кадров пришло от окна, сжато
+   * (и сколько стоит сжатие), отправлено. По ним видно, где узкое место —
+   * источник, кодек (процессор) или отправка.
+   */
+  private logStats(): void {
+    const now = performance.now()
+    if (!this.stats.since) this.stats.since = now
+    const dt = (now - this.stats.since) / 1000
+    if (dt < 10) return
+    const st = this.stats
+    if (this.receivers > 0) {
+      const enc = st.encoded ? (st.encodeMs / st.encoded).toFixed(0) : '—'
+      log.info(
+        `omt: «${this.name}» за ${dt.toFixed(0)} с: кадров от источника ${(st.pushed / dt).toFixed(1)}/с, ` + // i18n-ok: журнал
+          `сжато ${(st.encoded / dt).toFixed(1)}/с по ${enc} мс, отправлено ${(st.sent / dt).toFixed(1)}/с (цель ${this.fps})`, // i18n-ok: журнал
+      )
+    }
+    this.stats = { pushed: 0, encoded: 0, encodeMs: 0, sent: 0, since: now }
+  }
+
   setFps(fps: OmtFps): void {
     if (fps === this.fps) return
     this.fps = fps
     log.info(`omt: «${this.name}» ${fps} к/с`)
   }
 
-  /** Новый кадр от источника. Шире выбранного разрешения (Retina, 4K-проектор) — ужимаем. */
+  /** Новый кадр от источника. Чаще частоты выхода — пропускаем (90% периода — запас на дрожь). */
   push(image: NativeImage): void {
     if (this.closing || image.isEmpty()) return
+    const now = performance.now()
+    if (now - this.lastAcceptAt < 900 / this.fps) return
+    this.lastAcceptAt = now
+    this.stats.pushed++
+    this.pendingImage = image
+    this.encodeNext()
+  }
+
+  /** Байты кадра; шире выбранного разрешения (Retina, 4K-проектор) — ужимаем. */
+  private toRaw(image: NativeImage): RawFrame | null {
     let img = image
     const maxWidth = widthOf(this.size)
     if (img.getSize().width > maxWidth) img = img.resize({ width: maxWidth, quality: 'good' })
     const { width, height } = img.getSize()
-    if (width < 16 || height < 16) return
-    this.pendingRaw = { width, height, buf: img.toBitmap() }
-    this.encodeNext()
+    if (width < 16 || height < 16) return null
+    return { width, height, buf: img.toBitmap() }
   }
 
   /** Сжать самый свежий кадр; пока кодек занят, промежуточные кадры отбрасываются. */
   private encodeNext(): void {
-    const raw = this.pendingRaw
-    if (!raw || this.encoding || this.closing) return
-    this.pendingRaw = null
+    const image = this.pendingImage
+    if (!image || this.encoding || this.closing) return
+    this.pendingImage = null
+    const raw = this.toRaw(image)
+    if (!raw) return
     const { lib } = this
     if (!this.vmx || this.vmxSize.width !== raw.width || this.vmxSize.height !== raw.height) {
       if (this.vmx) lib.vmxDestroy(this.vmx)
@@ -223,13 +269,18 @@ class OmtSender {
     this.encoding = true
     const vmx = this.vmx
     const encode = this.alpha ? lib.vmxEncodeBGRA : lib.vmxEncodeBGRX
+    const t0 = performance.now()
     encode.async(vmx, raw.buf, raw.width * 4, 0, (err: unknown, hr: number) => {
       // Сохранение — копия в буфер, быстро: делаем здесь же, кодек ещё наш.
       let data: Buffer | null = null
       if (!err && hr === 0 && !this.closing) {
-        const out = Buffer.allocUnsafe(raw.width * raw.height * 4)
-        const len = lib.vmxSaveTo(vmx, out, out.length) as number
-        if (len > 0) data = out.subarray(0, len)
+        const need = raw.width * raw.height * 4
+        if (!this.scratch || this.scratch.length < need) this.scratch = Buffer.allocUnsafe(need)
+        const len = lib.vmxSaveTo(vmx, this.scratch, this.scratch.length) as number
+        // Своя копия нужной длины: scratch перезапишет следующий кадр, а этот ещё повторяется.
+        if (len > 0) data = Buffer.from(this.scratch.subarray(0, len))
+        this.stats.encoded++
+        this.stats.encodeMs += performance.now() - t0
       } else if (err || hr !== 0) {
         log.warn(`omt: кадр не сжался (${err ? String(err) : `VMX ${hr}`})`)
       }
@@ -256,6 +307,7 @@ class OmtSender {
     this.sending = f
     this.lib.send.async(this.inst, frame, (err: unknown) => {
       this.sending = null
+      this.stats.sent++
       if (err) log.warn('omt: кадр не ушёл', err)
       if (this.closing) this.finishStop()
     })
@@ -295,7 +347,7 @@ class OmtSender {
     if (this.pump) clearTimeout(this.pump)
     if (this.poll) clearInterval(this.poll)
     this.pump = this.poll = null
-    this.pendingRaw = null
+    this.pendingImage = null
     this.closing = true
     return new Promise((resolve) => {
       this.onStopped = resolve
