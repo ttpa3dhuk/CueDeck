@@ -2,7 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: 📥 Скачать последнюю версию
     url: https://github.com/ttpa3dhuk/CueDeck/releases/latest
-    about: GitHub Releases — DMG для Mac, ZIP для Windows
+    about: GitHub Releases — ZIP для Mac и Windows
   - name: 📖 Документация
     url: https://github.com/ttpa3dhuk/CueDeck#readme
     about: README с инструкциями по установке и горячим клавишам
