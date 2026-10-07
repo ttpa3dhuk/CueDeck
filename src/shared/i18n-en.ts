@@ -687,7 +687,7 @@ export const EN: Record<string, string> = {
   'Сохранить как новый': 'Save as new',
   '— профилей нет —': '— no profiles —',
   'Настрой экраны, звук и суфлёр под площадку, впиши название внизу и нажми «Сохранить как новый».': 'Set up screens, audio and the prompter for the venue, type a name below and press “Save as new”.',
-  // ── Трансляция (PLAN 2.21) ──
+  // ── Трансляция ──
   'Трансляция': 'Stream',
   'Трансляция: площадки, ключи, качество': 'Stream: destinations, keys, quality',
   'Трансляция идёт — открыть': 'Streaming — open',

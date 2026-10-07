@@ -2,7 +2,7 @@ import type { AppState, TimerMode, TimerPosition } from '../../shared/types.js'
 import { t } from '../../shared/i18n.js'
 
 /**
- * Таблица команд внешнего управления (PLAN 2.18) — без Electron, покрыта
+ * Таблица команд внешнего управления — без Electron, покрыта
  * тестами. Одна таблица на все входы: HTTP-путь `/api/timer/add/5` и
  * OSC-адрес `/cuedeck/timer/add 5` приходят сюда одинаковым списком сегментов.
  *

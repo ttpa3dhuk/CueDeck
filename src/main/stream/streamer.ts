@@ -29,7 +29,7 @@ import { audioFrame, audioSequenceHeader, metaData, videoEndOfSequence, videoFra
 import { parseRtmpUrl, RtmpPublisher } from './rtmp.js'
 
 /**
- * Встроенная трансляция (PLAN 2.21). Устройство:
+ * Встроенная трансляция. Устройство:
  *
  *   окно зала ──захват вкладки──▶ скрытое окно-кодировщик (renderer/stream)
  *     WebCodecs: H.264 (аппаратно) + AAC; звук = эфир зала + вход с пульта
@@ -94,7 +94,7 @@ let encRestartTimer: ReturnType<typeof setTimeout> | null = null
 /** Последняя метка, ушедшая в поток: после перезапуска кодировщика время не должно идти назад. */
 let lastTs = 0
 let journal: StreamLogEntry[] = []
-/** Файл журнала текущего/последнего эфира — переживает вылет и перезапуск программы (LESSONS: в памяти терялся). */
+/** Файл журнала текущего/последнего эфира — переживает вылет и перезапуск программы (журнал в памяти при вылете терялся). */
 let logPath: string | null = null
 
 const RETRY_MS = [2000, 4000, 8000, 15000]

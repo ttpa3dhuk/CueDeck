@@ -8,7 +8,7 @@
  * сообщения останавливается — адрес и уже прочитанные аргументы остаются.
  *
  * Отправляют нам это Companion (Generic OSC), grandMA3, QLab, StageCue, TouchOSC.
- * Encoder здесь для тестов и для будущего OSC-выхода (PLAN 2.18).
+ * Encoder здесь для тестов и для будущего OSC-выхода.
  */
 
 export type OscArg = number | string | boolean | null

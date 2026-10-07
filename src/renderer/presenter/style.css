@@ -2132,7 +2132,7 @@ body[data-theme="light"] .lo-code-block code { color: #1c7a3d; }
 body[data-theme="light"] .op-bottombar-handle::after { background: rgba(0, 0, 0, 0.25); }
 body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--accent); }
 
-/* ── Трансляция (PLAN 2.21): кнопка STREAM и окно ── */
+/* ── Трансляция: кнопка STREAM и окно ── */
 .bottombar .stream-btn {
   font-weight: 700;
   letter-spacing: 0.06em;

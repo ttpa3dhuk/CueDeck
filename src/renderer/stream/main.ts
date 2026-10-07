@@ -12,7 +12,7 @@ import type { StreamSettings } from '../../preload/api'
  *
  * Звук: эфир зала (звук вкладки) + аудиовход с пульта → Web Audio микс →
  * AAC. Здесь Web Audio безопасен: это потоки, а не <video>-элементы
- * (LESSONS: createMediaElementSource уводит звук элемента).
+ * (createMediaElementSource увёл бы звук самого элемента).
  */
 
 declare class MediaStreamTrackProcessor<T> {

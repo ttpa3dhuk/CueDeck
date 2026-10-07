@@ -20,7 +20,7 @@ import { parseOscPacket } from './osc.js'
 import { getLang, t } from '../../shared/i18n.js'
 
 /**
- * Внешнее управление (PLAN 2.18): HTTP и OSC слушают в main-процессе, поэтому
+ * Внешнее управление: HTTP и OSC слушают в main-процессе, поэтому
  * команда доходит независимо от того, какое окно в фокусе и в фокусе ли
  * CueDeck вообще — Stream Deck работает, пока оператор сидит в браузере.
  *
@@ -126,7 +126,7 @@ function entryName(id: string | null, path: string | null): string | null {
 
 /**
  * Снимок для обратной связи на кнопках (Companion сейчас, свой плагин
- * Stream Deck потом — PLAN 2.18 шаг 3): таймер, эфир со слайдами и остатком,
+ * Stream Deck потом): таймер, эфир со слайдами и остатком,
  * ролик, превью, место в плейлисте. Номера записей — с единицы, как на карточках.
  */
 function statusJson(): Record<string, unknown> {

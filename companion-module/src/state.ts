@@ -54,7 +54,7 @@ export interface CueDeckState {
 	speakerMessage: string | null
 	timerPresets?: number[]
 	messagePresets?: string[]
-	/** Появилось после 0.8.1 (PLAN 2.21) — с более старыми версиями просто отсутствует. */
+	/** Появилось после 0.8.1 — с более старыми версиями просто отсутствует. */
 	stream?: { running: boolean; live: number; total: number; warn: boolean }
 }
 

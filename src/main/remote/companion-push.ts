@@ -4,7 +4,7 @@ import { companionOfflineVars, companionVars, diffVars, type CompanionVars } fro
 import { t } from '../../shared/i18n.js'
 
 /**
- * Отправка состояния CueDeck в Bitfocus Companion (PLAN 2.18, шаг 3):
+ * Отправка состояния CueDeck в Bitfocus Companion:
  * `POST http://<хост>/api/custom-variable/<имя>/value?value=…` — встроенный
  * HTTP API Companion, модулей не требует. Кнопки готовой страницы
  * (companion/) показывают эти переменные: таймер с миганием на нуле,

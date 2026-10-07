@@ -172,7 +172,7 @@ describe('модуль Companion: /api/state → переменные', () => {
       speaker_8: '',
       timer_preset_2: 10,
       message_preset_6: '',
-      // Объект s без поля stream — как /api/state у CueDeck до 0.8.1 (PLAN 2.21): не ломается, просто пусто.
+      // Объект s без поля stream — как /api/state у CueDeck до 0.8.1: не ломается, просто пусто.
       stream_running: false,
       stream_warn: false,
       stream_live: '',

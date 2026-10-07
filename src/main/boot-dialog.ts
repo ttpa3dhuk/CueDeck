@@ -13,7 +13,7 @@ export interface BootLayoutChoice {
 // dialog.showMessageBox: NSAlert не умеет ни разделитель, ни плашку поддержки
 // внизу (нижний слот он всегда отдаёт cancel-кнопке). Порядок кнопок — 3/2/1
 // сверху вниз, ниже линия и «Поддержать проект». Заодно это база под
-// nag-плашку из PLAN 2.12.
+// стартовую плашку поддержки (nag-dialog.ts).
 // label — функция: язык интерфейса становится известен уже после загрузки модуля.
 const CHOICES: { layout: Layout; label: () => string; hotkey: string }[] = [
   { layout: 'operator-speaker-audience', label: () => t('3 экрана (+ суфлёр)'), hotkey: '3' },
