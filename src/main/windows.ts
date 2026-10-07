@@ -205,8 +205,10 @@ export function createHiddenSpeakerWindow(): BrowserWindow {
     show: false,
     backgroundColor: '#1a1a1a',
     title: 'CueDeck (monitor)',
-    // Размер — ровно картинка (без заголовка окна) и не ужимается под экран
-    // мака: её снимают трансляция и выходы OMT.
+    // Размер — ровно картинка: без рамки (Windows иначе съедает 16 px по
+    // ширине, мак — заголовок) и не ужимается под экран мака. Её снимают
+    // трансляция и выходы OMT.
+    frame: false,
     useContentSize: true,
     enableLargerThanScreen: true,
     webPreferences: {
@@ -236,8 +238,10 @@ export function createHiddenAudienceWindow(width: number, height: number): Brows
     show: false,
     backgroundColor: '#000000',
     title: 'CueDeck (hidden audience)',
-    // Размер — ровно картинка (без заголовка окна) и не ужимается под экран
-    // мака: её снимают трансляция и выходы OMT.
+    // Размер — ровно картинка: без рамки (Windows иначе съедает 16 px по
+    // ширине, мак — заголовок) и не ужимается под экран мака. Её снимают
+    // трансляция и выходы OMT.
+    frame: false,
     useContentSize: true,
     enableLargerThanScreen: true,
     webPreferences: {
