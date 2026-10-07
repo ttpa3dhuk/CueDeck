@@ -1,286 +1,119 @@
 # CueDeck
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/ttpa3dhuk/CueDeck)](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
 [![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-black?logo=apple&logoColor=white)](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D6?logo=windows&logoColor=white)](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
-[![Built with Electron](https://img.shields.io/badge/Electron-33-9feaf9?logo=electron&logoColor=black)](https://electronjs.org)
-[![Donate](https://img.shields.io/badge/%E2%98%95_%D0%9F%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C-CloudTips-ff8c00)](https://pay.cloudtips.ru/p/b79fa042)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**CueDeck — инструмент оператора презентаций на живых мероприятиях.**
+**Run every speaker's slides at a live event from one seat — with a preview/program switcher, per-speaker timers and a confidence monitor.**
 
-Собираешь плейлист всех спикеров заранее, в любом формате, и ведёшь мероприятие с одного рабочего места: персональные таймеры, заметки на суфлёр в реальном времени, заставка для зала, три независимых окна (оператор / суфлёр / аудитория).
+🇷🇺 [Русская версия](README.ru.md) · 📋 [What's new](CHANGELOG.md) · ⬇️ [Download](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
 
-[🇷🇺 Читать на русском](#-русский) · [🇬🇧 Read in English](#-english) · [📋 Что нового](CHANGELOG.md)
+![CueDeck operator window: speaker playlist, preview and program decks, prompter monitor, timer, notes and TAKE](docs/screenshots/operator.png)
 
----
+## 💡 Why
 
-## 🇷🇺 Русский
+Each speaker brings a different file — PDF, PowerPoint, Keynote, a video, their own laptop. You need to switch fast, keep each speaker on time and give them notes the audience never sees. PowerPoint Presenter View handles one deck at a time; PDF viewers have no timer and no notes.
 
-### ⬇️ Скачать
+CueDeck is built the way a video switcher works: line up all the speakers in a playlist beforehand, stage the next one in **Preview**, press **TAKE** — it goes to the hall. The audience screen never shows a file dialog.
 
-Последняя версия: **[GitHub Releases →](https://github.com/ttpa3dhuk/CueDeck/releases/latest)**, история версий — [CHANGELOG.md](CHANGELOG.md).
+## ✨ Features
 
-🎥 [Видеообзор всех возможностей (40 мин) →](https://www.youtube.com/watch?v=Vi5BDG_WoRg)
+**🎛 Show control**
+- **Preview / Program** with **TAKE** (`Tab`) — cue the next file off-air while the current one stays live
+- Three windows on three screens: **operator**, **prompter** (slide + next slide + notes + timer), **audience** (slide only)
+- **Blackout / key visual** (`B`) — the hall sees a still or a looping video while you change files
+- Global clicker — PgUp/PgDn flip slides even when CueDeck isn't focused
 
-| Платформа | Файл |
-|-----------|------|
-| macOS Apple Silicon (M1–M4) | `CueDeck-<version>-Silicon-mac.zip` |
-| macOS Intel | `CueDeck-<version>-Intel-mac.zip` |
-| Windows 10/11 (x64) | `CueDeck-<version>-win.zip` |
+**🗣 Speakers**
+- **Speaker playlist** — drag-and-drop, a name and a timer per speaker
+- **Timer** — countdown with presets and ±1 min on the fly, stopwatch or clock; placed anywhere on the prompter, or full-screen for a separate monitor
+- **Notes → prompter** in real time; PowerPoint speaker notes come in automatically
+- Flash message to the speaker: "Wrap up", "Closer to the mic", or your own text
 
-### 🛠 Установка
+**🎞 Media**
+- PDF, images, **PowerPoint / Keynote / ODP** (via LibreOffice) — embedded videos and on-click animations play
+- **Videos** in the playlist, synced across windows; per-clip loop, hold on first frame
+- **Photo/video lists** — one playlist row, loop or shuffle with crossfade
+- **Live input** — a guest laptop over a USB HDMI capture card joins the playlist like any file
+- Separate audio outputs for the hall and for headphone **cue/solo**, level meters
 
-**macOS:** распакуй ZIP, перетащи `CueDeck.app` в Applications. Первый запуск — правый клик → `Open` → `Open` (двойной клик блокируется, приложение без code signing). Если пишет «приложение повреждено» — сними карантин: `xattr -cr "/Applications/CueDeck.app"`.
+**📡 Streaming and control**
+- **Built-in streaming** — the STREAM button sends the hall picture and sound to YouTube, VK, Telegram, up to 5 destinations at once (RTMP/RTMPS), no OBS needed
+- **Stream Deck, Bitfocus Companion, OSC** — a ready-made Companion page with a live timer on the key ([setup guide, RU](companion/README.md))
+- MIDI controllers
 
-**Windows:** распакуй ZIP, запусти `CueDeck.exe`. SmartScreen предупредит → `More info` → `Run anyway`.
+**🛟 Prep and safety**
+- **Venue profiles** — all settings for a known venue in one pick
+- Projects survive a move to another computer; missing files are flagged when you open the project, not on air
+- Quit confirmation mid-show, problem report for testers (Help → Report a problem)
 
-### 📄 Форматы
+![Prompter screen: current slide, next slide, speaker notes and the countdown timer](docs/screenshots/prompter.png)
 
-PDF и картинки (PNG/JPG/WebP/GIF/BMP) открываются сразу. **PPTX/PPT/ODP/Keynote** конвертируются в PDF через LibreOffice ([brew install --cask libreoffice](https://www.libreoffice.org/download/download-libreoffice/) / установщик для Windows) — разово, с кешированием. Видео внутри слайда и анимации «по клику» воспроизводятся (v0.4+); редактирование слайдов недоступно, эффекты исчезновения/переходы не играют.
+## ⬇️ Download and install
 
-**Видео** — играет движком Chromium, поэтому важен кодек, не контейнер:
+Latest version — **[GitHub Releases](https://github.com/ttpa3dhuk/CueDeck/releases/latest)**.
 
-| Кодек | Статус |
+| Computer | File |
 |---|---|
-| H.264/AVC + AAC (MP4, M4V, MOV) | ✅ рекомендуется, играет везде |
-| VP8/VP9 (WebM) | ✅ работает |
-| HEVC/H.265 | ⚠️ Mac обычно да, Windows — нужны платные HEVC Video Extensions |
-| ProRes, DNxHD | ❌ не поддерживается нигде |
+| Mac with Apple Silicon (M1 and later) | `CueDeck-<version>-Silicon-mac.zip` |
+| Mac with Intel | `CueDeck-<version>-Intel-mac.zip` |
+| Windows 10 / 11 | `CueDeck-<version>-win.zip` |
 
-Правило: гони в **MP4 (H.264 + AAC)**. ProRes/HEVC — перекодируй в [HandBrake](https://handbrake.fr/) (пресет «Fast 1080p30»).
+**macOS:** unzip and drag `CueDeck.app` to Applications. The app isn't notarized, so the first launch is right-click → **Open** → **Open**. If macOS says the app is damaged: `xattr -cr /Applications/CueDeck.app`.
 
-**Захват (живой вход)** — видит устройства класса UVC (та же техника, что у Zoom): AVMatrix, Elgato Cam Link, ATEM Mini/Web Presenter, обычная веб-камера — работают. Blackmagic DeckLink/UltraStudio — нет (свой драйвер, в списке камер не появляются). Проверка: если устройство видно в Photo Booth — CueDeck его возьмёт.
+**Windows:** unzip and run `CueDeck.exe`. SmartScreen will warn → **More info** → **Run anyway**.
 
-### ✨ Возможности
+**PowerPoint / Keynote** files need [LibreOffice](https://www.libreoffice.org/download/download-libreoffice/) installed. PDF, images and videos work without it.
 
-- 🌍 **Английский и русский интерфейс** — язык спрашивается при первом запуске, меняется в ⚙️ Настройки → Интерфейс
-- 🎛 **Preview/Program** — эфирная модель как на видеопультах: превью (зелёная рамка) готовишь незаметно, **TAKE** (`Tab`) выдаёт в эфир (красная рамка). Эфир не рвётся, пока листаешь следующий файл
-- 🎚 Раскладка в стиле OBS Studio Mode — превью и эфир рядом, таймер и TAKE снизу, высота панели тянется мышью
-- 📡 **Трансляция без OBS и vMix** — кнопка STREAM: картинка и звук зала сразу на YouTube, VK, Telegram (до 5 площадок одновременно, RTMP/RTMPS). Площадку можно включить или отключить прямо в эфире; статистика подсказывает, где проблема — компьютер, сеть или площадка; журнал каждого эфира сохраняется в файл
-- 🎛 **Stream Deck, Companion, OSC** — эфир, ролики, спикеры и таймер с кнопок при любом активном окне; готовая страница Companion: время на кнопке мигает на нуле, «далее» показывает остаток слайдов ([подробно](#-stream-deck-companion-osc))
-- ⚙️ **Одно окно «Настройки»** (`Cmd+,`) — экраны, суфлёр, кликер, звук, клавиши, тема, язык, LibreOffice, внешнее управление, MIDI
-- 🗂 **Профили площадки** — настройки под зал (экраны, суфлёр, звук, кликер, Stream Deck…) одним выбором из списка; файл профиля переносится на другой компьютер
-- 🖱 **Суфлёр мышкой** — на макете экрана суфлёра таймер и сообщение спикеру ставятся куда угодно, размер — уголком или колёсиком, свой цвет таймера, колонки «слайд / дальше / заметки» тянутся
-- 🎹 MIDI-устройства — выбор контроллеров (назначение кнопок — скоро)
-- 🖱 **Глобальный кликер** — PgUp/PgDn листают эфир, даже когда CueDeck не в фокусе; отдельная галка для кликеров, шлющих стрелки (Logitech Spotlight)
-- 🪟 Диалог выбора раскладки (1/2/3 экрана) при каждом запуске — отключаемый
-- 🔢 Быстрая навигация по номеру слайда, подсказка «Далее: `<имя>`» в шапке
-- 📋 **Плейлист спикеров** — drag-and-drop сборка, своё название на запись, one-click переключение
-- ⏱ **Таймер** — обратный отсчёт (с пресетами и коррекцией на лету), секундомер, текущее время; тиканье/гонг, режим повтора; на суфлёре — в угол, куда угодно мышкой, во весь экран или скрыть
-- 🖥 Три независимых окна — оператор, суфлёр (текущий слайд + таймер + заметки), аудитория (только слайд)
-- 🎞 Видео внутри PPTX-слайдов — играет на своём месте, синхронно во всех окнах
-- ✨ Анимации PowerPoint «по клику» — разворачиваются в шаги, листаются кликером как в оригинале
-- 🎬 **Видео в плейлисте** — play/pause, перемотка, звук синхронизированы между окнами; таймкод и обратный отсчёт до конца в шапке
-- 📹 **Захват — чужой ноутбук на экране зала** — HDMI через USB-капчер встаёт в плейлист наравне с презентациями; три режима вписывания под гостевые 4:3/16:10
-- 🎧 **Предпрослушка (SOLO)** — слушаешь принесённый ролик или захват в наушниках, пока в зале идёт другое
-- 📊 Индикаторы уровня звука под превью и эфиром
-- 🔊 Выбор аудиовыхода — куда отдавать звук эфира (звуковая карта, HDMI на vMix, NDI и т.п.), отдельно для предпрослушки
-- 📝 **Заметки оператора → суфлёр** — текст появляется на экране суфлёра мгновенно; заметки докладчика из PowerPoint подставляются сами
-- 💬 Флэш-сообщение спикеру — готовые пресеты или свой текст, крупно и мигает
-- ⬛ **Blackout/Key Visual** (`B`) — зал видит заставку или чёрный фон, звук глушится, слайды листаются незаметно для зала
-- ⌨️ Настраиваемые горячие клавиши
-- 🖼 **Списки** — пачка фото/роликов одной строкой плейлиста: по кругу / вперемешку / один проход, с наплывом
-- 🔁 Цикл ролика — у каждой записи свой (видео-заставка крутится, пока спикер на сцене)
-- ⏸ Стоп на первом кадре — ролик уходит замороженным, запускает спикер кликером
-- 🎞 Анимированная заставка при блэкауте (видео вместо картинки)
-- 🛡 Подтверждение при закрытии посреди эфира
-- 📁 **Материалы не теряются при переезде** — проект хранит пути относительно себя; пропажа видна при открытии, «Найти в папке…» чинит разом, «Собрать проект в папку…» — для переноса на флешке
-- 💾 Проекты `.pdpres`, авто-обновления раз в сутки
+🎥 [Full walkthrough video, 40 min (in Russian)](https://www.youtube.com/watch?v=Vi5BDG_WoRg)
 
-### ⌨️ Горячие клавиши
+## 📄 Formats and devices
 
-> Переназначаются: ⚙️ Настройки → «Горячие клавиши». Ниже — значения по умолчанию.
-
-| Клавиша | Действие |
-|---------|----------|
-| `Tab` | **TAKE** — выдать превью в эфир |
-| `[` / `]` | Превью: предыдущий / следующий слайд |
-| `←` / `→` | Эфир: предыдущий / следующий слайд |
-| `Space` | Эфир: следующий слайд / play-pause видео |
-| `PgUp` / `PgDn` | Эфир: предыдущий / следующий (кликер) |
-| `B` / `.` | Blackout |
-| `T` | Старт / пауза таймера |
-| `R` / `Shift+T` | Сбросить таймер |
-| `Cmd+O` / `Cmd+N` / `Cmd+Shift+O` / `Cmd+S` | Открыть файл / новый проект / открыть проект / сохранить |
-| `Cmd+,` | Настройки (экраны, звук, клавиши, тема, LibreOffice, внешнее управление, MIDI) |
-
-### 🎛 Stream Deck, Companion, OSC
-
-Эфиром, роликами, плейлистом, таймером и сообщением спикеру можно управлять с кнопок — **при любом активном окне**, даже когда CueDeck свёрнут. Команды эфира идут сразу в зал, как с кликера.
-
-1. Кнопка **⚙** внизу окна (или меню CueDeck → «Настройки…») → раздел **«Внешнее управление»** → **Включить**.
-2. «Список команд…» — откроется страница с готовыми адресами и кнопкой «копировать».
-3. **Stream Deck (родная программа Elgato):** действие «Система → Веб-сайт», вставить адрес, включить **«GET-запрос в фоне»**.
-   **Bitfocus Companion:** Generic HTTP (тот же адрес) или Generic OSC (`127.0.0.1`, порт `9421`).
-
-| Команда | Адрес (HTTP GET) | OSC |
+| What | Works | Note |
 |---|---|---|
-| Далее / назад (как кликер) / к слайду | `http://127.0.0.1:9420/api/next` · `/api/prev` · `/api/program/goto/5` | `/cuedeck/next` |
-| ЭФИР (превью → зал) | `/api/take` | `/cuedeck/take` |
-| Заставка / blackout | `/api/blackout` · `/blackout/on` · `/blackout/off` | `/cuedeck/blackout` |
-| Ролик в эфире | `/api/video/toggle` · `/play` · `/pause` · `/restart` · `/stop` · `/forward/10` · `/back/10` · `/mute` · `/loop` | `/cuedeck/video/toggle` |
-| Спикер N — в превью / сразу в эфир | `/api/playlist/select/3` · `/api/playlist/air/3` (номер виден на карточке) | `/cuedeck/playlist/select 3` |
-| Следующий / предыдущий спикер — в превью | `/api/playlist/next` · `/api/playlist/prev` | `/cuedeck/playlist/next` |
-| Превью: листать, ролик, очистить | `/api/preview/next` · `/prev` · `/goto/2` · `/video/toggle` · `/clear` | |
-| Старт / пауза / одной кнопкой | `http://127.0.0.1:9420/api/timer/start` · `/pause` · `/toggle` | `/cuedeck/timer/toggle` |
-| Сброс / сброс и старт | `/api/timer/reset` · `/api/timer/restart` | `/cuedeck/timer/reset` |
-| Задать / добавить / убавить | `/api/timer/set/15` · `/add/1` · `/sub/0:30` | `/cuedeck/timer/add 1` |
-| Пресет длительности | `/api/timer/preset/1` | `/cuedeck/timer/preset 1` |
-| Режим, положение, «только таймер» | `/api/timer/mode/clock` · `/position/top-right` (или `free` — куда перетащил в настройках) · `/full` | |
-| Сообщение спикеру | `/api/message/preset/1` · `/message/text/Вопросы` · `/message/clear` | |
-| Состояние для кнопок (Companion) | `/api/state` (JSON), `/api/timer/text`, `/api/program/text` («3/12»), `/api/program/remaining`, `/api/video/remaining` | |
+| PDF, PNG, JPG, WebP, GIF, BMP | ✅ | opens instantly |
+| PPTX, PPT, ODP, Keynote | ✅ | converted once via LibreOffice, then cached; exit effects and transitions don't play |
+| Video H.264 + AAC (MP4, MOV, M4V), WebM | ✅ | recommended: export to MP4 (H.264 + AAC) |
+| HEVC / H.265 | ⚠️ | Mac — usually yes; Windows needs HEVC Video Extensions |
+| ProRes, DNxHD | ❌ | transcode with [HandBrake](https://handbrake.fr/) |
+| USB capture (UVC): Elgato Cam Link, AVMatrix, ATEM Mini, webcams | ✅ | if Photo Booth / Camera sees it, CueDeck will |
+| Blackmagic DeckLink / UltraStudio | ❌ | own driver, not visible as a camera |
 
-Время: `15` — минуты, `1:30` — мин:сек, `90s`, `1h`. По умолчанию доступ только с этого компьютера; галка «Из сети» — для Companion на другой машине.
+## ⌨️ Keyboard
 
-**Готовая страница для Bitfocus Companion** — таймер на кнопке (мигает, когда время вышло), «далее» с остатком слайдов, ЭФИР с именем спикера, ролик с остатком. **⚙ Настройки** → **Страница Companion…** → импортировать в Companion. Пошагово — [companion/README.md](companion/README.md).
+Defaults below; remap in ⚙️ Settings → Keyboard shortcuts.
 
-### 🖥 Раскладки экранов
-
-| Экранов | Окна |
+| Key | Action |
 |---|---|
-| 1 | Оператор (подготовка) |
-| 2 | Оператор + аудитория |
-| 3 | Оператор + суфлёр + аудитория |
+| `Tab` | **TAKE** — send preview to the hall |
+| `←` `→` / `Space` / `PgUp` `PgDn` | Program: previous / next slide |
+| `[` `]` | Preview: previous / next slide |
+| `B` | Blackout / key visual |
+| `T` / `R` | Timer start-pause / reset |
+| `Cmd+,` | Settings |
 
-Определяется автоматически по числу дисплеев, смена — `Cmd+,`.
+## 🎛 Stream Deck and Companion
 
-### 🔧 Сборка из исходников
+⚙️ Settings → **External control** → enable. **Command list…** opens a page with every command as a ready-to-copy URL (HTTP on port 9420, OSC on 9421). For Bitfocus Companion there's a ready-made page: Settings → **Companion page…** → import it in Companion. Step by step — [companion/README.md](companion/README.md).
+
+## 🔧 Build from source
 
 ```bash
 git clone https://github.com/ttpa3dhuk/CueDeck.git
 cd CueDeck
 npm install
-npm run dev           # dev-режим с HMR
-npm run package:mac   # .zip для Mac (Silicon + Intel)
-npm run package:win   # .zip для Windows
+npm run dev           # development mode
+npm test              # tests
+npm run package:mac   # Mac zips (Apple Silicon + Intel)
+npm run package:win   # Windows zip
 ```
 
-### ☕ Поддержать проект
+Electron + TypeScript. Found a bug — [open an issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose); Help → Report a problem saves a zip with logs you can attach.
 
-CueDeck бесплатен и делается в свободное время. Если он выручил на шоу — можно закинуть на кофе: **[☕ CloudTips →](https://pay.cloudtips.ru/p/b79fa042)**
+## ☕ Support
 
----
-
-## 🇬🇧 English
-
-### 💡 Why
-
-Every event has the same problem: each speaker brings a different format — PDF, PPTX, images. You need to switch fast, run individual timers, and keep notes visible to you, not the audience. PowerPoint Presenter View only works with `.pptx`; PDF readers have no timer, no notes. CueDeck fills the gap — build a speaker playlist in advance, then operate the whole day in one tool.
-
-### ⬇️ Download
-
-Latest release: **[GitHub Releases →](https://github.com/ttpa3dhuk/CueDeck/releases/latest)**, version history — [CHANGELOG.md](CHANGELOG.md).
-
-🎥 [Feature walkthrough video, 40 min (Russian) →](https://www.youtube.com/watch?v=Vi5BDG_WoRg)
-
-| Platform | File |
-|----------|------|
-| macOS Apple Silicon (M1–M4) | `CueDeck-<version>-Silicon-mac.zip` |
-| macOS Intel | `CueDeck-<version>-Intel-mac.zip` |
-| Windows 10/11 (x64) | `CueDeck-<version>-win.zip` |
-
-### 🛠 Installation
-
-**macOS:** unzip, drag `CueDeck.app` to Applications. First launch — right-click → `Open` → `Open` (unsigned app, blocked on double-click). "App is damaged"? Remove quarantine: `xattr -cr "/Applications/CueDeck.app"`.
-
-**Windows:** unzip, run `CueDeck.exe`. SmartScreen will warn → `More info` → `Run anyway`.
-
-### 📄 File formats
-
-PDF and images (PNG/JPG/WebP/GIF/BMP) open immediately. **PPTX/PPT/ODP/Keynote** are converted to PDF via LibreOffice ([brew install --cask libreoffice](https://www.libreoffice.org/download/download-libreoffice/) / Windows installer) — once, then cached. Embedded video and on-click animations play (v0.4+); slide editing isn't available, exit effects/transitions don't play.
-
-**Video** plays through the Chromium engine, so the codec matters, not the container:
-
-| Codec | Status |
-|---|---|
-| H.264/AVC + AAC (MP4, M4V, MOV) | ✅ recommended, plays everywhere |
-| VP8/VP9 (WebM) | ✅ works |
-| HEVC/H.265 | ⚠️ Mac usually yes, Windows needs paid HEVC Video Extensions |
-| ProRes, DNxHD | ❌ not supported anywhere |
-
-Rule of thumb: export to **MP4 (H.264 + AAC)**. Transcode ProRes/HEVC with [HandBrake](https://handbrake.fr/) ("Fast 1080p30").
-
-**Live input (capture)** — sees UVC-class devices (same tech as Zoom): AVMatrix, Elgato Cam Link, ATEM Mini/Web Presenter, regular webcams — work. Blackmagic DeckLink/UltraStudio — no (own driver, never show up as a camera). Check: if it shows in Photo Booth, CueDeck will see it.
-
-### ✨ Features
-
-- 🌍 **English and Russian interface** — chosen on first launch, switch any time in ⚙️ Settings → Interface
-- 🎛 **Preview/Program** — a video-switcher model: stage the preview (green frame) off-air, **TAKE** (`Tab`) sends it live (red frame). The program feed never breaks while you cue the next file
-- 🎚 OBS Studio-Mode layout — preview and program side by side, timer + TAKE below, drag-resizable
-- 📡 **Streaming without OBS or vMix** — the STREAM button sends the audience picture and sound to YouTube, VK, Telegram (up to 5 destinations at once, RTMP/RTMPS). Add or drop a destination while live; stats show where a problem is — computer, network or platform; every broadcast log is saved to a file
-- 🎛 **Stream Deck, Companion, OSC** — program, videos, speakers and timer from buttons, whatever window is focused; ready-made Companion page: live timer on the key that blinks at zero, slides left on "Next"
-- ⚙️ **One Settings window** (`Cmd+,`) — screens, prompter, clicker, audio, hotkeys, theme, language, LibreOffice, external control, MIDI
-- 🗂 **Venue profiles** — settings for a venue (screens, prompter, audio, clicker, Stream Deck…) in one pick from a list; a profile file moves to another computer
-- 🖱 **Prompter by mouse** — drag the timer and the speaker message anywhere on a mock of the prompter screen, resize by corner or wheel, custom timer colour, drag the column splits
-- 🎹 MIDI devices — pick your controllers (button mapping coming next)
-- 🖱 **Global clicker** — PgUp/PgDn flip the program deck even when CueDeck isn't focused; extra toggle for clickers that send arrow keys (Logitech Spotlight)
-- 🪟 Layout prompt (1/2/3 screens) on every launch — can be disabled
-- 🔢 Jump to a slide by number, "Next: `<name>`" indicator in the header
-- 📋 **Speaker playlist** — drag-and-drop reordering, custom label per entry, one-click switching
-- ⏱ **Timer** — countdown (presets + on-the-fly adjustment), stopwatch, clock; tick/gong sounds, loop mode, position and scale on the confidence monitor (or hide it)
-- 🖥 Three independent windows — operator, speaker (slide + timer + notes), audience (slide only)
-- 🎞 Video inside PPTX slides — plays in place, in sync across all windows
-- ✨ On-click PowerPoint animations — expand into steps, walked through with the clicker
-- 🎬 **Playlist video** — play/pause, seek, audio in sync across windows; time-code and countdown to end in the header
-- 📹 **Live input — a guest laptop on the hall screen** — HDMI through a USB capture device joins the playlist like any presentation; three fit modes for 4:3/16:10 guests
-- 🎧 **Cue/SOLO monitoring** — audition an incoming clip or capture in headphones while something else is on air
-- 📊 Audio level meters under preview and program
-- 🔊 Audio output selection — where program sound goes (sound card, HDMI to vMix, NDI, etc.), separate for cue monitoring
-- 📝 **Operator notes → confidence monitor** — text appears on the speaker's screen instantly; PowerPoint speaker notes are filled in automatically
-- 💬 Flash message to the speaker — presets or custom text, large and blinking
-- ⬛ **Blackout/Key Visual** (`B`) — audience sees a still or black screen, audio muted, slides change unseen
-- ⌨️ Customizable hotkeys
-- 🖼 **Lists** — a batch of photos/clips as one playlist row: loop / shuffle / single pass, with crossfade
-- 🔁 Per-clip loop (an idents clip loops while the speaker is on stage)
-- ⏸ Hold on first frame — clip goes on air frozen, speaker starts it with the clicker
-- 🎞 Animated key visual during blackout
-- 🛡 Quit confirmation mid-show
-- 📁 **Materials survive a move** — paths stored relative to the project; missing files show up on open, "Locate file…" fixes all at once, "Collect project into folder…" for USB-drive moves
-- 💾 `.pdpres` projects, daily auto-update check
-
-### ⌨️ Keyboard Shortcuts
-
-> Remappable in the "Keys…" editor. Defaults below.
-
-| Key | Action |
-|-----|--------|
-| `Tab` | **TAKE** — send preview to air |
-| `[` / `]` | Preview: previous / next slide |
-| `←` / `→` | Program: previous / next slide |
-| `Space` | Program: next slide / video play-pause |
-| `PgUp` / `PgDn` | Program: previous / next (clicker) |
-| `B` / `.` | Toggle blackout |
-| `T` | Start / pause timer |
-| `R` / `Shift+T` | Reset timer |
-| `Cmd+O` / `Cmd+N` / `Cmd+Shift+O` / `Cmd+S` | Open file / new project / open project / save |
-| `Cmd+,` | Settings (screens, audio, hotkeys, theme, LibreOffice, external control, MIDI) |
-
-### 🎛 Stream Deck, Companion, OSC
-
-Timer and speaker messages can be driven from buttons — **whatever window is focused**, even with CueDeck minimized.
-
-1. **⚙** button at the bottom (or CueDeck menu → Settings…) → **External control** → enable.
-2. "Список команд…" opens a page with ready-to-copy URLs.
-3. **Stream Deck (Elgato app):** System → Website action, paste the URL, tick **GET request in background**.
-   **Bitfocus Companion:** Generic HTTP (same URL) or Generic OSC (`127.0.0.1`, port `9421`).
-
-Program commands go straight to air, like a clicker: `next`, `prev`, `program/goto/5`, `take`, `blackout[/on|/off]`, `video/toggle|play|pause|restart|stop|forward/10|back/10|mute|loop`, `playlist/select/3` (to preview), `playlist/air/3` (to air), `playlist/next|prev`, `preview/next|prev|goto/2|video/toggle|clear`. Timer: `http://127.0.0.1:9420/api/timer/start|pause|toggle|reset|restart`, `timer/set/15`, `timer/add/1`, `timer/sub/0:30`, `timer/preset/1`, `timer/mode/<countdown|stopwatch|clock>`, `timer/position/<…>`, `timer/full`, `message/preset/1`, `message/text/<text>`, `message/clear`. OSC: the same paths under `/cuedeck/…`, argument as the first OSC arg. Feedback: `/api/state` (JSON), `/api/timer/text`, `/api/program/text`, `/api/program/remaining`, `/api/video/remaining`.
-
-### 🖥 Screen Layouts
-
-| Displays | Windows |
-|---|---|
-| 1 | Operator only |
-| 2 | Operator + audience |
-| 3 | Operator + speaker + audience |
-
-Detected automatically from connected displays, override with `Cmd+,`.
-
-### ☕ Support the project
-
-CueDeck is free and built in spare time. If it saved your show: **[☕ Donate via CloudTips →](https://pay.cloudtips.ru/p/b79fa042)**
-
----
+CueDeck is free and built in spare time. If it saved your show — [buy me a coffee via CloudTips](https://pay.cloudtips.ru/p/b79fa042).
 
 ## 📄 License
 
