@@ -31,9 +31,11 @@ import {
   type OmtStatus,
 } from '../../shared/types.js'
 import { cleanOmtName, cleanOmtResolution, getOmtSettings, setOmtSettings } from '../display-mapping.js'
+import { allowAudienceCapture } from '../stream/streamer.js'
 import {
   acquireGhost,
   createHiddenAudienceWindow,
+  createOmtAudioWindow,
   createHiddenSpeakerWindow,
   createOmtOverlayWindow,
   getActiveWindows,
@@ -42,7 +44,9 @@ import {
 import {
   loadOmt,
   omtLoadError,
+  OMT_CODEC_FPA1,
   OMT_CODEC_VMX1,
+  OMT_FRAME_AUDIO,
   OMT_FLAG_ALPHA,
   OMT_FLAG_PREMULTIPLIED,
   OMT_FRAME_VIDEO,
@@ -75,6 +79,26 @@ interface VmxFrame {
 
 type StatusFn = (s: Partial<OmtOutputStatus>) => void
 
+/** Кусок звука от окна звука OMT (renderer/omt-audio): float по каналам подряд. */
+export interface OmtAudioChunk {
+  sampleRate: number
+  channels: number
+  frames: number
+  data: Float32Array
+}
+
+/**
+ * Метки времени OMT — единицы по 100 нс. Свои, а не «-1» (тогда libomt сама
+ * ставит метки и держит частоту, задерживая вызов): со звуком картинке и
+ * звуку нужны общие часы, иначе получатель их не сведёт.
+ */
+function omtNow(): number {
+  return Number(process.hrtime.bigint() / 100n)
+}
+
+/** Звук ушёл от часов дальше этого — метки звука подтягиваем к часам. */
+const AUDIO_RESYNC = 1_500_000 // 150 мс
+
 /**
  * Отправитель OMT: принимает кадры, сжимает только новые, повторяет последний
  * сжатый с постоянной частотой; раз в секунду — получатели и tally.
@@ -93,6 +117,9 @@ class OmtSender {
   private poll: NodeJS.Timeout | null = null
   private closing = false
   private onStopped: (() => void) | null = null
+  /** Метка первого семпла и сколько семплов ушло с неё — звук идёт счётчиком, а не часами. */
+  private audioBase: number | null = null
+  private audioSamples = 0
   address: string | null = null
 
   constructor(
@@ -189,7 +216,7 @@ class OmtSender {
     const f = this.current
     if (!f || !this.inst || this.sending || this.closing) return
     const frame = {
-      Type: OMT_FRAME_VIDEO, Timestamp: -1, Codec: OMT_CODEC_VMX1,
+      Type: OMT_FRAME_VIDEO, Timestamp: omtNow(), Codec: OMT_CODEC_VMX1,
       Width: f.width, Height: f.height, Stride: f.width * 4,
       Flags: this.alpha ? OMT_FLAG_ALPHA | OMT_FLAG_PREMULTIPLIED : 0,
       FrameRateN: FPS, FrameRateD: 1, AspectRatio: f.width / f.height, ColorSpace: VMX_COLORSPACE_BT709,
@@ -203,6 +230,35 @@ class OmtSender {
       this.sending = null
       if (err) log.warn('omt: кадр не ушёл', err)
       if (this.closing) this.finishStop()
+    })
+  }
+
+  /**
+   * Звук зала. Метки — счётчиком семплов от первого куска (ровно, без дрожи
+   * IPC); ушли от часов дальше 150 мс (пауза в захвате, сон ноутбука) —
+   * начинаем отсчёт заново от часов.
+   */
+  pushAudio(chunk: OmtAudioChunk): void {
+    if (!this.inst || this.closing) return
+    const { sampleRate, channels, frames, data } = chunk
+    if (!sampleRate || !channels || !frames || data.length < frames * channels) return
+    const now = omtNow()
+    // Метка начала куска — он только что закончился.
+    const start = now - Math.round((frames * 1e7) / sampleRate)
+    let ts = this.audioBase === null ? start : this.audioBase + Math.round((this.audioSamples * 1e7) / sampleRate)
+    if (this.audioBase === null || Math.abs(ts - start) > AUDIO_RESYNC) {
+      this.audioBase = start
+      this.audioSamples = 0
+      ts = start
+    }
+    this.audioSamples += frames
+    const buf = Buffer.from(data.buffer, data.byteOffset, frames * channels * 4)
+    this.lib.send(this.inst, {
+      Type: OMT_FRAME_AUDIO, Timestamp: ts, Codec: OMT_CODEC_FPA1,
+      Width: 0, Height: 0, Stride: 0, Flags: 0, FrameRateN: 0, FrameRateD: 0, AspectRatio: 0, ColorSpace: 0,
+      SampleRate: sampleRate, Channels: channels, SamplesPerChannel: frames,
+      Data: buf, DataLength: buf.length,
+      CompressedData: null, CompressedLength: 0, FrameMetadata: null, FrameMetadataLength: 0,
     })
   }
 
@@ -281,6 +337,8 @@ class TimerOutput implements Output {
 class WindowOutput implements Output {
   private win: BrowserWindow | null = null
   private watch: NodeJS.Timeout | null = null
+  /** Окно звука (только у зала): снимает звук вкладки зала. */
+  audioWin: BrowserWindow | null = null
   private readonly holder: string
 
   constructor(
@@ -294,6 +352,14 @@ class WindowOutput implements Output {
     this.sender.start()
     this.follow()
     this.watch = setInterval(() => this.follow(), 500)
+    if (this.role === 'audience') {
+      const aw = createOmtAudioWindow()
+      allowAudienceCapture(aw)
+      this.audioWin = aw
+      aw.on('closed', () => {
+        if (this.audioWin === aw) this.audioWin = null
+      })
+    }
   }
 
   private follow(): void {
@@ -348,6 +414,8 @@ class WindowOutput implements Output {
     if (this.watch) clearInterval(this.watch)
     this.watch = null
     this.unsubscribe()
+    if (this.audioWin && !this.audioWin.isDestroyed()) this.audioWin.destroy()
+    this.audioWin = null
     releaseGhost(this.role, this.holder)
     return this.sender.stop()
   }
@@ -450,6 +518,13 @@ export function initOmt(): void {
 }
 
 export function registerOmtIpc(): void {
+  // Звук зала — только от окна звука текущего выхода «Зал».
+  ipcMain.on('omt:audio', (e, chunk: OmtAudioChunk) => {
+    const out = outputs.get('program')
+    if (!(out instanceof WindowOutput) || !out.audioWin || out.audioWin.webContents !== e.sender) return
+    if (!chunk || !(chunk.data instanceof Float32Array)) return
+    out.sender.pushAudio(chunk)
+  })
   ipcMain.handle('omt:configure', async (_e, v: Partial<OmtSettings>) => {
     const next = sanitize(v ?? {})
     setOmtSettings(next)

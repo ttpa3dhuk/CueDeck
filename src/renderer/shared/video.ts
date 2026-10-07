@@ -121,8 +121,8 @@ export function videoPosition(v: VideoState): number {
 /**
  * Which role drives audio output: the audience (projector / program feed) when
  * present, otherwise the operator in solo. The speaker monitor is never audible.
- * Трансляция в solo держит скрытое окно зала (её источник) — тогда звучит оно,
- * иначе звук эфира не попал бы в трансляцию.
+ * Трансляция и выход OMT «Зал» в solo держат скрытое окно зала (их источник) —
+ * тогда звучит оно, иначе звук эфира не попал бы в захват.
  */
 export function audioRole(layout: Layout, streaming = false): Role {
   return layout === 'solo' && !streaming ? 'operator' : 'audience'
@@ -135,7 +135,15 @@ export function audioRole(layout: Layout, streaming = false): Role {
  * un-blackout brings the sound back at the live position).
  */
 export function shouldMute(state: AppState, role: Role): boolean {
-  return role !== audioRole(state.layout, state.stream?.running) || state.video.muted || state.blackout
+  return role !== audioRole(state.layout, programCaptured(state)) || state.video.muted || state.blackout
+}
+
+/**
+ * Звук зала кто-то снимает: трансляция или выход OMT «Зал». Тогда и в solo
+ * звучит (скрытое) окно зала — иначе в захват попадала бы тишина.
+ */
+export function programCaptured(state: AppState): boolean {
+  return Boolean(state.stream?.running) || state.omt?.outputs?.program?.state === 'on'
 }
 
 const DEFAULT_DRIFT_SEC = 0.4

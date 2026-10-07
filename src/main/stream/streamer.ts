@@ -370,7 +370,20 @@ function requestKeyframe(): void {
 
 // ── кодировщик и захват ─────────────────────────────────────────────────────
 
-function audienceWindow(): BrowserWindow | null {
+/**
+ * Кроме кодировщика трансляции зал снимают и другие скрытые окна (звук выхода
+ * OMT, omt/outputs.ts). Два захвата одной вкладки с enableLocalEcho друг
+ * другу не мешают — проверено 2026-10-08.
+ */
+const captureClients = new Set<BrowserWindow>()
+
+export function allowAudienceCapture(win: BrowserWindow): void {
+  captureClients.add(win)
+  win.on('closed', () => captureClients.delete(win))
+}
+
+/** Окно зала, которое сейчас снимают: настоящее или скрытое. */
+export function audienceWindow(): BrowserWindow | null {
   const real = getActiveWindows().get('audience')
   if (real && !real.isDestroyed()) return real
   return ghostWindow('audience')
@@ -676,9 +689,10 @@ export function initStream(): void {
   // и картинку, и её звук. enableLocalEcho — зал продолжает звучать в колонках.
   session.defaultSession.setDisplayMediaRequestHandler((req, cb) => {
     const aud = audienceWindow()
-    const fromEncoder =
-      enc !== null && !enc.isDestroyed() && req.frame !== null && req.frame.processId === enc.webContents.getProcessId()
-    if (!fromEncoder || !aud) {
+    const pid = req.frame?.processId
+    const fromEncoder = enc !== null && !enc.isDestroyed() && pid === enc.webContents.getProcessId()
+    const fromClient = [...captureClients].some((w) => !w.isDestroyed() && pid === w.webContents.getProcessId())
+    if ((!fromEncoder && !fromClient) || !aud) {
       cb({})
       return
     }

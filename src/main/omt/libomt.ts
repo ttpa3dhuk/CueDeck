@@ -18,6 +18,8 @@ type Koffi = typeof import('koffi')
 type Fn = ReturnType<import('koffi').IKoffiLib['func']>
 
 export const OMT_CODEC_VMX1 = 0x31584d56
+export const OMT_CODEC_FPA1 = 0x31415046
+export const OMT_FRAME_AUDIO = 4
 export const OMT_FRAME_VIDEO = 2
 export const OMT_FLAG_ALPHA = 2
 export const OMT_FLAG_PREMULTIPLIED = 4

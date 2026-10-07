@@ -144,6 +144,7 @@ const api: PresenterApi = {
   },
   omt: {
     configure: (settings) => ipcRenderer.invoke('omt:configure', settings),
+    sendAudio: (chunk) => ipcRenderer.send('omt:audio', chunk),
   },
   files: {
     // Sandboxed renderer has no File.path (removed in Electron 32) — this is

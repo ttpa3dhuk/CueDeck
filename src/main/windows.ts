@@ -14,8 +14,8 @@ const PRELOAD = resolve(__dirname, '../preload/index.cjs')
 const DEV_TILE = process.env.PRESENTER_DEV_TILE === '1'
 
 interface RendererTarget {
-  entry: 'presenter' | 'audience' | 'stream' | 'overlay'
-  role: Role | 'stream' | 'omt-timer'
+  entry: 'presenter' | 'audience' | 'stream' | 'overlay' | 'omt-audio'
+  role: Role | 'stream' | 'omt-timer' | 'omt-audio'
 }
 
 function rendererForRole(role: Role): RendererTarget {
@@ -302,6 +302,25 @@ export function createOmtOverlayWindow(width: number, height: number): BrowserWi
   })
   loadRenderer(win, { entry: 'overlay', role: 'omt-timer' })
   store.registerWindow('omt-timer', win)
+  return win
+}
+
+/** Окно звука выхода OMT «Зал» (omt/outputs.ts): снимает звук вкладки зала. Никогда не показывается. */
+export function createOmtAudioWindow(): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 320,
+    height: 180,
+    show: false,
+    title: 'CueDeck (OMT audio)',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  })
+  loadRenderer(win, { entry: 'omt-audio', role: 'omt-audio' })
   return win
 }
 

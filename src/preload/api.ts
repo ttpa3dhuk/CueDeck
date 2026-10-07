@@ -243,6 +243,8 @@ export interface PresenterApi {
   /** Выходы OMT в сеть (main/omt/): статус приходит и в state.omt. */
   omt: {
     configure(settings: Partial<OmtSettings>): Promise<{ ok: true; status: OmtStatus }>
+    /** Окно звука OMT: кусок звука зала, 32 бит float по каналам подряд. */
+    sendAudio(chunk: { sampleRate: number; channels: number; frames: number; data: Float32Array }): void
   }
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */
