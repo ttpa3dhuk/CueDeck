@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import { DEFAULT_OMT_SETTINGS, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'
+import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'
 import type { AppState, DeckState, Role, TimerState, VideoState } from '../shared/types.js'
 
 // Canonical definitions live in src/shared/types.ts (shared with preload/renderer).
@@ -126,14 +126,16 @@ export function initialState(): AppState {
       log: [],
     },
     omt: {
-      ...DEFAULT_OMT_SETTINGS,
-      available: false,
+      enabled: { ...DEFAULT_OMT_SETTINGS.enabled },
+      names: { ...DEFAULT_OMT_SETTINGS.names },
+      timerMessage: DEFAULT_OMT_SETTINGS.timerMessage,
+      available: null,
       error: null,
-      timerState: 'off',
-      timerAddress: null,
-      timerReceivers: 0,
-      timerProgram: false,
-      timerPreview: false,
+      outputs: {
+        timer: { ...OMT_OUTPUT_OFF },
+        program: { ...OMT_OUTPUT_OFF },
+        prompter: { ...OMT_OUTPUT_OFF },
+      },
     },
   }
 }

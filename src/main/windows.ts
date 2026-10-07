@@ -205,6 +205,10 @@ export function createHiddenSpeakerWindow(): BrowserWindow {
     show: false,
     backgroundColor: '#1a1a1a',
     title: 'CueDeck (monitor)',
+    // Размер — ровно картинка (без заголовка окна) и не ужимается под экран
+    // мака: её снимают трансляция и выходы OMT.
+    useContentSize: true,
+    enableLargerThanScreen: true,
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
@@ -231,7 +235,11 @@ export function createHiddenAudienceWindow(width: number, height: number): Brows
     height,
     show: false,
     backgroundColor: '#000000',
-    title: 'CueDeck (stream)',
+    title: 'CueDeck (hidden audience)',
+    // Размер — ровно картинка (без заголовка окна) и не ужимается под экран
+    // мака: её снимают трансляция и выходы OMT.
+    useContentSize: true,
+    enableLargerThanScreen: true,
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
@@ -295,4 +303,43 @@ export function createOmtOverlayWindow(width: number, height: number): BrowserWi
   loadRenderer(win, { entry: 'overlay', role: 'omt-timer' })
   store.registerWindow('omt-timer', win)
   return win
+}
+
+// ── Скрытые окна зала и суфлёра — общие на всех ─────────────────────────────
+// Когда настоящего окна роли в раскладке нет, его держит скрытым тот, кому
+// оно нужно: трансляция (зал в solo), монитор оператора (суфлёр в solo),
+// выходы OMT (зал/суфлёр в любой раскладке). Окно регистрируется в store под
+// своей ролью, а две регистрации одной роли перебивают друг друга — поэтому
+// скрытое окно на роль одно, со списком держателей. Ушёл последний — закрыто.
+
+type GhostRole = 'audience' | 'speaker'
+const ghosts = new Map<GhostRole, { win: BrowserWindow; holders: Set<string> }>()
+
+/** Взять скрытое окно роли (создать, если его нет). `create` зовётся только при создании. */
+export function acquireGhost(role: GhostRole, holder: string, create: () => BrowserWindow): BrowserWindow {
+  const g = ghosts.get(role)
+  if (g && !g.win.isDestroyed()) {
+    g.holders.add(holder)
+    return g.win
+  }
+  const win = create()
+  ghosts.set(role, { win, holders: new Set([holder]) })
+  win.on('closed', () => {
+    if (ghosts.get(role)?.win === win) ghosts.delete(role)
+  })
+  return win
+}
+
+/** Отпустить; последний держатель закрывает окно. */
+export function releaseGhost(role: GhostRole, holder: string): void {
+  const g = ghosts.get(role)
+  if (!g || !g.holders.delete(holder) || g.holders.size > 0) return
+  ghosts.delete(role)
+  if (!g.win.isDestroyed()) g.win.destroy()
+}
+
+/** Скрытое окно роли, если его кто-то держит. */
+export function ghostWindow(role: GhostRole): BrowserWindow | null {
+  const g = ghosts.get(role)
+  return g && !g.win.isDestroyed() ? g.win : null
 }

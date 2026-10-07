@@ -20,7 +20,7 @@ import { WINDOW_TITLES } from '../../shared/window-titles'
 import { getLang, t, type Lang } from '../../shared/i18n'
 import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
-import type { ListMode, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
+import type { ListMode, OmtOutputId, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
 import { initStreamUi } from './stream-ui'
 import type {
@@ -3830,48 +3830,75 @@ function wireRemoteSection(remote: RemoteStatus): void {
 // ── Выходы OMT (main/omt/) ───────────────────────────────────────────────────
 // Применяется сразу; статус (получатели, эфир у vMix) приходит в state.omt.
 
+function omtRows(): Array<{ id: OmtOutputId; row: HTMLElement; on: HTMLInputElement; name: HTMLInputElement; status: HTMLElement }> {
+  return Array.from(document.querySelectorAll<HTMLElement>('#omt-section .omt-row')).map((row) => ({
+    id: row.dataset.omt as OmtOutputId,
+    row,
+    on: row.querySelector<HTMLInputElement>('.omt-on')!,
+    name: row.querySelector<HTMLInputElement>('.omt-name')!,
+    status: row.querySelector<HTMLElement>('.omt-status')!,
+  }))
+}
+
 function wireOmtSection(omt: OmtStatus): void {
-  const timer = $<HTMLInputElement>('omt-timer')
-  const name = $<HTMLInputElement>('omt-timer-name')
+  const rows = omtRows()
   const message = $<HTMLInputElement>('omt-timer-message')
-  timer.checked = omt.timer
-  name.value = omt.timerName
+  for (const r of rows) {
+    r.on.checked = omt.enabled[r.id]
+    r.name.value = omt.names[r.id]
+  }
   message.checked = omt.timerMessage
   renderOmtStatus(omt)
   const commit = async (): Promise<void> => {
-    const res = await window.api.omt.configure({ timer: timer.checked, timerName: name.value, timerMessage: message.checked })
-    // Пустое имя или скобки main заменил — показываем, что реально стоит.
-    name.value = res.status.timerName
+    const enabled = { ...omt.enabled }
+    const names = { ...omt.names }
+    for (const r of rows) {
+      enabled[r.id] = r.on.checked
+      names[r.id] = r.name.value
+    }
+    const res = await window.api.omt.configure({ enabled, names, timerMessage: message.checked })
+    // Пустое имя, скобки, совпадение с соседним — main поправил: показываем, что реально стоит.
+    for (const r of rows) r.name.value = res.status.names[r.id]
   }
-  timer.onchange = () => void commit()
   message.onchange = () => void commit()
-  name.onchange = () => void commit()
-  name.onkeydown = (e) => {
-    e.stopPropagation()
-    if (e.key === 'Enter') name.blur()
+  for (const r of rows) {
+    r.on.onchange = () => void commit()
+    r.name.onchange = () => void commit()
+    r.name.onkeydown = (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') r.name.blur()
+    }
   }
 }
 
 function renderOmtStatus(o: OmtStatus): void {
-  const el = document.getElementById('omt-status')
-  if (!el) return
-  document.getElementById('omt-section')?.classList.toggle('off', !o.timer)
-  el.className = 'remote-status'
-  if (o.timerState === 'error') {
-    el.classList.add('error')
-    el.textContent = o.available ? `⚠ ${o.error ?? ''}` : t('⚠ OMT недоступен на этом компьютере: {error}', { error: o.error ?? '' })
-    return
+  for (const r of omtRows()) {
+    const st = o.outputs[r.id]
+    r.row.classList.toggle('off', !o.enabled[r.id])
+    r.status.className = 'omt-status remote-status'
+    r.status.title = st.address ?? ''
+    if (st.state === 'error') {
+      r.status.classList.add('error')
+      r.status.textContent = o.available === false ? t('⚠ недоступно') : `⚠ ${st.error ?? ''}`
+      continue
+    }
+    if (st.state !== 'on') {
+      r.status.textContent = ''
+      continue
+    }
+    r.status.classList.add('on')
+    const parts = [t('● в сети')]
+    parts.push(st.receivers > 0 ? t('смотрят: {n}', { n: st.receivers }) : t('никто не смотрит'))
+    if (st.program) parts.push(t('в эфире'))
+    else if (st.preview) parts.push(t('в превью'))
+    r.status.textContent = parts.join(' · ')
   }
-  if (o.timerState !== 'on') {
-    el.textContent = t('Выключено')
-    return
+  document.querySelector('.omt-sub')?.classList.toggle('off', !o.enabled.timer)
+  const err = document.getElementById('omt-error')
+  if (err) {
+    err.classList.toggle('hidden', o.available !== false)
+    err.textContent = t('⚠ OMT недоступен на этом компьютере: {error}', { error: o.error ?? '' })
   }
-  el.classList.add('on')
-  const parts = [t('● В сети: {name}', { name: o.timerAddress ?? o.timerName })]
-  parts.push(o.timerReceivers > 0 ? t('смотрят: {n}', { n: o.timerReceivers }) : t('никто не смотрит'))
-  if (o.timerProgram) parts.push(t('в эфире'))
-  else if (o.timerPreview) parts.push(t('в превью'))
-  el.textContent = parts.join(' · ')
 }
 
 function renderRemoteStatus(r: RemoteStatus, error?: string): void {

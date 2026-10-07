@@ -6,7 +6,7 @@
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/fetch-omt.cjs && electron-vite dev",
+    "dev": "node scripts/stop-dev.cjs && node scripts/fetch-omt.cjs && electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",

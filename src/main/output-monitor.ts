@@ -1,6 +1,6 @@
 import type { BrowserWindow } from 'electron'
 import type { MonitorRole } from '../shared/types.js'
-import { createHiddenSpeakerWindow, getActiveWindows, getOperatorWindow } from './windows.js'
+import { acquireGhost, createHiddenSpeakerWindow, getActiveWindows, getOperatorWindow, ghostWindow, releaseGhost } from './windows.js'
 import { store } from './state.js'
 
 /**
@@ -20,28 +20,23 @@ const JPEG_QUALITY = 70
 // Пропускаем тик, пока предыдущий кадр ещё снимается/жмётся.
 let inFlight = false
 
-// Скрытый суфлёр solo-режима; в остальных раскладках уничтожается.
-let ghost: BrowserWindow | null = null
-
 export function startOutputMonitor(): void {
   setInterval(() => {
     const s = store.get()
     const op = getOperatorWindow()
     const opAlive = op !== undefined && !op.isDestroyed()
 
+    // Скрытый суфлёр solo-режима (общий с выходом OMT — windows.ts).
     const wantGhost = s.outputMonitorsEnabled && opAlive && s.layout === 'solo'
-    if (wantGhost && !ghost) ghost = createHiddenSpeakerWindow()
-    if (!wantGhost && ghost) {
-      if (!ghost.isDestroyed()) ghost.destroy()
-      ghost = null
-    }
+    if (wantGhost) acquireGhost('speaker', 'monitor', createHiddenSpeakerWindow)
+    else releaseGhost('speaker', 'monitor')
 
     if (!s.outputMonitorsEnabled || !opAlive || op.isMinimized() || inFlight) return
 
     // Суфлёр в приоритете (настоящий или скрытый), без него — зал
     // (та же логика, что у панели в окне оператора).
     const windows = getActiveWindows()
-    const speakerWin = windows.get('speaker') ?? (ghost && !ghost.isDestroyed() ? ghost : null)
+    const speakerWin = windows.get('speaker') ?? ghostWindow('speaker')
     const win = speakerWin ?? windows.get('audience')
     if (!win || win.isDestroyed()) return
     const role: MonitorRole = speakerWin ? 'speaker' : 'audience'

@@ -332,38 +332,51 @@ export interface AppState {
 
 /**
  * Выходы OMT (main/omt/) — источники в локальной сети для vMix 29+, OBS
- * (плагин OMT) и других программ. Пока один: таймер на прозрачном фоне —
- * кладётся поверх картинки без ключа.
+ * (плагин OMT) и других программ: таймер на прозрачном фоне (кладётся поверх
+ * картинки без ключа), зал (то, что на проекторе) и суфлёр.
  */
+export type OmtOutputId = 'timer' | 'program' | 'prompter'
+
+export const OMT_OUTPUTS: readonly OmtOutputId[] = ['timer', 'program', 'prompter']
+
 export interface OmtSettings {
-  /** Отдавать в сеть таймер с прозрачным фоном. */
-  timer: boolean
-  /** Имя источника; в списке у получателя — «КОМПЬЮТЕР (имя)». */
-  timerName: string
+  /** Какие выходы отдавать в сеть. */
+  enabled: Record<OmtOutputId, boolean>
+  /** Имена источников; у получателя — «КОМПЬЮТЕР (имя)». */
+  names: Record<OmtOutputId, string>
   /** Показывать на таймере сообщение спикеру. */
   timerMessage: boolean
 }
 
 export type OmtOutputState = 'off' | 'on' | 'error'
 
-export interface OmtStatus extends OmtSettings {
-  /** Библиотека libomt загрузилась (на этой системе OMT вообще есть). */
-  available: boolean
-  /** Почему недоступно / почему выход не поднялся. */
-  error: string | null
-  timerState: OmtOutputState
+export interface OmtOutputStatus {
+  state: OmtOutputState
   /** Полное имя в сети: «КОМПЬЮТЕР (CueDeck Timer)». */
-  timerAddress: string | null
+  address: string | null
   /** Сколько программ смотрят источник. */
-  timerReceivers: number
+  receivers: number
   /** Tally от vMix: источник в эфире / в превью у получателя. */
-  timerProgram: boolean
-  timerPreview: boolean
+  program: boolean
+  preview: boolean
+  error: string | null
+}
+
+export interface OmtStatus extends OmtSettings {
+  /** Библиотека libomt загрузилась (null — ещё не пробовали: ни один выход не включали). */
+  available: boolean | null
+  /** Почему libomt недоступна. */
+  error: string | null
+  outputs: Record<OmtOutputId, OmtOutputStatus>
+}
+
+export const OMT_OUTPUT_OFF: OmtOutputStatus = {
+  state: 'off', address: null, receivers: 0, program: false, preview: false, error: null,
 }
 
 export const DEFAULT_OMT_SETTINGS: OmtSettings = {
-  timer: false,
-  timerName: 'CueDeck Timer',
+  enabled: { timer: false, program: false, prompter: false },
+  names: { timer: 'CueDeck Timer', program: 'CueDeck Program', prompter: 'CueDeck Prompter' },
   timerMessage: true,
 }
 

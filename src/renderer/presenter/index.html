@@ -641,21 +641,36 @@
             </section>
             <section class="settings-section hidden" data-section="omt">
               <p class="audio-hint">Источники в сети для vMix 29+ и OBS (плагин OMT).</p>
-              <div id="omt-section" class="remote-section">
-                <label class="windowed-label">
-                  <input id="omt-timer" type="checkbox" />
-                  <span>Таймер <span class="windowed-hint">(прозрачный фон — поверх картинки без ключа)</span></span>
-                </label>
-                <div class="remote-row">
-                  <label class="remote-port">имя <input id="omt-timer-name" type="text" class="omt-name" spellcheck="false" maxlength="64" /></label>
+              <div id="omt-section" class="omt-list">
+                <div class="omt-row" data-omt="timer">
                   <label class="windowed-label">
-                    <input id="omt-timer-message" type="checkbox" />
-                    <span>Сообщение спикеру</span>
+                    <input class="omt-on" type="checkbox" />
+                    <span>Таймер <span class="windowed-hint">(прозрачный фон)</span></span>
                   </label>
+                  <input class="omt-name" type="text" spellcheck="false" maxlength="64" />
+                  <span class="omt-status remote-status"></span>
                 </div>
-                <div class="remote-row remote-status-row">
-                  <span id="omt-status" class="remote-status"></span>
+                <label class="windowed-label omt-sub">
+                  <input id="omt-timer-message" type="checkbox" />
+                  <span>Сообщение спикеру на таймере</span>
+                </label>
+                <div class="omt-row" data-omt="program">
+                  <label class="windowed-label">
+                    <input class="omt-on" type="checkbox" />
+                    <span>Зал</span>
+                  </label>
+                  <input class="omt-name" type="text" spellcheck="false" maxlength="64" />
+                  <span class="omt-status remote-status"></span>
                 </div>
+                <div class="omt-row" data-omt="prompter">
+                  <label class="windowed-label">
+                    <input class="omt-on" type="checkbox" />
+                    <span>Суфлёр</span>
+                  </label>
+                  <input class="omt-name" type="text" spellcheck="false" maxlength="64" />
+                  <span class="omt-status remote-status"></span>
+                </div>
+                <p id="omt-error" class="remote-status error hidden"></p>
               </div>
             </section>
             <section class="settings-section hidden" data-section="midi">

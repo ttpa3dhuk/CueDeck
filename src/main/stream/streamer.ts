@@ -20,7 +20,10 @@ import { fileStamp, logsDir } from '../diag.js'
 import { store } from '../state.js'
 import { getStreamSettings, sanitizeStreamSettings, setStreamSettings } from '../display-mapping.js'
 import {
+  acquireGhost,
   createHiddenAudienceWindow,
+  ghostWindow,
+  releaseGhost,
   createStreamEncoderWindow,
   getActiveWindows,
   getOperatorWindow,
@@ -82,7 +85,6 @@ const QUICK_FAIL_STREAK = 3
 
 const dests = new Map<string, Dest>()
 let enc: BrowserWindow | null = null
-let ghost: BrowserWindow | null = null
 let encCfg: StreamEncoderConfig | null = null
 /** Сдвиг меток кодировщика относительно старта трансляции, мс. */
 let encOffset = 0
@@ -371,7 +373,7 @@ function requestKeyframe(): void {
 function audienceWindow(): BrowserWindow | null {
   const real = getActiveWindows().get('audience')
   if (real && !real.isDestroyed()) return real
-  return ghost && !ghost.isDestroyed() ? ghost : null
+  return ghostWindow('audience')
 }
 
 /** В solo зала нет — держим скрытый, пока идёт трансляция; появился настоящий — прячем свой. */
@@ -379,17 +381,10 @@ function syncGhost(): void {
   const running = store.get().stream.running
   const real = getActiveWindows().get('audience')
   const need = running && (!real || real.isDestroyed())
-  if (need && !ghost) {
+  if (need) {
     const { width, height } = streamSize(settings().height)
-    ghost = createHiddenAudienceWindow(width, height)
-    ghost.on('closed', () => {
-      ghost = null
-    })
-  } else if (!need && ghost) {
-    const g = ghost
-    ghost = null
-    if (!g.isDestroyed()) g.destroy()
-  }
+    acquireGhost('audience', 'stream', () => createHiddenAudienceWindow(width, height))
+  } else releaseGhost('audience', 'stream')
 }
 
 function startEncoder(): void {

@@ -37,6 +37,7 @@ export interface OmtLib {
   vmxCreate: Fn
   vmxDestroy: Fn
   vmxEncodeBGRA: Fn
+  vmxEncodeBGRX: Fn
   vmxSaveTo: Fn
 }
 
@@ -101,6 +102,7 @@ export function loadOmt(): OmtLib | null {
       vmxCreate: vmx.func('void *VMX_Create(VMX_SIZE dimensions, int profile, int colorSpace)'),
       vmxDestroy: vmx.func('void VMX_Destroy(void *inst)'),
       vmxEncodeBGRA: vmx.func('int VMX_EncodeBGRA(void *inst, uint8_t *src, int stride, int interlaced)'),
+      vmxEncodeBGRX: vmx.func('int VMX_EncodeBGRX(void *inst, uint8_t *src, int stride, int interlaced)'),
       vmxSaveTo: vmx.func('int VMX_SaveTo(void *inst, uint8_t *dst, int maxLen)'),
     }
     log.info(`omt: libomt загружена (${omtPath})`)

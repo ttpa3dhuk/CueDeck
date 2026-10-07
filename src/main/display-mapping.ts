@@ -5,6 +5,7 @@ import type { PlaylistEntry, RemoteSettings, VenueProfile, SlideTakeMode, TimerM
 import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 import {
   DEFAULT_OMT_SETTINGS,
+  OMT_OUTPUTS,
   DEFAULT_REMOTE_SETTINGS,
   DEFAULT_STREAM_SETTINGS,
   STREAM_AUDIO_KBPS,
@@ -597,11 +598,13 @@ export function cleanOmtName(v: unknown, def: string): string {
 
 export function getOmtSettings(): OmtSettings {
   const raw = (store().get('omt') ?? {}) as Partial<OmtSettings>
-  return {
-    timer: raw.timer === true,
-    timerName: cleanOmtName(raw.timerName, DEFAULT_OMT_SETTINGS.timerName),
-    timerMessage: raw.timerMessage !== false,
+  const d = DEFAULT_OMT_SETTINGS
+  const out: OmtSettings = { enabled: { ...d.enabled }, names: { ...d.names }, timerMessage: raw.timerMessage !== false }
+  for (const id of OMT_OUTPUTS) {
+    out.enabled[id] = raw.enabled?.[id] === true
+    out.names[id] = cleanOmtName(raw.names?.[id], d.names[id])
   }
+  return out
 }
 
 export function setOmtSettings(value: OmtSettings): void {

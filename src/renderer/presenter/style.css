@@ -1897,8 +1897,21 @@ body[data-role="operator"] #current-slide {
 .remote-port input.remote-host { width: 130px; }
 .remote-status.on { color: var(--timer-green); }
 .remote-status.error { color: var(--danger); }
-.remote-port input.omt-name { width: 180px; }
-#omt-section.off .remote-row:first-of-type { opacity: 0.55; }
+/* Выходы OMT — раздел окна «Настройки» */
+.omt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; font-size: 13px; }
+.omt-row { display: grid; grid-template-columns: 230px 180px 1fr; align-items: center; gap: 12px; }
+.omt-row .omt-name {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.omt-row.off .omt-name { opacity: 0.55; }
+.omt-sub { margin: -4px 0 4px 24px; }
+.omt-sub.off { opacity: 0.55; }
 
 /* Speaker role overrides */
 body[data-role="speaker"] .op-only { display: none !important; }
