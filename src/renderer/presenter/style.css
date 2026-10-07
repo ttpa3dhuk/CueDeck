@@ -686,9 +686,12 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   /* Scrollbar on the LEFT (rtl trick) so it never overlaps the ✕ delete buttons */
   direction: rtl;
   padding-left: 4px;
+  /* место под ярлычок «эфир/превью» у первой карточки — иначе его срежет прокрутка */
+  padding-top: 6px;
 }
 .playlist-list > .playlist-item {
   direction: ltr; /* content stays normal; only the scrollbar moved */
+  text-align: left; /* иначе от rtl списка наследуется выравнивание вправо — названия жались к ✎ */
 }
 /* Thin, elegant scrollbar (Chromium/Electron) */
 .playlist-list::-webkit-scrollbar { width: 7px; }
@@ -725,13 +728,24 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 }
 .playlist-item.in-preview::before {
   content: var(--t-badge-preview, '○ превью');
+  color: #4ac26b;
+}
+/* Метка состояния — ярлычок на верхней рамке, а не в углу карточки: в углу
+   она ложилась на ✎ и ✕. На рамке не отнимает ширину у названия и не меняет
+   высоту карточки (иначе список прыгал бы на каждом TAKE). */
+.playlist-item.in-preview::before,
+.playlist-item.on-air::after {
   position: absolute;
-  top: 6px;
-  right: 8px;
+  top: -6px;
+  right: 10px;
+  padding: 0 5px;
   font-size: 9px;
+  line-height: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: #4ac26b;
+  background: var(--panel);
+  border-radius: 3px;
+  pointer-events: none;
 }
 /* When an item is both on-air and staged, the red ЭФИР label wins the corner */
 .playlist-item.on-air.in-preview::before { content: none; }
@@ -742,12 +756,6 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 }
 .playlist-item.on-air::after {
   content: var(--t-badge-program, '● ЭФИР');
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
   color: var(--danger, #d64045);
 }
 /* Материал не найден на диске: запись видна как проблемная сразу, а не в
