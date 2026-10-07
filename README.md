@@ -38,6 +38,10 @@ The STREAM button sends the hall picture and sound to YouTube, VK, Telegram — 
 
 <img src="docs/screenshots/stream.png" width="720" alt="Stream window with YouTube, VK and Telegram destinations">
 
+## 🔌 OMT outputs for vMix and OBS
+
+The timer on a transparent background, the hall (with sound) and the prompter go out as network sources over [OMT](https://github.com/openmediatransport) — the open alternative to NDI. vMix 29+ sees them natively, OBS — with the OMT plugin. The timer lands on top of your picture with no keying; when vMix takes a CueDeck source to program, the OMT button turns red. Set it up in ⚙️ Settings → OMT outputs: name, 720p / 1080p / 4K, 15–60 fps. Use a wired network for video: each receiver gets its own ~60 Mbit/s stream at 1080p30.
+
 ## 🎛 Stream Deck and Companion
 
 A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live timer, TAKE with the speaker's name, speakers lit green for preview and red on air. HTTP and OSC for anything else ([setup](companion/README.md)).
