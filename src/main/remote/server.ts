@@ -203,6 +203,13 @@ function statusJson(): Record<string, unknown> {
       warn: s.stream.warn,
       uptimeSec: s.stream.startedAt ? Math.floor((now - s.stream.startedAt) / 1000) : 0,
     },
+    /** Выходы OMT: включён ли, сколько получателей, tally от vMix (в эфире / в превью). */
+    omt: Object.fromEntries(
+      (['timer', 'program', 'prompter'] as const).map((id) => {
+        const o = s.omt.outputs[id]
+        return [id, { on: o.state === 'on', receivers: o.receivers, program: o.program, preview: o.preview }]
+      }),
+    ),
   }
 }
 

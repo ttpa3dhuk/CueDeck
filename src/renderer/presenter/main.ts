@@ -20,6 +20,7 @@ import { WINDOW_TITLES } from '../../shared/window-titles'
 import { getLang, t, type Lang } from '../../shared/i18n'
 import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
+import { OMT_OUTPUTS } from '../../shared/types'
 import type { ListMode, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
 import { initStreamUi } from './stream-ui'
@@ -2442,7 +2443,10 @@ function setupOperatorControls(): void {
   subscribe((s, patch) => {
     if (patch?.remote && !settingsModal.classList.contains('hidden')) renderRemoteStatus(s.remote)
     if (patch?.omt && !settingsModal.classList.contains('hidden')) renderOmtStatus(s.omt)
+    if (patch?.omt) renderOmtButton(s.omt)
   })
+  renderOmtButton(getState().omt)
+  $('omt-btn').addEventListener('click', () => openSettings('omt'))
   $('report-close').addEventListener('click', hideReportModal)
   $('report-save').addEventListener('click', () => void saveReport())
   // Из текстового поля: Cmd/Ctrl+Enter — сохранить, Esc — закрыть.
@@ -3911,6 +3915,44 @@ function renderOmtStatus(o: OmtStatus): void {
     err.classList.toggle('hidden', o.available !== false)
     err.textContent = t('⚠ OMT недоступен на этом компьютере: {error}', { error: o.error ?? '' })
   }
+}
+
+function omtLabel(id: OmtOutputId): string {
+  return id === 'timer' ? t('Таймер') : id === 'program' ? t('Зал') : t('Суфлёр')
+}
+
+/**
+ * Кнопка OMT на нижней панели: видна, пока включён хоть один выход. Красная —
+ * какой-то наш источник в эфире у vMix (tally), зелёная — в превью; в подписи —
+ * какие именно. Подробности — во всплывающей подсказке, клик — в «Настройки».
+ */
+function renderOmtButton(o: OmtStatus): void {
+  const btn = document.getElementById('omt-btn')
+  const tally = document.getElementById('omt-btn-tally')
+  if (!btn || !tally) return
+  const on = OMT_OUTPUTS.filter((id) => o.enabled[id])
+  btn.classList.toggle('hidden', on.length === 0)
+  const inProgram = on.filter((id) => o.outputs[id].program)
+  const inPreview = on.filter((id) => o.outputs[id].preview && !o.outputs[id].program)
+  const broken = on.some((id) => o.outputs[id].state === 'error')
+  btn.classList.toggle('program', inProgram.length > 0)
+  btn.classList.toggle('preview', inProgram.length === 0 && inPreview.length > 0)
+  btn.classList.toggle('warn', broken && inProgram.length === 0 && inPreview.length === 0)
+  const shown = inProgram.length ? inProgram : inPreview
+  tally.textContent = shown.map(omtLabel).join(', ')
+  btn.title = on
+    .map((id) => {
+      const st = o.outputs[id]
+      const parts = [omtLabel(id)]
+      if (st.state === 'error') parts.push(`⚠ ${st.error ?? ''}`)
+      else {
+        parts.push(st.receivers > 0 ? t('смотрят: {n}', { n: st.receivers }) : t('никто не смотрит'))
+        if (st.program) parts.push(t('в эфире'))
+        else if (st.preview) parts.push(t('в превью'))
+      }
+      return parts.join(' · ')
+    })
+    .join('\n')
 }
 
 function renderRemoteStatus(r: RemoteStatus, error?: string): void {

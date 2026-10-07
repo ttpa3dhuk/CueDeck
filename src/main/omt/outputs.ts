@@ -101,7 +101,7 @@ const AUDIO_RESYNC = 1_500_000 // 150 мс
 
 /**
  * Отправитель OMT: принимает кадры, сжимает только новые, повторяет последний
- * сжатый с постоянной частотой; раз в секунду — получатели и tally.
+ * сжатый с постоянной частотой; следит за получателями и tally.
  */
 class OmtSender {
   private inst: unknown = null
@@ -149,9 +149,14 @@ class OmtSender {
     this.pump = setInterval(() => this.sendCurrent(), Math.round(1000 / FPS))
     let lastKey = ''
     const tally = { preview: 0, program: 0 }
+    // Tally — 5 раз в секунду (лампа должна загораться сразу, вызов без ожидания
+    // и дешёвый), число получателей — раз в секунду.
+    let tick = 0
+    let receivers = 0
     this.poll = setInterval(() => {
       if (!this.inst) return
-      const conns = lib.sendConnections(this.inst) as number
+      if (tick++ % 5 === 0) receivers = lib.sendConnections(this.inst) as number
+      const conns = receivers
       lib.sendGetTally(this.inst, 0, tally)
       // Получатель открывает два соединения: видео+метаданные и звук.
       const s = { receivers: Math.ceil(Math.max(0, conns) / 2), program: tally.program === 1, preview: tally.preview === 1 }
@@ -161,7 +166,7 @@ class OmtSender {
         log.info(`omt: «${this.name}» получателей ${s.receivers}${s.program ? ', в эфире' : ''}${s.preview ? ', в превью' : ''}`)
         this.onStatus(s)
       }
-    }, 1000)
+    }, 200)
     log.info(`omt: выход «${this.address ?? this.name}» запущен, ${this.size}p`)
   }
 

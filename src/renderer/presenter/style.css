@@ -1902,7 +1902,11 @@ body[data-role="operator"] #current-slide {
 .remote-status.error { color: var(--danger); }
 /* Выходы OMT — раздел окна «Настройки» */
 .omt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; font-size: 13px; }
-.omt-row { display: grid; grid-template-columns: 200px 170px 76px 1fr; align-items: center; gap: 12px; }
+.omt-row { display: grid; grid-template-columns: minmax(0, 1fr) 170px 84px; align-items: center; gap: 4px 12px; }
+.omt-row .omt-name, .omt-row .omt-size { min-width: 0; }
+/* Статус — второй строкой под выходом, на всю ширину: в колонке справа ломался по буквам. */
+.omt-row .omt-status { grid-column: 1 / -1; padding-left: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.omt-row .omt-status:empty { display: none; }
 .omt-row .omt-name {
   background: var(--panel);
   color: var(--text);
@@ -2164,6 +2168,22 @@ body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--a
 .stream-btn-time { font-variant-numeric: tabular-nums; font-weight: 600; }
 .bottombar .stream-btn.on { background: var(--danger); border-color: var(--danger); color: #fff; }
 .bottombar .stream-btn.warn { animation: stream-warn 1s steps(1, end) infinite; }
+/* Выходы OMT: красная — наш источник в эфире у vMix (tally), зелёная — в превью. */
+.bottombar .omt-btn {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 12px;
+  padding: 4px 12px;
+  margin-left: 8px;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.omt-btn-tally:empty { display: none; }
+.omt-btn-tally { font-weight: 600; letter-spacing: 0; }
+.bottombar .omt-btn.program { background: var(--danger); border-color: var(--danger); color: #fff; }
+.bottombar .omt-btn.preview { background: var(--timer-green); border-color: var(--timer-green); color: #fff; }
+.bottombar .omt-btn.warn { color: var(--warning); border-color: var(--warning); }
 @keyframes stream-warn {
   0% { background: var(--warning); border-color: var(--warning); color: #111; }
   50% { background: var(--danger); border-color: var(--danger); color: #fff; }
