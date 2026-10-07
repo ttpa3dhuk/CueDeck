@@ -61,7 +61,7 @@ A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live time
 
 **macOS:** unzip, drag `CueDeck.app` to Applications, then right-click → **Open** → **Open**. If macOS says the app is damaged: `xattr -cr /Applications/CueDeck.app`.
 
-**Windows:** unzip and run `CueDeck.exe`. SmartScreen will warn → **More info** → **Run anyway**.
+**Windows:** unzip and run `CueDeck.exe`. SmartScreen will warn → **More info** → **Run anyway**. Still won't start? → [Windows: step by step](docs/windows.md).
 
 **PowerPoint / Keynote** files need [LibreOffice](https://www.libreoffice.org/download/download-libreoffice/). PDF, images and video work without it.
 </details>

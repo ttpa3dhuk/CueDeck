@@ -63,7 +63,7 @@
 
 **macOS:** распакуй, перетащи `CueDeck.app` в «Программы», затем правый клик → **Открыть** → **Открыть**. Если пишет «приложение повреждено»: `xattr -cr /Applications/CueDeck.app`.
 
-**Windows:** распакуй и запусти `CueDeck.exe`. SmartScreen предупредит → **Подробнее** → **Выполнить в любом случае**.
+**Windows:** распакуй и запусти `CueDeck.exe`. SmartScreen предупредит → **Подробнее** → **Выполнить в любом случае**. Всё равно не запускается? → [Windows: по шагам](docs/windows.ru.md).
 
 Для **PowerPoint / Keynote** нужен [LibreOffice](https://ru.libreoffice.org/download/). PDF, картинки и видео работают без него.
 </details>
