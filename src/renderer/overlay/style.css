@@ -1,0 +1,60 @@
+/* Таймер для выхода OMT: прозрачный фон, только цифры — кладётся поверх картинки
+   в vMix / OBS без ключа. Цвета и мигание — как на суфлёре в режиме ⛶. */
+:root {
+  --timer-green: #3fce7c;
+  --timer-yellow: #f5c14c;
+  --timer-red: #e0524a;
+}
+html, body {
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+}
+.timer {
+  position: absolute;
+  top: 55%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  /* Строка гуляет от «00:00» до «−01:02:33» — число символов приносит JS. */
+  font-size: min(56vh, calc(92vw / var(--timer-chars, 5) * 1.75));
+  /* Тень — чтобы цифры читались и на светлой картинке. */
+  text-shadow: 0 0.02em 0.08em rgba(0, 0, 0, 0.55);
+}
+.timer.green { color: var(--speaker-timer-green, var(--timer-green)); }
+.timer.yellow { color: var(--speaker-timer-yellow, var(--timer-yellow)); }
+.timer.red { color: var(--speaker-timer-red, var(--timer-red)); }
+.timer.neutral { color: #fff; }
+.timer.red.overtime { animation: timer-pulse 1s ease-in-out infinite; }
+@keyframes timer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.message {
+  position: absolute;
+  top: 5vh;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 90vw;
+  padding: 1.6vh 4vh;
+  border-radius: 1.5vh;
+  background: #e0524a;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 6vh;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+  animation: msg-blink 1s step-end infinite;
+}
+@keyframes msg-blink {
+  50% { background: #7a2621; }
+}
+.hidden { display: none; }

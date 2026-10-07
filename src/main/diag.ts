@@ -361,6 +361,12 @@ export async function buildReport(comment: string): Promise<ReportResult> {
       const p = join(logDir, name)
       if (existsSync(p)) push(name, await readFile(p))
     }
+    // Журнал libomt (выходы OMT, main/omt/) — сам себя не обрезает: берём хвост.
+    const omtLog = join(logDir, 'omt.log')
+    if (existsSync(omtLog)) {
+      const buf = await readFile(omtLog)
+      push('omt.log', buf.length > 512 * 1024 ? buf.subarray(buf.length - 512 * 1024) : buf)
+    }
 
     // Последние эфиры (main/stream/streamer.ts пишет их отдельно, streams/<файл>.log) —
     // самые свежие 5, не все 30: в отчёт нужен последний случай, а не архив.

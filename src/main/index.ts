@@ -8,6 +8,7 @@ import { checkForUpdates } from './updater.js'
 import { initDiag, instrumentIpc, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
 import { captureIpcHandlers, initRemote, registerRemoteIpc } from './remote/server.js'
 import { initStream } from './stream/streamer.js'
+import { initOmt, registerOmtIpc } from './omt/outputs.js'
 import { registerProfileIpc } from './profiles.js'
 import { askBootLayout } from './boot-dialog.js'
 import { askUiLang } from './lang-dialog.js'
@@ -342,6 +343,7 @@ app.whenReady().then(async () => {
   registerDiagIpc()
   registerRemoteIpc()
   registerProfileIpc()
+  registerOmtIpc()
   initStream()
 
   // Язык — раньше меню и любых окон: всё дальше рисуется уже на нём. Не
@@ -442,6 +444,7 @@ app.whenReady().then(async () => {
   // Слушатели Stream Deck / Companion — до диалогов старта: пока оператор
   // выбирает раскладку, кнопки уже должны отвечать, а не сыпать ошибками.
   await initRemote()
+  initOmt()
 
   setOperatorWindowHook(attachOperatorCloseGuard)
   await bootNag()

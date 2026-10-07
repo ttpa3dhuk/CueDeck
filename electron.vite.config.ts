@@ -6,6 +6,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: resolve(__dirname, 'src/main/index.ts'),
+        // Нативный модуль (FFI к libomt) — не бандлится, грузится из node_modules.
+        external: ['koffi'],
       },
     },
   },
@@ -28,6 +30,7 @@ export default defineConfig({
           presenter: resolve(__dirname, 'src/renderer/presenter/index.html'),
           audience: resolve(__dirname, 'src/renderer/audience/index.html'),
           stream: resolve(__dirname, 'src/renderer/stream/index.html'),
+          overlay: resolve(__dirname, 'src/renderer/overlay/index.html'),
         },
       },
     },

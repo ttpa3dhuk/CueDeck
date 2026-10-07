@@ -142,6 +142,9 @@ const api: PresenterApi = {
     openHelp: () => ipcRenderer.invoke('remote:open-help'),
     saveCompanionPage: () => ipcRenderer.invoke('remote:save-companion-page'),
   },
+  omt: {
+    configure: (settings) => ipcRenderer.invoke('omt:configure', settings),
+  },
   files: {
     // Sandboxed renderer has no File.path (removed in Electron 32) — this is
     // the only way to resolve a dropped File to its filesystem path.

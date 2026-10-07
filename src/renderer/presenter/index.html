@@ -422,6 +422,7 @@
             <button data-section="ui">Интерфейс</button>
             <button data-section="lo">PPTX / LibreOffice</button>
             <button data-section="remote">Внешнее управление</button>
+            <button data-section="omt">Выходы OMT</button>
             <button data-section="midi">MIDI</button>
           </nav>
           <div class="settings-body">
@@ -637,6 +638,25 @@
         <button id="remote-help">Список команд…</button>
       </div>
     </div>
+            </section>
+            <section class="settings-section hidden" data-section="omt">
+              <p class="audio-hint">Источники в сети для vMix 29+ и OBS (плагин OMT).</p>
+              <div id="omt-section" class="remote-section">
+                <label class="windowed-label">
+                  <input id="omt-timer" type="checkbox" />
+                  <span>Таймер <span class="windowed-hint">(прозрачный фон — поверх картинки без ключа)</span></span>
+                </label>
+                <div class="remote-row">
+                  <label class="remote-port">имя <input id="omt-timer-name" type="text" class="omt-name" spellcheck="false" maxlength="64" /></label>
+                  <label class="windowed-label">
+                    <input id="omt-timer-message" type="checkbox" />
+                    <span>Сообщение спикеру</span>
+                  </label>
+                </div>
+                <div class="remote-row remote-status-row">
+                  <span id="omt-status" class="remote-status"></span>
+                </div>
+              </div>
             </section>
             <section class="settings-section hidden" data-section="midi">
               <p class="audio-hint">MIDI-устройства, подключённые к этому компьютеру. Галка — CueDeck слушает устройство; можно несколько. Лампочка мигает, когда с устройства приходит сигнал. Назначение кнопок и фейдеров на команды — следующий шаг.</p>

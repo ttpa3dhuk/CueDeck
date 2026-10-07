@@ -4,6 +4,7 @@ import type { DisplayMap, Layout } from './layout.js'
 import type { PlaylistEntry, RemoteSettings, VenueProfile, SlideTakeMode, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
 import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 import {
+  DEFAULT_OMT_SETTINGS,
   DEFAULT_REMOTE_SETTINGS,
   DEFAULT_STREAM_SETTINGS,
   STREAM_AUDIO_KBPS,
@@ -11,6 +12,7 @@ import {
   STREAM_HEIGHTS,
   STREAM_KEYFRAME_SEC,
   STREAM_MAX_DESTINATIONS,
+  type OmtSettings,
   type StreamDestination,
   type StreamSettings,
 } from '../shared/types.js'
@@ -68,6 +70,8 @@ interface PersistedShape {
   remote: RemoteSettings
   /** Встроенная трансляция (stream/streamer.ts); ключи площадок — здесь же, как у OBS. */
   stream: StreamSettings
+  /** Выходы OMT (omt/outputs.ts). */
+  omt: OmtSettings
   /** MIDI-входы, которые слушает CueDeck — имена устройств («Настройки → MIDI»). */
   midiInputs: string[]
   /** Профили площадки (profiles.ts) — список, новые в конце. */
@@ -120,6 +124,7 @@ const STORE_DEFAULTS: PersistedShape = {
   uiTheme: 'light',
   remote: { ...DEFAULT_REMOTE_SETTINGS },
   stream: { ...DEFAULT_STREAM_SETTINGS },
+  omt: { ...DEFAULT_OMT_SETTINGS },
   midiInputs: [],
   venueProfiles: [],
   lastLaunchAt: 0,
@@ -581,6 +586,26 @@ export function getStreamSettings(): StreamSettings {
 
 export function setStreamSettings(value: StreamSettings): void {
   store().set('stream', value)
+}
+
+/** Имя источника OMT: печатные символы, без скобок (их добавляет сама OMT: «КОМПЬЮТЕР (имя)»), ≤ 64. */
+export function cleanOmtName(v: unknown, def: string): string {
+  if (typeof v !== 'string') return def
+  const s = v.replace(/[\u0000-\u001f()]/g, '').trim().slice(0, 64)
+  return s || def
+}
+
+export function getOmtSettings(): OmtSettings {
+  const raw = (store().get('omt') ?? {}) as Partial<OmtSettings>
+  return {
+    timer: raw.timer === true,
+    timerName: cleanOmtName(raw.timerName, DEFAULT_OMT_SETTINGS.timerName),
+    timerMessage: raw.timerMessage !== false,
+  }
+}
+
+export function setOmtSettings(value: OmtSettings): void {
+  store().set('omt', value)
 }
 
 export function setRemoteSettings(value: RemoteSettings): void {

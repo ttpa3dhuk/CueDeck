@@ -781,6 +781,20 @@ export const EN: Record<string, string> = {
   '{name}: площадка обрывает соединение сразу — похоже, эфир там завершён или ключ сменился':
     '{name}: the destination keeps closing the connection right away — the broadcast there is likely over, or the key changed',
   'Ещё не было ни одного эфира': 'No broadcast has run yet',
+  // ── Настройки → Выходы OMT ──
+  'Выходы OMT': 'OMT outputs',
+  'Источники в сети для vMix 29+ и OBS (плагин OMT).': 'Network sources for vMix 29+ and OBS (OMT plugin).',
+  '(прозрачный фон — поверх картинки без ключа)': '(transparent background — goes over the picture without keying)',
+  'имя': 'name',
+  'OMT в CueDeck есть только на macOS и Windows': 'OMT in CueDeck is available on macOS and Windows only',
+  'нет файла {path}': 'file not found: {path}',
+  'не удалось создать источник OMT': 'could not create the OMT source',
+  '⚠ OMT недоступен на этом компьютере: {error}': '⚠ OMT is not available on this computer: {error}',
+  '● В сети: {name}': '● On the network: {name}',
+  'смотрят: {n}': 'receivers: {n}',
+  'никто не смотрит': 'no receivers',
+  'в эфире': 'on air',
+  'в превью': 'in preview',
 }
 
 /**

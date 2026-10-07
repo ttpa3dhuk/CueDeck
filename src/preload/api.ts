@@ -16,6 +16,8 @@ import type {
   ProfileGroup,
   RemoteSettings,
   RemoteStatus,
+  OmtSettings,
+  OmtStatus,
   ReportResult,
   SlideTakeMode,
   StreamEncoderConfig,
@@ -52,6 +54,8 @@ export type {
   ProfileGroup,
   RemoteSettings,
   RemoteStatus,
+  OmtSettings,
+  OmtStatus,
   ReportResult,
   Role,
   SlideMedia,
@@ -235,6 +239,10 @@ export interface PresenterApi {
     openHelp(): Promise<{ ok: boolean; error?: string }>
     /** Сохранить готовую страницу Companion (.companionconfig) — диалог «Сохранить». */
     saveCompanionPage(): Promise<{ ok: boolean; path?: string; cancelled?: boolean }>
+  }
+  /** Выходы OMT в сеть (main/omt/): статус приходит и в state.omt. */
+  omt: {
+    configure(settings: Partial<OmtSettings>): Promise<{ ok: true; status: OmtStatus }>
   }
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */

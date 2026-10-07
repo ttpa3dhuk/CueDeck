@@ -34,3 +34,4 @@ pptx-cache/
 Thumbs.db
 *.swp
 *.tmp
+vendor/

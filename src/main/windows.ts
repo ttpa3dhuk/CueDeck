@@ -14,8 +14,8 @@ const PRELOAD = resolve(__dirname, '../preload/index.cjs')
 const DEV_TILE = process.env.PRESENTER_DEV_TILE === '1'
 
 interface RendererTarget {
-  entry: 'presenter' | 'audience' | 'stream'
-  role: Role | 'stream'
+  entry: 'presenter' | 'audience' | 'stream' | 'overlay'
+  role: Role | 'stream' | 'omt-timer'
 }
 
 function rendererForRole(role: Role): RendererTarget {
@@ -267,5 +267,32 @@ export function createStreamEncoderWindow(): BrowserWindow {
     },
   })
   loadRenderer(win, { entry: 'stream', role: 'stream' })
+  return win
+}
+
+/**
+ * Оверлей для выхода OMT (omt/outputs.ts): offscreen, прозрачный фон — кадры
+ * берутся событием `paint` вместе с альфой. Никогда не показывается. Получает
+ * состояние, как обычное окно (store.registerWindow).
+ */
+export function createOmtOverlayWindow(width: number, height: number): BrowserWindow {
+  const win = new BrowserWindow({
+    width,
+    height,
+    show: false,
+    frame: false,
+    transparent: true,
+    title: 'CueDeck (OMT timer)',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+      offscreen: true,
+    },
+  })
+  loadRenderer(win, { entry: 'overlay', role: 'omt-timer' })
+  store.registerWindow('omt-timer', win)
   return win
 }

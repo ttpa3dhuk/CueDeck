@@ -20,7 +20,7 @@ import { WINDOW_TITLES } from '../../shared/window-titles'
 import { getLang, t, type Lang } from '../../shared/i18n'
 import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
-import type { ListMode, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
+import type { ListMode, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
 import { initStreamUi } from './stream-ui'
 import type {
@@ -2441,6 +2441,7 @@ function setupOperatorControls(): void {
   // рестарта и т. п.) — если «Настройка экранов» открыта, обновляем строку.
   subscribe((s, patch) => {
     if (patch?.remote && !settingsModal.classList.contains('hidden')) renderRemoteStatus(s.remote)
+    if (patch?.omt && !settingsModal.classList.contains('hidden')) renderOmtStatus(s.omt)
   })
   $('report-close').addEventListener('click', hideReportModal)
   $('report-save').addEventListener('click', () => void saveReport())
@@ -2942,7 +2943,7 @@ function buildSetupModal(displays: DisplayInfo[]): void {
 // Разделы слева, содержимое справа. Всё применяется сразу, кроме раздела
 // «Экраны»: смена раскладки пересобирает окна — там своя кнопка «Применить».
 
-type SettingsSection = 'profiles' | 'screens' | 'prompter' | 'clicker' | 'audio' | 'hotkeys' | 'ui' | 'lo' | 'remote' | 'midi'
+type SettingsSection = 'profiles' | 'screens' | 'prompter' | 'clicker' | 'audio' | 'hotkeys' | 'ui' | 'lo' | 'remote' | 'omt' | 'midi'
 let settingsWired = false
 
 function showSettingsSection(name: SettingsSection): void {
@@ -3385,6 +3386,7 @@ function openSettings(section: SettingsSection = 'screens'): void {
     })
   }
   wireRemoteSection(getState().remote)
+  wireOmtSection(getState().omt)
   showSettingsSection(section)
   settingsModal.classList.remove('hidden')
 }
@@ -3823,6 +3825,53 @@ function wireRemoteSection(remote: RemoteStatus): void {
   }
   $<HTMLButtonElement>('remote-help').onclick = () => void window.api.remote.openHelp()
   $<HTMLButtonElement>('remote-companion-page').onclick = () => void window.api.remote.saveCompanionPage()
+}
+
+// ── Выходы OMT (main/omt/) ───────────────────────────────────────────────────
+// Применяется сразу; статус (получатели, эфир у vMix) приходит в state.omt.
+
+function wireOmtSection(omt: OmtStatus): void {
+  const timer = $<HTMLInputElement>('omt-timer')
+  const name = $<HTMLInputElement>('omt-timer-name')
+  const message = $<HTMLInputElement>('omt-timer-message')
+  timer.checked = omt.timer
+  name.value = omt.timerName
+  message.checked = omt.timerMessage
+  renderOmtStatus(omt)
+  const commit = async (): Promise<void> => {
+    const res = await window.api.omt.configure({ timer: timer.checked, timerName: name.value, timerMessage: message.checked })
+    // Пустое имя или скобки main заменил — показываем, что реально стоит.
+    name.value = res.status.timerName
+  }
+  timer.onchange = () => void commit()
+  message.onchange = () => void commit()
+  name.onchange = () => void commit()
+  name.onkeydown = (e) => {
+    e.stopPropagation()
+    if (e.key === 'Enter') name.blur()
+  }
+}
+
+function renderOmtStatus(o: OmtStatus): void {
+  const el = document.getElementById('omt-status')
+  if (!el) return
+  document.getElementById('omt-section')?.classList.toggle('off', !o.timer)
+  el.className = 'remote-status'
+  if (o.timerState === 'error') {
+    el.classList.add('error')
+    el.textContent = o.available ? `⚠ ${o.error ?? ''}` : t('⚠ OMT недоступен на этом компьютере: {error}', { error: o.error ?? '' })
+    return
+  }
+  if (o.timerState !== 'on') {
+    el.textContent = t('Выключено')
+    return
+  }
+  el.classList.add('on')
+  const parts = [t('● В сети: {name}', { name: o.timerAddress ?? o.timerName })]
+  parts.push(o.timerReceivers > 0 ? t('смотрят: {n}', { n: o.timerReceivers }) : t('никто не смотрит'))
+  if (o.timerProgram) parts.push(t('в эфире'))
+  else if (o.timerPreview) parts.push(t('в превью'))
+  el.textContent = parts.join(' · ')
 }
 
 function renderRemoteStatus(r: RemoteStatus, error?: string): void {

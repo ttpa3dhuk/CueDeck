@@ -326,6 +326,45 @@ export interface AppState {
   remote: RemoteStatus
   /** Встроенная трансляция: настройки + живой статус. */
   stream: StreamStatus
+  /** Выходы OMT (Open Media Transport) в сеть: настройки + живой статус. */
+  omt: OmtStatus
+}
+
+/**
+ * Выходы OMT (main/omt/) — источники в локальной сети для vMix 29+, OBS
+ * (плагин OMT) и других программ. Пока один: таймер на прозрачном фоне —
+ * кладётся поверх картинки без ключа.
+ */
+export interface OmtSettings {
+  /** Отдавать в сеть таймер с прозрачным фоном. */
+  timer: boolean
+  /** Имя источника; в списке у получателя — «КОМПЬЮТЕР (имя)». */
+  timerName: string
+  /** Показывать на таймере сообщение спикеру. */
+  timerMessage: boolean
+}
+
+export type OmtOutputState = 'off' | 'on' | 'error'
+
+export interface OmtStatus extends OmtSettings {
+  /** Библиотека libomt загрузилась (на этой системе OMT вообще есть). */
+  available: boolean
+  /** Почему недоступно / почему выход не поднялся. */
+  error: string | null
+  timerState: OmtOutputState
+  /** Полное имя в сети: «КОМПЬЮТЕР (CueDeck Timer)». */
+  timerAddress: string | null
+  /** Сколько программ смотрят источник. */
+  timerReceivers: number
+  /** Tally от vMix: источник в эфире / в превью у получателя. */
+  timerProgram: boolean
+  timerPreview: boolean
+}
+
+export const DEFAULT_OMT_SETTINGS: OmtSettings = {
+  timer: false,
+  timerName: 'CueDeck Timer',
+  timerMessage: true,
 }
 
 /**

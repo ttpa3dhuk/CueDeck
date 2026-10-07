@@ -6,7 +6,7 @@
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/fetch-omt.cjs && electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
@@ -14,9 +14,10 @@
     "companion:build": "vite-node companion/build.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package:mac": "electron-vite build && electron-builder --mac --publish=never && node scripts/rename-mac.cjs",
-    "package:win": "electron-vite build && electron-builder --win --publish=never",
-    "package:all": "electron-vite build && electron-builder -mw --publish=never && node scripts/rename-mac.cjs"
+    "package:mac": "node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --mac --publish=never && node scripts/rename-mac.cjs",
+    "package:win": "node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --win --publish=never",
+    "package:all": "node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder -mw --publish=never && node scripts/rename-mac.cjs",
+    "fetch:omt": "node scripts/fetch-omt.cjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
@@ -30,6 +31,7 @@
   "dependencies": {
     "electron-log": "^5.4.4",
     "electron-store": "^10.0.1",
+    "koffi": "^2.16.3",
     "pdfjs-dist": "^4.10.38"
   },
   "build": {
@@ -45,7 +47,9 @@
       "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
       "!**/node_modules/*.d.ts",
       "!**/node_modules/.bin",
-      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!**/node_modules/koffi/{src,vendor,lib,doc}/**",
+      "!**/node_modules/koffi/build/koffi/{freebsd*,linux*,musl*,openbsd*,win32_ia32,win32_arm64}/**"
     ],
     "mac": {
       "target": [
@@ -67,6 +71,10 @@
         {
           "from": "build/ru.lproj",
           "to": "ru.lproj"
+        },
+        {
+          "from": "vendor/omt/mac",
+          "to": "omt"
         }
       ],
       "hardenedRuntime": false,
@@ -80,9 +88,18 @@
             "x64"
           ]
         }
+      ],
+      "extraResources": [
+        {
+          "from": "vendor/omt/win",
+          "to": "omt"
+        }
       ]
     },
     "asar": true,
-    "compression": "normal"
+    "compression": "normal",
+    "asarUnpack": [
+      "**/node_modules/koffi/build/**"
+    ]
   }
 }

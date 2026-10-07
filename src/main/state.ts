@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import { DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'
+import { DEFAULT_OMT_SETTINGS, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'
 import type { AppState, DeckState, Role, TimerState, VideoState } from '../shared/types.js'
 
 // Canonical definitions live in src/shared/types.ts (shared with preload/renderer).
@@ -125,6 +125,16 @@ export function initialState(): AppState {
       capture: false,
       log: [],
     },
+    omt: {
+      ...DEFAULT_OMT_SETTINGS,
+      available: false,
+      error: null,
+      timerState: 'off',
+      timerAddress: null,
+      timerReceivers: 0,
+      timerProgram: false,
+      timerPreview: false,
+    },
   }
 }
 
@@ -137,18 +147,21 @@ function positionOf(v: VideoState): number {
   return v.anchorSec
 }
 
+/** Окна, которым рассылается состояние: роли раскладки + служебные (оверлей OMT). */
+export type WindowKey = Role | 'omt-timer'
+
 type Listener = (state: AppState, patch: Partial<AppState>) => void
 
 export class StateStore {
   private state: AppState = initialState()
   private listeners = new Set<Listener>()
-  private windows = new Map<Role, BrowserWindow>()
+  private windows = new Map<WindowKey, BrowserWindow>()
 
   get(): AppState {
     return this.state
   }
 
-  registerWindow(role: Role, win: BrowserWindow): void {
+  registerWindow(role: WindowKey, win: BrowserWindow): void {
     this.windows.set(role, win)
     win.on('closed', () => {
       if (this.windows.get(role) === win) this.windows.delete(role)
@@ -163,7 +176,7 @@ export class StateStore {
     }
   }
 
-  unregisterWindow(role: Role): void {
+  unregisterWindow(role: WindowKey): void {
     this.windows.delete(role)
   }
 
