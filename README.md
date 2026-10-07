@@ -1,88 +1,112 @@
-# CueDeck
+<p align="center"><img src="docs/screenshots/icon.png" width="96" alt="CueDeck icon"></p>
 
-[![Release](https://img.shields.io/github/v/release/ttpa3dhuk/CueDeck)](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
-[![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-black?logo=apple&logoColor=white)](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
-[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D6?logo=windows&logoColor=white)](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<h1 align="center">CueDeck</h1>
 
-**Run every speaker's slides at a live event from one seat — with a preview/program switcher, per-speaker timers and a confidence monitor.**
+<p align="center"><b>Every speaker's slides from one seat — preview, TAKE, timers, prompter, streaming.</b><br>
+Free · macOS &amp; Windows · for live events and conferences</p>
 
-🇷🇺 [Русская версия](README.ru.md) · 📋 [What's new](CHANGELOG.md) · ⬇️ [Download](https://github.com/ttpa3dhuk/CueDeck/releases/latest)
+<p align="center">
+<a href="https://github.com/ttpa3dhuk/CueDeck/releases/latest"><b>⬇️ Download</b></a> ·
+<a href="README.ru.md">🇷🇺 Русская версия</a> ·
+<a href="CHANGELOG.md">📋 What's new</a> ·
+<a href="https://www.youtube.com/watch?v=Vi5BDG_WoRg">🎥 Video</a>
+</p>
 
-![CueDeck operator window: speaker playlist, preview and program decks, prompter monitor, timer, notes and TAKE](docs/screenshots/operator.png)
+![Stage the next speaker in Preview, press TAKE — it goes to the hall](docs/screenshots/take.gif)
 
-## 💡 Why
+Line up every speaker beforehand — PDF, PowerPoint, Keynote, video, a guest laptop. Stage the next one in **Preview**, press **TAKE**: it goes to the hall, their timer is loaded, the prompter follows.
 
-Each speaker brings a different file — PDF, PowerPoint, Keynote, a video, their own laptop. You need to switch fast, keep each speaker on time and give them notes the audience never sees. PowerPoint Presenter View handles one deck at a time; PDF viewers have no timer and no notes.
+## 🖥 Three screens, one operator
 
-CueDeck is built the way a video switcher works: line up all the speakers in a playlist beforehand, stage the next one in **Preview**, press **TAKE** — it goes to the hall. The audience screen never shows a file dialog.
+![Operator laptop, speaker's prompter and the hall screen side by side](docs/screenshots/screens.png)
 
-## ✨ Features
+## 🗣 A prompter speakers actually read
 
-**🎛 Show control**
-- **Preview / Program** with **TAKE** (`Tab`) — cue the next file off-air while the current one stays live
-- Three windows on three screens: **operator**, **prompter** (slide + next slide + notes + timer), **audience** (slide only)
-- **Blackout / key visual** (`B`) — the hall sees a still or a looping video while you change files
-- Global clicker — PgUp/PgDn flip slides even when CueDeck isn't focused
+Current and next slide, your notes in real time, a timer that turns yellow and red. Or give the whole screen to the timer and feed it to a stage monitor.
 
-**🗣 Speakers**
-- **Speaker playlist** — drag-and-drop, a name and a timer per speaker
-- **Timer** — countdown with presets and ±1 min on the fly, stopwatch or clock; placed anywhere on the prompter, or full-screen for a separate monitor
-- **Notes → prompter** in real time; PowerPoint speaker notes come in automatically
-- Flash message to the speaker: "Wrap up", "Closer to the mic", or your own text
+| | |
+|---|---|
+| ![Prompter: slide, next slide, notes, timer](docs/screenshots/prompter.png) | ![Timer-only prompter mode](docs/screenshots/prompter-timer.png) |
 
-**🎞 Media**
-- PDF, images, **PowerPoint / Keynote / ODP** (via LibreOffice) — embedded videos and on-click animations play
-- **Videos** in the playlist, synced across windows; per-clip loop, hold on first frame
-- **Photo/video lists** — one playlist row, loop or shuffle with crossfade
-- **Live input** — a guest laptop over a USB HDMI capture card joins the playlist like any file
-- Separate audio outputs for the hall and for headphone **cue/solo**, level meters
+Drag the timer and messages wherever you want them:
 
-**📡 Streaming and control**
-- **Built-in streaming** — the STREAM button sends the hall picture and sound to YouTube, VK, Telegram, up to 5 destinations at once (RTMP/RTMPS), no OBS needed
-- **Stream Deck, Bitfocus Companion, OSC** — a ready-made Companion page with a live timer on the key ([setup guide, RU](companion/README.md))
-- MIDI controllers
+<img src="docs/screenshots/settings-prompter.png" width="640" alt="Prompter layout editor in Settings">
 
-**🛟 Prep and safety**
-- **Venue profiles** — all settings for a known venue in one pick
-- Projects survive a move to another computer; missing files are flagged when you open the project, not on air
-- Quit confirmation mid-show, problem report for testers (Help → Report a problem)
+## 📡 Stream without OBS
 
-![Prompter screen: current slide, next slide, speaker notes and the countdown timer](docs/screenshots/prompter.png)
+The STREAM button sends the hall picture and sound to YouTube, VK, Telegram — up to 5 destinations at once. Add or drop one while live; stats show whether a problem is your computer, the network or the platform.
 
-## ⬇️ Download and install
+<img src="docs/screenshots/stream.png" width="720" alt="Stream window with YouTube, VK and Telegram destinations">
 
-Latest version — **[GitHub Releases](https://github.com/ttpa3dhuk/CueDeck/releases/latest)**.
+## 🎛 Stream Deck and Companion
 
-| Computer | File |
+A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live timer, TAKE with the speaker's name, speakers lit green for preview and red on air. HTTP and OSC for anything else ([setup](companion/README.md)).
+
+<img src="docs/screenshots/streamdeck.png" width="480" alt="CueDeck buttons on a Stream Deck via Companion">
+
+## ⬇️ Download
+
+| Computer | File from [the latest release](https://github.com/ttpa3dhuk/CueDeck/releases/latest) |
 |---|---|
 | Mac with Apple Silicon (M1 and later) | `CueDeck-<version>-Silicon-mac.zip` |
 | Mac with Intel | `CueDeck-<version>-Intel-mac.zip` |
 | Windows 10 / 11 | `CueDeck-<version>-win.zip` |
 
-**macOS:** unzip and drag `CueDeck.app` to Applications. The app isn't notarized, so the first launch is right-click → **Open** → **Open**. If macOS says the app is damaged: `xattr -cr /Applications/CueDeck.app`.
+<details>
+<summary><b>First launch</b> — the app isn't signed</summary>
+
+**macOS:** unzip, drag `CueDeck.app` to Applications, then right-click → **Open** → **Open**. If macOS says the app is damaged: `xattr -cr /Applications/CueDeck.app`.
 
 **Windows:** unzip and run `CueDeck.exe`. SmartScreen will warn → **More info** → **Run anyway**.
 
-**PowerPoint / Keynote** files need [LibreOffice](https://www.libreoffice.org/download/download-libreoffice/) installed. PDF, images and videos work without it.
+**PowerPoint / Keynote** files need [LibreOffice](https://www.libreoffice.org/download/download-libreoffice/). PDF, images and video work without it.
+</details>
 
-🎥 [Full walkthrough video, 40 min (in Russian)](https://www.youtube.com/watch?v=Vi5BDG_WoRg)
+<a href="https://www.youtube.com/watch?v=Vi5BDG_WoRg"><img src="https://img.youtube.com/vi/Vi5BDG_WoRg/maxresdefault.jpg" width="480" alt="Full walkthrough video"></a><br>
+<sub>Full walkthrough, 40 min (in Russian)</sub>
 
-## 📄 Formats and devices
+## 📚 More
+
+<details>
+<summary><b>All features</b></summary>
+
+- **Preview / Program** with **TAKE** (`Tab`); global clicker — PgUp/PgDn work even when CueDeck isn't focused
+- **Speaker playlist** — drag-and-drop, a name and a timer per speaker
+- **Timer** — countdown, stopwatch or clock; presets and ±1 min on the fly; tick and gong sounds
+- **Notes → prompter** in real time; PowerPoint speaker notes come in automatically
+- **Message to the speaker** — "Wrap up", "Closer to the mic" or your own text
+- **Blackout / key visual** (`B`) — a still or looping video in the hall while you change files
+- **PowerPoint / Keynote / ODP** — embedded videos and on-click animations play
+- **Videos** synced across windows; per-clip loop, hold on first frame
+- **Photo/video lists** — one playlist row, loop or shuffle with crossfade
+- **Live input** — a guest laptop through a USB HDMI capture card joins the playlist like any file
+- **Audio** — separate outputs for the hall and headphone cue/solo, level meters
+- **Streaming** — RTMP/RTMPS, up to 5 destinations, a log file for every broadcast
+- **Stream Deck, Companion, OSC, HTTP**; MIDI controllers
+- **Venue profiles** — every setting for a known venue in one pick
+- Projects move between computers; missing files are flagged when you open the project, not on air
+- Quit confirmation mid-show; Help → Report a problem saves a zip with logs
+- English and Russian interface
+</details>
+
+<details>
+<summary><b>Formats and devices</b></summary>
 
 | What | Works | Note |
 |---|---|---|
 | PDF, PNG, JPG, WebP, GIF, BMP | ✅ | opens instantly |
 | PPTX, PPT, ODP, Keynote | ✅ | converted once via LibreOffice, then cached; exit effects and transitions don't play |
-| Video H.264 + AAC (MP4, MOV, M4V), WebM | ✅ | recommended: export to MP4 (H.264 + AAC) |
+| Video H.264 + AAC (MP4, MOV, M4V), WebM | ✅ | recommended: MP4 (H.264 + AAC) |
 | HEVC / H.265 | ⚠️ | Mac — usually yes; Windows needs HEVC Video Extensions |
 | ProRes, DNxHD | ❌ | transcode with [HandBrake](https://handbrake.fr/) |
 | USB capture (UVC): Elgato Cam Link, AVMatrix, ATEM Mini, webcams | ✅ | if Photo Booth / Camera sees it, CueDeck will |
 | Blackmagic DeckLink / UltraStudio | ❌ | own driver, not visible as a camera |
+</details>
 
-## ⌨️ Keyboard
+<details>
+<summary><b>Keyboard</b></summary>
 
-Defaults below; remap in ⚙️ Settings → Keyboard shortcuts.
+Remap in ⚙️ Settings → Keyboard shortcuts.
 
 | Key | Action |
 |---|---|
@@ -92,12 +116,10 @@ Defaults below; remap in ⚙️ Settings → Keyboard shortcuts.
 | `B` | Blackout / key visual |
 | `T` / `R` | Timer start-pause / reset |
 | `Cmd+,` | Settings |
+</details>
 
-## 🎛 Stream Deck and Companion
-
-⚙️ Settings → **External control** → enable. **Command list…** opens a page with every command as a ready-to-copy URL (HTTP on port 9420, OSC on 9421). For Bitfocus Companion there's a ready-made page: Settings → **Companion page…** → import it in Companion. Step by step — [companion/README.md](companion/README.md).
-
-## 🔧 Build from source
+<details>
+<summary><b>Build from source</b></summary>
 
 ```bash
 git clone https://github.com/ttpa3dhuk/CueDeck.git
@@ -109,12 +131,11 @@ npm run package:mac   # Mac zips (Apple Silicon + Intel)
 npm run package:win   # Windows zip
 ```
 
-Electron + TypeScript. Found a bug — [open an issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose); Help → Report a problem saves a zip with logs you can attach.
+Electron + TypeScript.
+</details>
 
-## ☕ Support
+Found a bug? [Open an issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose) — Help → Report a problem saves a zip with logs you can attach.
 
-CueDeck is free and built in spare time. If it saved your show — [buy me a coffee via CloudTips](https://pay.cloudtips.ru/p/b79fa042).
-
-## 📄 License
+☕ CueDeck is free and built in spare time. If it saved your show — [buy me a coffee](https://pay.cloudtips.ru/p/b79fa042).
 
 [MIT](LICENSE) © 2026 [Azat Khusaenov](https://github.com/ttpa3dhuk)
