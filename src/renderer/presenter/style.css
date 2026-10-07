@@ -573,11 +573,14 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 /* Строка «Режим / Секунд на фото / FADE» в редакторе списка. */
 .list-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   margin: 10px 0;
 }
-.list-sec { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.list-sec { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+/* Кнопка — к правому краю и не ломается в три строки (не помещается — уходит на новую строку). */
+#list-add-files { margin-left: auto; white-space: nowrap; }
 .list-sec input {
   width: 64px;
   background: var(--panel-2);
@@ -1899,7 +1902,7 @@ body[data-role="operator"] #current-slide {
 .remote-status.error { color: var(--danger); }
 /* Выходы OMT — раздел окна «Настройки» */
 .omt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; font-size: 13px; }
-.omt-row { display: grid; grid-template-columns: 230px 180px 1fr; align-items: center; gap: 12px; }
+.omt-row { display: grid; grid-template-columns: 200px 170px 76px 1fr; align-items: center; gap: 12px; }
 .omt-row .omt-name {
   background: var(--panel);
   color: var(--text);
@@ -1909,7 +1912,7 @@ body[data-role="operator"] #current-slide {
   font-size: 13px;
   font-family: inherit;
 }
-.omt-row.off .omt-name { opacity: 0.55; }
+.omt-row.off .omt-name, .omt-row.off .omt-size { opacity: 0.55; }
 .omt-sub { margin: -4px 0 4px 24px; }
 .omt-sub.off { opacity: 0.55; }
 
@@ -2275,8 +2278,18 @@ body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--a
 }
 
 /* Нижний слой наплыва: держит уходящий кадр ровно на время перехода.
-   Геометрия та же, что у основного слоя, — иначе кадры «прыгнут». */
-.slide-image.fade-under { z-index: 0; }
+   Лежит ПОД основным, а не рядом: контейнер — flex-строка, и в потоке две
+   картинки вставали бок о бок, по половине каждая (2026-10-08, видно в OMT).
+   Геометрия та же, что у основного слоя (по центру, те же max-ограничения), —
+   иначе кадры «прыгнут». */
+.slide-image { position: relative; z-index: 1; }
+.slide-image.fade-under {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+}
 .slide-image.fade-under.hidden { display: none; }
 
 /* ── Английский интерфейс (i18n.ts): надписи из CSS `content`. Русский —

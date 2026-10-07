@@ -339,11 +339,21 @@ export type OmtOutputId = 'timer' | 'program' | 'prompter'
 
 export const OMT_OUTPUTS: readonly OmtOutputId[] = ['timer', 'program', 'prompter']
 
+/** Разрешение выхода — высота кадра 16:9: 720p, 1080p, 4K. */
+export type OmtResolution = 720 | 1080 | 2160
+
+export const OMT_RESOLUTIONS: readonly OmtResolution[] = [720, 1080, 2160]
+
 export interface OmtSettings {
   /** Какие выходы отдавать в сеть. */
   enabled: Record<OmtOutputId, boolean>
   /** Имена источников; у получателя — «КОМПЬЮТЕР (имя)». */
   names: Record<OmtOutputId, string>
+  /**
+   * Разрешение. Таймер рисуется ровно в нём; зал и суфлёр больше него
+   * ужимаются, а меньше — уходят как есть (получатель растянет сам).
+   */
+  sizes: Record<OmtOutputId, OmtResolution>
   /** Показывать на таймере сообщение спикеру. */
   timerMessage: boolean
 }
@@ -377,6 +387,7 @@ export const OMT_OUTPUT_OFF: OmtOutputStatus = {
 export const DEFAULT_OMT_SETTINGS: OmtSettings = {
   enabled: { timer: false, program: false, prompter: false },
   names: { timer: 'CueDeck Timer', program: 'CueDeck Program', prompter: 'CueDeck Prompter' },
+  sizes: { timer: 1080, program: 1080, prompter: 1080 },
   timerMessage: true,
 }
 

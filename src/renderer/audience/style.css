@@ -73,6 +73,16 @@ canvas, .slide-image, .slide-video {
 }
 
 /* Нижний слой наплыва: держит уходящий кадр ровно на время перехода.
-   Геометрия та же, что у основного слоя, — иначе кадры «прыгнут». */
-.slide-image.fade-under { z-index: 0; }
+   Лежит ПОД основным, а не рядом: контейнер — flex-строка, и в потоке две
+   картинки вставали бок о бок, по половине каждая (2026-10-08, видно в OMT).
+   Геометрия та же, что у основного слоя (по центру, те же max-ограничения), —
+   иначе кадры «прыгнут». */
+.slide-image { position: relative; z-index: 1; }
+.slide-image.fade-under {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+}
 .slide-image.fade-under.hidden { display: none; }

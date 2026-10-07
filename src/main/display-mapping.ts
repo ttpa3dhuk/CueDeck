@@ -6,6 +6,7 @@ import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 import {
   DEFAULT_OMT_SETTINGS,
   OMT_OUTPUTS,
+  OMT_RESOLUTIONS,
   DEFAULT_REMOTE_SETTINGS,
   DEFAULT_STREAM_SETTINGS,
   STREAM_AUDIO_KBPS,
@@ -13,6 +14,7 @@ import {
   STREAM_HEIGHTS,
   STREAM_KEYFRAME_SEC,
   STREAM_MAX_DESTINATIONS,
+  type OmtResolution,
   type OmtSettings,
   type StreamDestination,
   type StreamSettings,
@@ -596,13 +598,24 @@ export function cleanOmtName(v: unknown, def: string): string {
   return s || def
 }
 
+/** Разрешение выхода OMT: только 720 / 1080 / 2160, иначе дефолт. */
+export function cleanOmtResolution(v: unknown, def: OmtResolution): OmtResolution {
+  return OMT_RESOLUTIONS.includes(v as OmtResolution) ? (v as OmtResolution) : def
+}
+
 export function getOmtSettings(): OmtSettings {
   const raw = (store().get('omt') ?? {}) as Partial<OmtSettings>
   const d = DEFAULT_OMT_SETTINGS
-  const out: OmtSettings = { enabled: { ...d.enabled }, names: { ...d.names }, timerMessage: raw.timerMessage !== false }
+  const out: OmtSettings = {
+    enabled: { ...d.enabled },
+    names: { ...d.names },
+    sizes: { ...d.sizes },
+    timerMessage: raw.timerMessage !== false,
+  }
   for (const id of OMT_OUTPUTS) {
     out.enabled[id] = raw.enabled?.[id] === true
     out.names[id] = cleanOmtName(raw.names?.[id], d.names[id])
+    out.sizes[id] = cleanOmtResolution(raw.sizes?.[id], d.sizes[id])
   }
   return out
 }

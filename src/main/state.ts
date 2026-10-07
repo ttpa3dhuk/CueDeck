@@ -128,6 +128,7 @@ export function initialState(): AppState {
     omt: {
       enabled: { ...DEFAULT_OMT_SETTINGS.enabled },
       names: { ...DEFAULT_OMT_SETTINGS.names },
+      sizes: { ...DEFAULT_OMT_SETTINGS.sizes },
       timerMessage: DEFAULT_OMT_SETTINGS.timerMessage,
       available: null,
       error: null,

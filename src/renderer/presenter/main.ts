@@ -20,7 +20,7 @@ import { WINDOW_TITLES } from '../../shared/window-titles'
 import { getLang, t, type Lang } from '../../shared/i18n'
 import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
-import type { ListMode, OmtOutputId, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
+import type { ListMode, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
 import { initStreamUi } from './stream-ui'
 import type {
@@ -3830,12 +3830,20 @@ function wireRemoteSection(remote: RemoteStatus): void {
 // ── Выходы OMT (main/omt/) ───────────────────────────────────────────────────
 // Применяется сразу; статус (получатели, эфир у vMix) приходит в state.omt.
 
-function omtRows(): Array<{ id: OmtOutputId; row: HTMLElement; on: HTMLInputElement; name: HTMLInputElement; status: HTMLElement }> {
+function omtRows(): Array<{
+  id: OmtOutputId
+  row: HTMLElement
+  on: HTMLInputElement
+  name: HTMLInputElement
+  size: HTMLSelectElement
+  status: HTMLElement
+}> {
   return Array.from(document.querySelectorAll<HTMLElement>('#omt-section .omt-row')).map((row) => ({
     id: row.dataset.omt as OmtOutputId,
     row,
     on: row.querySelector<HTMLInputElement>('.omt-on')!,
     name: row.querySelector<HTMLInputElement>('.omt-name')!,
+    size: row.querySelector<HTMLSelectElement>('.omt-size')!,
     status: row.querySelector<HTMLElement>('.omt-status')!,
   }))
 }
@@ -3846,17 +3854,20 @@ function wireOmtSection(omt: OmtStatus): void {
   for (const r of rows) {
     r.on.checked = omt.enabled[r.id]
     r.name.value = omt.names[r.id]
+    r.size.value = String(omt.sizes[r.id])
   }
   message.checked = omt.timerMessage
   renderOmtStatus(omt)
   const commit = async (): Promise<void> => {
     const enabled = { ...omt.enabled }
     const names = { ...omt.names }
+    const sizes = { ...omt.sizes }
     for (const r of rows) {
       enabled[r.id] = r.on.checked
       names[r.id] = r.name.value
+      sizes[r.id] = Number(r.size.value) as OmtResolution
     }
-    const res = await window.api.omt.configure({ enabled, names, timerMessage: message.checked })
+    const res = await window.api.omt.configure({ enabled, names, sizes, timerMessage: message.checked })
     // Пустое имя, скобки, совпадение с соседним — main поправил: показываем, что реально стоит.
     for (const r of rows) r.name.value = res.status.names[r.id]
   }
@@ -3864,6 +3875,7 @@ function wireOmtSection(omt: OmtStatus): void {
   for (const r of rows) {
     r.on.onchange = () => void commit()
     r.name.onchange = () => void commit()
+    r.size.onchange = () => void commit()
     r.name.onkeydown = (e) => {
       e.stopPropagation()
       if (e.key === 'Enter') r.name.blur()

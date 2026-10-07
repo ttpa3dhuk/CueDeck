@@ -26,10 +26,11 @@ import {
   OMT_OUTPUT_OFF,
   type OmtOutputId,
   type OmtOutputStatus,
+  type OmtResolution,
   type OmtSettings,
   type OmtStatus,
 } from '../../shared/types.js'
-import { cleanOmtName, getOmtSettings, setOmtSettings } from '../display-mapping.js'
+import { cleanOmtName, cleanOmtResolution, getOmtSettings, setOmtSettings } from '../display-mapping.js'
 import {
   acquireGhost,
   createHiddenAudienceWindow,
@@ -51,9 +52,12 @@ import {
   type OmtLib,
 } from './libomt.js'
 
-const WIDTH = 1920
-const HEIGHT = 1080
 const FPS = 30
+
+/** Ширина кадра 16:9 для разрешения выхода. */
+function widthOf(res: OmtResolution): number {
+  return Math.round((res * 16) / 9)
+}
 
 /** Кадр, ещё не сжатый: BGRA (у таймера альфа premultiplied). */
 interface RawFrame {
@@ -94,6 +98,7 @@ class OmtSender {
   constructor(
     private readonly lib: OmtLib,
     readonly name: string,
+    readonly size: OmtResolution,
     private readonly alpha: boolean,
     private readonly onStatus: StatusFn,
   ) {}
@@ -130,14 +135,15 @@ class OmtSender {
         this.onStatus(s)
       }
     }, 1000)
-    log.info(`omt: выход «${this.address ?? this.name}» запущен`)
+    log.info(`omt: выход «${this.address ?? this.name}» запущен, ${this.size}p`)
   }
 
-  /** Новый кадр от источника. Больше 1920 по ширине (Retina, 4K-проектор) — ужимаем. */
+  /** Новый кадр от источника. Шире выбранного разрешения (Retina, 4K-проектор) — ужимаем. */
   push(image: NativeImage): void {
     if (this.closing || image.isEmpty()) return
     let img = image
-    if (img.getSize().width > WIDTH) img = img.resize({ width: WIDTH, quality: 'good' })
+    const maxWidth = widthOf(this.size)
+    if (img.getSize().width > maxWidth) img = img.resize({ width: maxWidth, quality: 'good' })
     const { width, height } = img.getSize()
     if (width < 16 || height < 16) return
     this.pendingRaw = { width, height, buf: img.toBitmap() }
@@ -250,10 +256,11 @@ class TimerOutput implements Output {
 
   start(): void {
     this.sender.start()
-    // Offscreen рисует в пикселях экрана (Retina — вдвое больше), а нам нужен
-    // ровно 1920×1080: окно делаем меньше на масштаб основного дисплея.
+    // Offscreen рисует в пикселях экрана (Retina — вдвое больше), а нам нужно
+    // ровно выбранное разрешение: окно делаем меньше на масштаб основного дисплея.
     const sf = screen.getPrimaryDisplay().scaleFactor || 1
-    const win = createOmtOverlayWindow(Math.round(WIDTH / sf), Math.round(HEIGHT / sf))
+    const { size } = this.sender
+    const win = createOmtOverlayWindow(Math.round(widthOf(size) / sf), Math.round(size / sf))
     this.win = win
     win.webContents.setFrameRate(FPS)
     win.webContents.on('paint', (_e, _dirty, image) => this.sender.push(image))
@@ -313,15 +320,16 @@ class WindowOutput implements Output {
   }
 
   /**
-   * Зал — ровно 1920×1080 в пикселях (на Retina вдвое меньше в точках): там
-   * только слайд во весь экран. Суфлёр — как настоящий, 1920×1080 точек: его
-   * вёрстка в пикселях CSS, в уменьшенном окне всё стало бы вдвое крупнее;
-   * лишнее разрешение ужмёт push().
+   * Зал — ровно выбранное разрешение в пикселях (на Retina вдвое меньше в
+   * точках): там только слайд во весь экран. Суфлёр — как настоящий, 1920×1080
+   * точек: его вёрстка в пикселях CSS, в другом размере всё стало бы крупнее
+   * или мельче; лишнее разрешение ужмёт push().
    */
   private createGhost(): BrowserWindow {
     if (this.role === 'speaker') return createHiddenSpeakerWindow()
     const sf = screen.getPrimaryDisplay().scaleFactor || 1
-    return createHiddenAudienceWindow(Math.round(WIDTH / sf), Math.round(HEIGHT / sf))
+    const { size } = this.sender
+    return createHiddenAudienceWindow(Math.round(widthOf(size) / sf), Math.round(size / sf))
   }
 
   private unsubscribe(): void {
@@ -359,28 +367,29 @@ function publishOutput(id: OmtOutputId, patch: Partial<OmtOutputStatus>): void {
   publish({ outputs: { ...status.outputs, [id]: { ...status.outputs[id], ...patch } } })
 }
 
-function makeOutput(lib: OmtLib, id: OmtOutputId, name: string): Output {
+function makeOutput(lib: OmtLib, id: OmtOutputId, name: string, size: OmtResolution): Output {
   const onStatus: StatusFn = (s) => {
     if (outputs.get(id) === out) publishOutput(id, s)
   }
   const out: Output =
     id === 'timer'
-      ? new TimerOutput(new OmtSender(lib, name, true, onStatus))
-      : new WindowOutput(new OmtSender(lib, name, false, onStatus), id === 'program' ? 'audience' : 'speaker')
+      ? new TimerOutput(new OmtSender(lib, name, size, true, onStatus))
+      : new WindowOutput(new OmtSender(lib, name, size, false, onStatus), id === 'program' ? 'audience' : 'speaker')
   return out
 }
 
 async function apply(next: OmtSettings): Promise<OmtStatus> {
-  // Сначала гасим лишнее и переименованное (новое имя = новый источник в сети).
+  // Сначала гасим лишнее, переименованное (новое имя = новый источник в сети)
+  // и с другим разрешением (окно и кодек — под размер).
   for (const id of OMT_OUTPUTS) {
     const out = outputs.get(id)
-    if (out && (!next.enabled[id] || out.sender.name !== next.names[id])) {
+    if (out && (!next.enabled[id] || out.sender.name !== next.names[id] || out.sender.size !== next.sizes[id])) {
       outputs.delete(id)
       await out.stop()
       publishOutput(id, { ...OMT_OUTPUT_OFF })
     }
   }
-  publish({ enabled: { ...next.enabled }, names: { ...next.names }, timerMessage: next.timerMessage })
+  publish({ enabled: { ...next.enabled }, names: { ...next.names }, sizes: { ...next.sizes }, timerMessage: next.timerMessage })
   const wanted = OMT_OUTPUTS.filter((id) => next.enabled[id] && !outputs.has(id))
   if (wanted.length === 0) return status
   const lib = loadOmt()
@@ -392,7 +401,7 @@ async function apply(next: OmtSettings): Promise<OmtStatus> {
   }
   publish({ available: true, error: null })
   for (const id of wanted) {
-    const out = makeOutput(lib, id, next.names[id])
+    const out = makeOutput(lib, id, next.names[id], next.sizes[id])
     try {
       outputs.set(id, out)
       out.start()
@@ -414,11 +423,13 @@ function sanitize(v: Partial<OmtSettings>): OmtSettings {
   const out: OmtSettings = {
     enabled: { ...cur.enabled },
     names: { ...cur.names },
+    sizes: { ...cur.sizes },
     timerMessage: v.timerMessage === undefined ? cur.timerMessage : v.timerMessage === true,
   }
   const used = new Set<string>()
   for (const id of OMT_OUTPUTS) {
     if (v.enabled?.[id] !== undefined) out.enabled[id] = v.enabled[id] === true
+    if (v.sizes?.[id] !== undefined) out.sizes[id] = cleanOmtResolution(Number(v.sizes[id]), cur.sizes[id])
     let name = cleanOmtName(v.names?.[id] ?? cur.names[id], cur.names[id])
     if (used.has(name.toLowerCase())) name = `${name} ${id}`
     used.add(name.toLowerCase())
@@ -431,7 +442,7 @@ function sanitize(v: Partial<OmtSettings>): OmtSettings {
 export function initOmt(): void {
   const s = getOmtSettings()
   // Библиотеку не грузим, пока выход не включён: кому OMT не нужен, тот её и не загружает.
-  publish({ enabled: { ...s.enabled }, names: { ...s.names }, timerMessage: s.timerMessage })
+  publish({ enabled: { ...s.enabled }, names: { ...s.names }, sizes: { ...s.sizes }, timerMessage: s.timerMessage })
   if (OMT_OUTPUTS.some((id) => s.enabled[id])) chain = chain.then(() => apply(s))
   process.on('exit', () => {
     for (const out of outputs.values()) out.sender.destroyNow()

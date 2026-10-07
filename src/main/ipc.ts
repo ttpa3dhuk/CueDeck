@@ -885,6 +885,11 @@ export function registerIpcHandlers(): void {
       video = { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: state.video.muted }
     }
 
+    // В эфире играл список — его проигрыватель останавливаем, иначе таймер фото
+    // через несколько секунд открыл бы следующий элемент прямо в эфир поверх
+    // только что выданного (двойной клик идёт через openFile — там остановка была).
+    stopListPlayback()
+
     // Swap: whatever was on air goes back into preview (frozen, muted) so repeated
     // takes ping-pong the two decks. If program was empty, preview becomes empty.
     const oldProgramPos = store.videoPositionSec()
