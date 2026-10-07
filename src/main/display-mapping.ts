@@ -5,6 +5,7 @@ import type { PlaylistEntry, RemoteSettings, VenueProfile, SlideTakeMode, TimerM
 import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 import {
   DEFAULT_OMT_SETTINGS,
+  OMT_FPS,
   OMT_OUTPUTS,
   OMT_RESOLUTIONS,
   DEFAULT_REMOTE_SETTINGS,
@@ -14,6 +15,7 @@ import {
   STREAM_HEIGHTS,
   STREAM_KEYFRAME_SEC,
   STREAM_MAX_DESTINATIONS,
+  type OmtFps,
   type OmtResolution,
   type OmtSettings,
   type StreamDestination,
@@ -603,6 +605,11 @@ export function cleanOmtResolution(v: unknown, def: OmtResolution): OmtResolutio
   return OMT_RESOLUTIONS.includes(v as OmtResolution) ? (v as OmtResolution) : def
 }
 
+/** Частота кадров выхода OMT: только из списка OMT_FPS, иначе дефолт. */
+export function cleanOmtFps(v: unknown, def: OmtFps): OmtFps {
+  return OMT_FPS.includes(v as OmtFps) ? (v as OmtFps) : def
+}
+
 export function getOmtSettings(): OmtSettings {
   const raw = (store().get('omt') ?? {}) as Partial<OmtSettings>
   const d = DEFAULT_OMT_SETTINGS
@@ -610,12 +617,15 @@ export function getOmtSettings(): OmtSettings {
     enabled: { ...d.enabled },
     names: { ...d.names },
     sizes: { ...d.sizes },
+    fps: { ...d.fps },
+    programAudio: raw.programAudio !== false,
     timerMessage: raw.timerMessage !== false,
   }
   for (const id of OMT_OUTPUTS) {
     out.enabled[id] = raw.enabled?.[id] === true
     out.names[id] = cleanOmtName(raw.names?.[id], d.names[id])
     out.sizes[id] = cleanOmtResolution(raw.sizes?.[id], d.sizes[id])
+    out.fps[id] = cleanOmtFps(raw.fps?.[id], d.fps[id])
   }
   return out
 }

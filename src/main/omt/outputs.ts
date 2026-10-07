@@ -25,12 +25,13 @@ import {
   OMT_OUTPUTS,
   OMT_OUTPUT_OFF,
   type OmtOutputId,
+  type OmtFps,
   type OmtOutputStatus,
   type OmtResolution,
   type OmtSettings,
   type OmtStatus,
 } from '../../shared/types.js'
-import { cleanOmtName, cleanOmtResolution, getOmtSettings, setOmtSettings } from '../display-mapping.js'
+import { cleanOmtFps, cleanOmtName, cleanOmtResolution, getOmtSettings, setOmtSettings } from '../display-mapping.js'
 import { allowAudienceCapture } from '../stream/streamer.js'
 import {
   acquireGhost,
@@ -56,7 +57,6 @@ import {
   type OmtLib,
 } from './libomt.js'
 
-const FPS = 30
 
 /** Ширина кадра 16:9 для разрешения выхода. */
 function widthOf(res: OmtResolution): number {
@@ -114,6 +114,8 @@ class OmtSender {
   private current: VmxFrame | null = null
   private sending: VmxFrame | null = null
   private pump: NodeJS.Timeout | null = null
+  /** Когда уйти следующему кадру (мс, performance.now) — счёт от расписания, а не от прошлого вызова: без накопленного опоздания. */
+  private nextAt = 0
   private poll: NodeJS.Timeout | null = null
   private closing = false
   private onStopped: (() => void) | null = null
@@ -126,6 +128,8 @@ class OmtSender {
     private readonly lib: OmtLib,
     readonly name: string,
     readonly size: OmtResolution,
+    /** Частота кадров; меняется на лету (setFps). */
+    public fps: OmtFps,
     private readonly alpha: boolean,
     private readonly onStatus: StatusFn,
   ) {}
@@ -146,7 +150,8 @@ class OmtSender {
     const n = lib.sendGetAddress(this.inst, addr, addr.length) as number
     this.address = n > 1 ? addr.toString('utf8', 0, n - 1) : null
 
-    this.pump = setInterval(() => this.sendCurrent(), Math.round(1000 / FPS))
+    this.nextAt = performance.now()
+    this.tickPump()
     let lastKey = ''
     const tally = { preview: 0, program: 0 }
     // Tally — 5 раз в секунду (лампа должна загораться сразу, вызов без ожидания
@@ -167,7 +172,25 @@ class OmtSender {
         this.onStatus(s)
       }
     }, 200)
-    log.info(`omt: выход «${this.address ?? this.name}» запущен, ${this.size}p`)
+    log.info(`omt: выход «${this.address ?? this.name}» запущен, ${this.size}p ${this.fps} к/с`)
+  }
+
+  /** Повтор последнего кадра с частотой fps. setInterval на 60 к/с давал бы 59 (округление до 17 мс). */
+  private tickPump(): void {
+    if (this.closing) return
+    this.sendCurrent()
+    const period = 1000 / this.fps
+    this.nextAt += period
+    const now = performance.now()
+    // Проспали (нагрузка, сон ноутбука) — не догоняем пачкой, а встаём в шаг заново.
+    if (this.nextAt < now - period) this.nextAt = now
+    this.pump = setTimeout(() => this.tickPump(), Math.max(0, this.nextAt - now))
+  }
+
+  setFps(fps: OmtFps): void {
+    if (fps === this.fps) return
+    this.fps = fps
+    log.info(`omt: «${this.name}» ${fps} к/с`)
   }
 
   /** Новый кадр от источника. Шире выбранного разрешения (Retina, 4K-проектор) — ужимаем. */
@@ -224,7 +247,7 @@ class OmtSender {
       Type: OMT_FRAME_VIDEO, Timestamp: omtNow(), Codec: OMT_CODEC_VMX1,
       Width: f.width, Height: f.height, Stride: f.width * 4,
       Flags: this.alpha ? OMT_FLAG_ALPHA | OMT_FLAG_PREMULTIPLIED : 0,
-      FrameRateN: FPS, FrameRateD: 1, AspectRatio: f.width / f.height, ColorSpace: VMX_COLORSPACE_BT709,
+      FrameRateN: this.fps, FrameRateD: 1, AspectRatio: f.width / f.height, ColorSpace: VMX_COLORSPACE_BT709,
       SampleRate: 0, Channels: 0, SamplesPerChannel: 0,
       Data: f.data, DataLength: f.data.length,
       CompressedData: null, CompressedLength: 0, FrameMetadata: null, FrameMetadataLength: 0,
@@ -269,7 +292,7 @@ class OmtSender {
 
   /** Остановить: дождаться кадра в работе, потом освободить отправителя и кодек. */
   stop(): Promise<void> {
-    if (this.pump) clearInterval(this.pump)
+    if (this.pump) clearTimeout(this.pump)
     if (this.poll) clearInterval(this.poll)
     this.pump = this.poll = null
     this.pendingRaw = null
@@ -296,7 +319,7 @@ class OmtSender {
   /** Выход программы: без ожиданий — что в работе, не трогаем, процесс всё равно завершается. */
   destroyNow(): void {
     this.closing = true
-    if (this.pump) clearInterval(this.pump)
+    if (this.pump) clearTimeout(this.pump)
     if (this.poll) clearInterval(this.poll)
     if (this.inst && !this.sending && !this.encoding) this.lib.sendDestroy(this.inst)
     this.inst = null
@@ -307,6 +330,8 @@ interface Output {
   readonly sender: OmtSender
   start(): void
   stop(): Promise<void>
+  /** Частота меняется на лету: источник в сети не пропадает. */
+  setFps(fps: OmtFps): void
 }
 
 /** Таймер: своё offscreen-окно на прозрачном фоне. */
@@ -323,8 +348,13 @@ class TimerOutput implements Output {
     const { size } = this.sender
     const win = createOmtOverlayWindow(Math.round(widthOf(size) / sf), Math.round(size / sf))
     this.win = win
-    win.webContents.setFrameRate(FPS)
+    win.webContents.setFrameRate(this.sender.fps)
     win.webContents.on('paint', (_e, _dirty, image) => this.sender.push(image))
+  }
+
+  setFps(fps: OmtFps): void {
+    this.sender.setFps(fps)
+    if (this.win && !this.win.isDestroyed()) this.win.webContents.setFrameRate(fps)
   }
 
   stop(): Promise<void> {
@@ -357,13 +387,27 @@ class WindowOutput implements Output {
     this.sender.start()
     this.follow()
     this.watch = setInterval(() => this.follow(), 500)
-    if (this.role === 'audience') {
+  }
+
+  setFps(fps: OmtFps): void {
+    this.sender.setFps(fps)
+  }
+
+  /** Звук эфира (только у зала) — включается и выключается без перезапуска источника. */
+  setAudio(on: boolean): void {
+    if (this.role !== 'audience') return
+    if (on && !this.audioWin) {
       const aw = createOmtAudioWindow()
       allowAudienceCapture(aw)
       this.audioWin = aw
       aw.on('closed', () => {
         if (this.audioWin === aw) this.audioWin = null
       })
+      log.info(`omt: «${this.sender.name}» со звуком`)
+    } else if (!on && this.audioWin) {
+      if (!this.audioWin.isDestroyed()) this.audioWin.destroy()
+      this.audioWin = null
+      log.info(`omt: «${this.sender.name}» без звука`)
     }
   }
 
@@ -436,18 +480,30 @@ function publish(patch: Partial<OmtStatus>): void {
   store.patch({ omt: status })
 }
 
+/** Настроечная часть статуса (копии, чтобы не делить объекты с файлом настроек). */
+function settingsPatch(v: OmtSettings): Partial<OmtStatus> {
+  return {
+    enabled: { ...v.enabled },
+    names: { ...v.names },
+    sizes: { ...v.sizes },
+    fps: { ...v.fps },
+    programAudio: v.programAudio,
+    timerMessage: v.timerMessage,
+  }
+}
+
 function publishOutput(id: OmtOutputId, patch: Partial<OmtOutputStatus>): void {
   publish({ outputs: { ...status.outputs, [id]: { ...status.outputs[id], ...patch } } })
 }
 
-function makeOutput(lib: OmtLib, id: OmtOutputId, name: string, size: OmtResolution): Output {
+function makeOutput(lib: OmtLib, id: OmtOutputId, name: string, size: OmtResolution, fps: OmtFps): Output {
   const onStatus: StatusFn = (s) => {
     if (outputs.get(id) === out) publishOutput(id, s)
   }
   const out: Output =
     id === 'timer'
-      ? new TimerOutput(new OmtSender(lib, name, size, true, onStatus))
-      : new WindowOutput(new OmtSender(lib, name, size, false, onStatus), id === 'program' ? 'audience' : 'speaker')
+      ? new TimerOutput(new OmtSender(lib, name, size, fps, true, onStatus))
+      : new WindowOutput(new OmtSender(lib, name, size, fps, false, onStatus), id === 'program' ? 'audience' : 'speaker')
   return out
 }
 
@@ -462,7 +518,12 @@ async function apply(next: OmtSettings): Promise<OmtStatus> {
       publishOutput(id, { ...OMT_OUTPUT_OFF })
     }
   }
-  publish({ enabled: { ...next.enabled }, names: { ...next.names }, sizes: { ...next.sizes }, timerMessage: next.timerMessage })
+  publish(settingsPatch(next))
+  // Что меняется на лету — частота и звук — у работающих выходов.
+  for (const [id, out] of outputs) {
+    out.setFps(next.fps[id])
+    if (out instanceof WindowOutput) out.setAudio(id === 'program' && next.programAudio)
+  }
   const wanted = OMT_OUTPUTS.filter((id) => next.enabled[id] && !outputs.has(id))
   if (wanted.length === 0) return status
   const lib = loadOmt()
@@ -474,10 +535,11 @@ async function apply(next: OmtSettings): Promise<OmtStatus> {
   }
   publish({ available: true, error: null })
   for (const id of wanted) {
-    const out = makeOutput(lib, id, next.names[id], next.sizes[id])
+    const out = makeOutput(lib, id, next.names[id], next.sizes[id], next.fps[id])
     try {
       outputs.set(id, out)
       out.start()
+      if (out instanceof WindowOutput) out.setAudio(id === 'program' && next.programAudio)
       publishOutput(id, { ...OMT_OUTPUT_OFF, state: 'on', address: out.sender.address })
     } catch (err) {
       const msg = (err as Error).message || String(err)
@@ -497,12 +559,15 @@ function sanitize(v: Partial<OmtSettings>): OmtSettings {
     enabled: { ...cur.enabled },
     names: { ...cur.names },
     sizes: { ...cur.sizes },
+    fps: { ...cur.fps },
+    programAudio: v.programAudio === undefined ? cur.programAudio : v.programAudio === true,
     timerMessage: v.timerMessage === undefined ? cur.timerMessage : v.timerMessage === true,
   }
   const used = new Set<string>()
   for (const id of OMT_OUTPUTS) {
     if (v.enabled?.[id] !== undefined) out.enabled[id] = v.enabled[id] === true
     if (v.sizes?.[id] !== undefined) out.sizes[id] = cleanOmtResolution(Number(v.sizes[id]), cur.sizes[id])
+    if (v.fps?.[id] !== undefined) out.fps[id] = cleanOmtFps(Number(v.fps[id]), cur.fps[id])
     let name = cleanOmtName(v.names?.[id] ?? cur.names[id], cur.names[id])
     if (used.has(name.toLowerCase())) name = `${name} ${id}`
     used.add(name.toLowerCase())
@@ -515,7 +580,7 @@ function sanitize(v: Partial<OmtSettings>): OmtSettings {
 export function initOmt(): void {
   const s = getOmtSettings()
   // Библиотеку не грузим, пока выход не включён: кому OMT не нужен, тот её и не загружает.
-  publish({ enabled: { ...s.enabled }, names: { ...s.names }, sizes: { ...s.sizes }, timerMessage: s.timerMessage })
+  publish(settingsPatch(s))
   if (OMT_OUTPUTS.some((id) => s.enabled[id])) chain = chain.then(() => apply(s))
   process.on('exit', () => {
     for (const out of outputs.values()) out.sender.destroyNow()

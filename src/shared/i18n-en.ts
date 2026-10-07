@@ -790,7 +790,7 @@ export const EN: Record<string, string> = {
   '⚠ OMT недоступен на этом компьютере: {error}': '⚠ OMT is not available on this computer: {error}',
   '● в сети': '● on the network',
   'Зал': 'Audience',
-  '(со звуком)': '(with sound)',
+  'Звук эфира': 'Program sound',
   '⚠ недоступно': '⚠ not available',
   '(прозрачный фон)': '(transparent background)',
   'Сообщение спикеру на таймере': 'Speaker message on the timer',

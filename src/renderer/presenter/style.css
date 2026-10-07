@@ -1902,8 +1902,8 @@ body[data-role="operator"] #current-slide {
 .remote-status.error { color: var(--danger); }
 /* Выходы OMT — раздел окна «Настройки» */
 .omt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; font-size: 13px; }
-.omt-row { display: grid; grid-template-columns: minmax(0, 1fr) 170px 84px; align-items: center; gap: 4px 12px; }
-.omt-row .omt-name, .omt-row .omt-size { min-width: 0; }
+.omt-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px 76px 76px; align-items: center; gap: 4px 10px; }
+.omt-row .omt-name, .omt-row .omt-size, .omt-row .omt-fps { min-width: 0; }
 /* Статус — второй строкой под выходом, на всю ширину: в колонке справа ломался по буквам. */
 .omt-row .omt-status { grid-column: 1 / -1; padding-left: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .omt-row .omt-status:empty { display: none; }
@@ -1916,7 +1916,7 @@ body[data-role="operator"] #current-slide {
   font-size: 13px;
   font-family: inherit;
 }
-.omt-row.off .omt-name, .omt-row.off .omt-size { opacity: 0.55; }
+.omt-row.off .omt-name, .omt-row.off .omt-size, .omt-row.off .omt-fps { opacity: 0.55; }
 .omt-sub { margin: -4px 0 4px 24px; }
 .omt-sub.off { opacity: 0.55; }
 

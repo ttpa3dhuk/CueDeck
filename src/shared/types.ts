@@ -344,6 +344,14 @@ export type OmtResolution = 720 | 1080 | 2160
 
 export const OMT_RESOLUTIONS: readonly OmtResolution[] = [720, 1080, 2160]
 
+/**
+ * Частота кадров выхода. Неподвижную картинку мы повторяем с этой частотой,
+ * а кодек VMX сжимает каждый кадр целиком — поток пропорционален частоте.
+ */
+export type OmtFps = 15 | 25 | 30 | 50 | 60
+
+export const OMT_FPS: readonly OmtFps[] = [15, 25, 30, 50, 60]
+
 export interface OmtSettings {
   /** Какие выходы отдавать в сеть. */
   enabled: Record<OmtOutputId, boolean>
@@ -354,6 +362,10 @@ export interface OmtSettings {
    * ужимаются, а меньше — уходят как есть (получатель растянет сам).
    */
   sizes: Record<OmtOutputId, OmtResolution>
+  /** Частота кадров. */
+  fps: Record<OmtOutputId, OmtFps>
+  /** Отдавать в выход «Зал» звук эфира. */
+  programAudio: boolean
   /** Показывать на таймере сообщение спикеру. */
   timerMessage: boolean
 }
@@ -388,6 +400,8 @@ export const DEFAULT_OMT_SETTINGS: OmtSettings = {
   enabled: { timer: false, program: false, prompter: false },
   names: { timer: 'CueDeck Timer', program: 'CueDeck Program', prompter: 'CueDeck Prompter' },
   sizes: { timer: 1080, program: 1080, prompter: 1080 },
+  fps: { timer: 30, program: 30, prompter: 30 },
+  programAudio: true,
   timerMessage: true,
 }
 

@@ -654,16 +654,23 @@
                     <option value="1080">1080p</option>
                     <option value="2160">4K</option>
                   </select>
+                  <select class="omt-fps">
+                    <option value="15">15 fps</option>
+                    <option value="25">25 fps</option>
+                    <option value="30">30 fps</option>
+                    <option value="50">50 fps</option>
+                    <option value="60">60 fps</option>
+                  </select>
                   <span class="omt-status remote-status"></span>
                 </div>
-                <label class="windowed-label omt-sub">
+                <label class="windowed-label omt-sub" data-sub="timer">
                   <input id="omt-timer-message" type="checkbox" />
                   <span>Сообщение спикеру на таймере</span>
                 </label>
                 <div class="omt-row" data-omt="program">
                   <label class="windowed-label">
                     <input class="omt-on" type="checkbox" />
-                    <span>Зал <span class="windowed-hint">(со звуком)</span></span>
+                    <span>Зал</span>
                   </label>
                   <input class="omt-name" type="text" spellcheck="false" maxlength="64" />
                   <select class="omt-size">
@@ -671,8 +678,19 @@
                     <option value="1080">1080p</option>
                     <option value="2160">4K</option>
                   </select>
+                  <select class="omt-fps">
+                    <option value="15">15 fps</option>
+                    <option value="25">25 fps</option>
+                    <option value="30">30 fps</option>
+                    <option value="50">50 fps</option>
+                    <option value="60">60 fps</option>
+                  </select>
                   <span class="omt-status remote-status"></span>
                 </div>
+                <label class="windowed-label omt-sub" data-sub="program">
+                  <input id="omt-program-audio" type="checkbox" />
+                  <span>Звук эфира</span>
+                </label>
                 <div class="omt-row" data-omt="prompter">
                   <label class="windowed-label">
                     <input class="omt-on" type="checkbox" />
@@ -683,6 +701,13 @@
                     <option value="720">720p</option>
                     <option value="1080">1080p</option>
                     <option value="2160">4K</option>
+                  </select>
+                  <select class="omt-fps">
+                    <option value="15">15 fps</option>
+                    <option value="25">25 fps</option>
+                    <option value="30">30 fps</option>
+                    <option value="50">50 fps</option>
+                    <option value="60">60 fps</option>
                   </select>
                   <span class="omt-status remote-status"></span>
                 </div>

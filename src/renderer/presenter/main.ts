@@ -21,7 +21,7 @@ import { getLang, t, type Lang } from '../../shared/i18n'
 import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
 import { OMT_OUTPUTS } from '../../shared/types'
-import type { ListMode, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
+import type { ListMode, OmtFps, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL } from '../../preload/api'
 import { initStreamUi } from './stream-ui'
 import type {
@@ -3840,6 +3840,7 @@ function omtRows(): Array<{
   on: HTMLInputElement
   name: HTMLInputElement
   size: HTMLSelectElement
+  fps: HTMLSelectElement
   status: HTMLElement
 }> {
   return Array.from(document.querySelectorAll<HTMLElement>('#omt-section .omt-row')).map((row) => ({
@@ -3848,6 +3849,7 @@ function omtRows(): Array<{
     on: row.querySelector<HTMLInputElement>('.omt-on')!,
     name: row.querySelector<HTMLInputElement>('.omt-name')!,
     size: row.querySelector<HTMLSelectElement>('.omt-size')!,
+    fps: row.querySelector<HTMLSelectElement>('.omt-fps')!,
     status: row.querySelector<HTMLElement>('.omt-status')!,
   }))
 }
@@ -3859,27 +3861,41 @@ function wireOmtSection(omt: OmtStatus): void {
     r.on.checked = omt.enabled[r.id]
     r.name.value = omt.names[r.id]
     r.size.value = String(omt.sizes[r.id])
+    r.fps.value = String(omt.fps[r.id])
   }
+  const audio = $<HTMLInputElement>('omt-program-audio')
+  audio.checked = omt.programAudio
   message.checked = omt.timerMessage
   renderOmtStatus(omt)
   const commit = async (): Promise<void> => {
     const enabled = { ...omt.enabled }
     const names = { ...omt.names }
     const sizes = { ...omt.sizes }
+    const fps = { ...omt.fps }
     for (const r of rows) {
       enabled[r.id] = r.on.checked
       names[r.id] = r.name.value
       sizes[r.id] = Number(r.size.value) as OmtResolution
+      fps[r.id] = Number(r.fps.value) as OmtFps
     }
-    const res = await window.api.omt.configure({ enabled, names, sizes, timerMessage: message.checked })
+    const res = await window.api.omt.configure({
+      enabled,
+      names,
+      sizes,
+      fps,
+      programAudio: audio.checked,
+      timerMessage: message.checked,
+    })
     // Пустое имя, скобки, совпадение с соседним — main поправил: показываем, что реально стоит.
     for (const r of rows) r.name.value = res.status.names[r.id]
   }
   message.onchange = () => void commit()
+  audio.onchange = () => void commit()
   for (const r of rows) {
     r.on.onchange = () => void commit()
     r.name.onchange = () => void commit()
     r.size.onchange = () => void commit()
+    r.fps.onchange = () => void commit()
     r.name.onkeydown = (e) => {
       e.stopPropagation()
       if (e.key === 'Enter') r.name.blur()
@@ -3909,7 +3925,8 @@ function renderOmtStatus(o: OmtStatus): void {
     else if (st.preview) parts.push(t('в превью'))
     r.status.textContent = parts.join(' · ')
   }
-  document.querySelector('.omt-sub')?.classList.toggle('off', !o.enabled.timer)
+  document.querySelector('.omt-sub[data-sub="timer"]')?.classList.toggle('off', !o.enabled.timer)
+  document.querySelector('.omt-sub[data-sub="program"]')?.classList.toggle('off', !o.enabled.program)
   const err = document.getElementById('omt-error')
   if (err) {
     err.classList.toggle('hidden', o.available !== false)

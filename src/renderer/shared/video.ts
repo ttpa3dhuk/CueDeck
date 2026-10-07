@@ -139,11 +139,11 @@ export function shouldMute(state: AppState, role: Role): boolean {
 }
 
 /**
- * Звук зала кто-то снимает: трансляция или выход OMT «Зал». Тогда и в solo
+ * Звук зала кто-то снимает: трансляция или выход OMT «Зал» со звуком. Тогда и в solo
  * звучит (скрытое) окно зала — иначе в захват попадала бы тишина.
  */
 export function programCaptured(state: AppState): boolean {
-  return Boolean(state.stream?.running) || state.omt?.outputs?.program?.state === 'on'
+  return Boolean(state.stream?.running) || (state.omt?.outputs?.program?.state === 'on' && state.omt.programAudio)
 }
 
 const DEFAULT_DRIFT_SEC = 0.4

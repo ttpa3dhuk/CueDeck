@@ -129,6 +129,8 @@ export function initialState(): AppState {
       enabled: { ...DEFAULT_OMT_SETTINGS.enabled },
       names: { ...DEFAULT_OMT_SETTINGS.names },
       sizes: { ...DEFAULT_OMT_SETTINGS.sizes },
+      fps: { ...DEFAULT_OMT_SETTINGS.fps },
+      programAudio: DEFAULT_OMT_SETTINGS.programAudio,
       timerMessage: DEFAULT_OMT_SETTINGS.timerMessage,
       available: null,
       error: null,
