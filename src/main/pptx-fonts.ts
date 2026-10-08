@@ -72,6 +72,7 @@ function masterStyleFace(masterXml: string, tag: string): string | null {
  *
  * Берём каждый ран с текстом: явный шрифт, а если его нет — унаследованный
  * (заголовок → шрифт заголовков мастера или темы, остальное → основной).
+ * Диаграммы (ppt/charts) и схемы SmartArt (ppt/diagrams) читаем отдельно.
  * Макеты не разбираем: переопределение шрифта на уровне макета бывает редко.
  * Только латиница (`a:latin`): для иероглифов и сложных письменностей
  * LibreOffice подбирает шрифт сам.
@@ -132,6 +133,17 @@ export function requestedFonts(
       return ''
     })
     addRuns(rest, false) // таблицы и группы вне p:sp
+  }
+
+  // Диаграммы и схемы SmartArt лежат в своих частях архива, не в слайде. Шрифт
+  // там обычно задан явно и именно там, где он нужен, поэтому берём его целиком.
+  for (const n of names) {
+    const xml = /^ppt\/(charts\/chart|diagrams\/drawing)[^/]*\.xml$/.test(n) ? text(n) : null
+    if (!xml) continue
+    for (const face of latinFaces(xml)) {
+      const f = resolve(face, false)
+      if (f && !SYMBOL_FONTS.test(f)) found.add(f)
+    }
   }
   return [...found].sort((a, b) => a.localeCompare(b))
 }

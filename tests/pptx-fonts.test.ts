@@ -59,6 +59,16 @@ describe('requestedFonts', () => {
     const got = requestedFonts(Object.keys(files), (n) => files[n] ?? null, ['ppt/slides/slide1.xml'])
     expect(got).toEqual(['Aptos', 'Aptos Display', 'Gotham Pro'])
   })
+  it('читает шрифты диаграмм и SmartArt, а не только слайдов', () => {
+    const withCharts: Record<string, string> = {
+      ...files,
+      'ppt/slides/slide1.xml': '<p:sp>' + run('Текст', 'Arial') + '</p:sp>',
+      'ppt/charts/chart1.xml': '<c:txPr><a:defRPr><a:latin typeface="SB Sans Text Semibold"/></a:defRPr></c:txPr>',
+      'ppt/diagrams/drawing1.xml': '<p:sp>' + run('Схема', 'Gotham Pro') + '</p:sp>',
+    }
+    const got = requestedFonts(Object.keys(withCharts), (n) => withCharts[n] ?? null, ['ppt/slides/slide1.xml'])
+    expect(got).toEqual(['Arial', 'Gotham Pro', 'SB Sans Text Semibold'])
+  })
   it('шрифт, который есть только в теме, а в тексте не используется, не считается', () => {
     const only: Record<string, string> = {
       ...files,
