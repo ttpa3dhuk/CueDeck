@@ -1,4 +1,5 @@
-import { dialog, globalShortcut, ipcMain, screen } from 'electron'
+import { app, dialog, globalShortcut, ipcMain, screen } from 'electron'
+import { homedir } from 'node:os'
 import { access, copyFile, mkdir, readFile, rm } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { basename, join } from 'node:path'
@@ -73,6 +74,10 @@ import { indexFolder, pickBestCandidate, uniqueName } from './project-files.js'
 import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, convertPptxToPdf, findSoffice, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
 import { preparePptxMedia } from './pptx-media.js'
+import { substitutedFonts } from './pptx-fonts.js'
+import { log } from './diag.js'
+import { addFonts, addedFontsCount, removeAddedFonts, type FontHooks } from './user-fonts.js'
+import { installWinFont, uninstallWinFont } from './win-fonts.js'
 import {
   loadProjectFile,
   PROJECT_EXTENSION,
@@ -167,6 +172,19 @@ function ownNotes(sha1: string, notes: Record<number, string>): Record<number, s
   return out
 }
 
+/** Запомнить, какие шрифты PPTX подменены; патч только при изменении. */
+function setFontIssues(filePath: string, fonts: string[]): void {
+  const cur = store.get().fontIssues
+  const had = cur[filePath]
+  if (fonts.length === 0 && !had) return
+  if (had && had.length === fonts.length && had.every((f, i) => f === fonts[i])) return
+  const next = { ...cur }
+  if (fonts.length > 0) next[filePath] = fonts
+  else delete next[filePath]
+  store.patch({ fontIssues: next })
+  if (fonts.length > 0) log.warn(`[fonts] ${filePath}: подменены ${fonts.join(', ')}`) // i18n-ok
+}
+
 /** Read a file's identity + page count + sidecar notes. Shared by both decks. */
 async function inspectFile(filePath: string): Promise<InspectedFile> {
   const kind = kindOf(filePath)
@@ -201,6 +219,7 @@ async function inspectFile(filePath: string): Promise<InspectedFile> {
       const cachedPath = await convertPptxToPdf(prepared.convertSource, sha1)
       const buf = await readFile(cachedPath)
       totalSlides = countPdfPages(buf)
+      setFontIssues(filePath, substitutedFonts(prepared.fonts, buf))
     } finally {
       if (prepared.temporary) rm(prepared.convertSource, { force: true }).catch(() => undefined)
     }
@@ -1724,6 +1743,81 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('soffice:check', async () => {
     return Boolean(await findSoffice())
+  })
+
+  /**
+   * «Шрифты поставил — пересобрать»: сбросить PDF этого PPTX из кэша и
+   * конвертировать заново. Открытый сейчас слайд не трогаем: новый PDF
+   * подхватится, когда спикера выберут снова.
+   */
+  ipcMain.handle('pptx:rebuild', async (_e, filePath: string) => {
+    try {
+      if (kindOf(filePath) !== 'pptx') return { ok: false, error: t('Это не PPTX') }
+      const sha1 = await computePdfSha1(filePath)
+      await rm(cachedPdfPathFor(sha1), { force: true })
+      await inspectFile(filePath)
+      return { ok: true, remaining: store.get().fontIssues[filePath] ?? [] }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  /**
+   * Шрифты, которые принесли с презентацией: копируем в папку шрифтов
+   * пользователя (мак — ~/Library/Fonts, Windows — %LOCALAPPDATA%\Microsoft\
+   * Windows\Fonts + регистрация) — LibreOffice берёт шрифты лишь у системы.
+   * Список добавленного ведём, чтобы «Убрать» стирало ровно это.
+   */
+  const fontsDir = (): string | null => {
+    if (process.platform === 'darwin') return join(homedir(), 'Library', 'Fonts')
+    if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
+      return join(process.env.LOCALAPPDATA, 'Microsoft', 'Windows', 'Fonts')
+    }
+    return null
+  }
+  const fontHooks: FontHooks =
+    process.platform === 'win32' ? { install: installWinFont, uninstall: uninstallWinFont } : {}
+  const fontsList = (): string => join(app.getPath('userData'), 'added-fonts.json')
+
+  ipcMain.handle('fonts:info', async () => ({
+    supported: fontsDir() !== null,
+    added: await addedFontsCount(fontsList()),
+  }))
+
+  ipcMain.handle('fonts:add', async () => {
+    const dir = fontsDir()
+    if (!dir) return { ok: false, error: t('Здесь добавить шрифты нельзя: только macOS и Windows') }
+    const res = await dialog.showOpenDialog(getOperatorWindow()!, {
+      title: t('Выбери папку со шрифтами или сами файлы'),
+      properties: ['openFile', 'openDirectory', 'multiSelections'],
+      filters: [{ name: t('Шрифты'), extensions: ['ttf', 'otf', 'ttc', 'otc'] }],
+    })
+    if (res.canceled || res.filePaths.length === 0) return { ok: false, cancelled: true }
+    try {
+      const out = await addFonts(res.filePaths, dir, fontsList(), fontHooks)
+      log.info(`[fonts] добавлено ${out.added.length}, уже были ${out.skipped.length}, не приняты ${out.failed.join(', ') || '—'}`) // i18n-ok
+      return {
+        ok: true,
+        added: out.added.length - out.failed.length,
+        skipped: out.skipped.length,
+        failed: out.failed,
+        found: out.added.length + out.skipped.length,
+      }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('fonts:remove', async () => {
+    const dir = fontsDir()
+    if (!dir) return { ok: false, error: t('Здесь добавить шрифты нельзя: только macOS и Windows') }
+    try {
+      const removed = await removeAddedFonts(dir, fontsList(), fontHooks)
+      log.info(`[fonts] убрано ${removed}`) // i18n-ok
+      return { ok: true, removed }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
   })
 
   /** Какой soffice сейчас используется — для раздела «Настройки → PPTX / LibreOffice». */

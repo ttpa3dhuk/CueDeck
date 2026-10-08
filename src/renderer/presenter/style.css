@@ -2320,3 +2320,24 @@ html[lang="en"] {
   --t-badge-program: '● ON AIR';
   --t-kv-video: '▶ VIDEO';
 }
+
+/* Окошко со списком подменённых шрифтов у значка ⚠ на карточке PPTX */
+#font-popup {
+  position: fixed;
+  z-index: 1000;
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  padding: 12px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--warning);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+}
+#font-popup .fp-title { font-weight: 600; margin-bottom: 6px; }
+#font-popup ul { margin: 0 0 8px; padding-left: 18px; max-height: 160px; overflow: auto; }
+#font-popup .fp-hint { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+#font-popup .fp-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+#font-popup .fp-row button { white-space: nowrap; }
+#font-popup .fp-note { color: var(--muted); font-size: 11px; }

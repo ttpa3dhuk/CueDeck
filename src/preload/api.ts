@@ -324,6 +324,17 @@ export interface PresenterApi {
     hasLast(): Promise<boolean>
     restore(): Promise<OpenPdfResult & { hadSession: boolean }>
   }
+  fonts: {
+    info(): Promise<{ supported: boolean; added: number }>
+    /** Выбрать папку/файлы шрифтов и поставить для текущего пользователя (мак, Windows). */
+    add(): Promise<{ ok: boolean; cancelled?: boolean; added?: number; skipped?: number; failed?: string[]; found?: number; error?: string }>
+    /** Убрать ровно те шрифты, которые добавила программа. */
+    remove(): Promise<{ ok: boolean; removed?: number; error?: string }>
+  }
+  pptx: {
+    /** Сбросить кэш PDF этого PPTX и сконвертировать заново (после установки шрифтов). */
+    rebuild(path: string): Promise<{ ok: boolean; remaining?: string[]; error?: string }>
+  }
   soffice: {
     check(): Promise<boolean>
     /** Путь к используемому soffice или null. */

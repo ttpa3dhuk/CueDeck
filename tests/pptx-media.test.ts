@@ -88,6 +88,7 @@ describe('preparePptxMedia (деградация)', () => {
     expect(prepared).toEqual({
       slideMedia: [],
       pageNotes: {},
+      fonts: [],
       convertSource: '/nowhere/deck.odp',
       temporary: false,
     })

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { app } from 'electron'
 import type { SlideMedia } from '../shared/types.js'
 import { cachedPdfPathFor } from './pptx-converter.js'
+import { requestedFonts } from './pptx-fonts.js'
 
 /**
  * PPTX-препроцессор перед конвертацией в PDF. Закрывает две фичи:
@@ -37,9 +38,9 @@ const PLAYABLE_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm'])
 /** Всё видеообразное стрипаем из копии для LibreOffice (вес PDF). */
 const STRIP_EXTS = new Set([...PLAYABLE_EXTS, 'avi', 'wmv', 'mpg', 'mpeg', 'mkv', '3gp', 'asf'])
 
-const MANIFEST_VERSION = 3
+const MANIFEST_VERSION = 5
 /** Манифесты с этими версиями писались от той же пересборки — PDF в кэше годен. */
-const COMPATIBLE_PDF_VERSIONS = new Set([2, 3])
+const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5])
 
 const SLIDE_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'
@@ -58,12 +59,16 @@ interface MediaManifest {
   slideMedia: SlideMedia[]
   /** Заметки докладчика: номер страницы PDF (1-based) → текст. */
   pageNotes: Record<number, string>
+  /** Шрифты, которые просит презентация (проверка подмены — pptx-fonts.ts). */
+  fonts: string[]
 }
 
 export interface PreparedPptxMedia {
   slideMedia: SlideMedia[]
   /** Заметки докладчика из PPTX по страницам PDF (1-based). */
   pageNotes: Record<number, string>
+  /** Шрифты, которые просит презентация. */
+  fonts: string[]
   /** Что отдавать LibreOffice: пересобранная копия или оригинал. */
   convertSource: string
   /** convertSource — временный файл, удалить после конверсии. */
@@ -670,6 +675,7 @@ interface TransformResult {
   slideMedia: SlideMedia[]
   videos: FoundVideo[]
   pageNotes: Record<number, string>
+  fonts: string[]
 }
 
 function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
@@ -684,9 +690,14 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   }
 
   const pres = parsePresentation(text)
-  if (!pres) return { zip: null, slideMedia: [], videos: [], pageNotes: {} }
+  if (!pres) return { zip: null, slideMedia: [], videos: [], pageNotes: {}, fonts: [] }
 
   const videos = findSlideVideos(pres, text, (n) => byName.has(n))
+  const fonts = requestedFonts(
+    entries.map((e) => e.name),
+    text,
+    pres.slidePaths.filter((_, i) => !pres.hidden.has(i)),
+  )
   const videoSlides = new Set(videos.map((v) => v.slideIdx))
 
   // Шаги анимаций; слайды с видео не разворачиваем (клик-запуск ролика
@@ -727,7 +738,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
     file: v.mediaEntry.split('/').pop()!,
   }))
 
-  if (strip.size === 0 && stepsBySlide.size === 0) return { zip: null, slideMedia, videos, pageNotes }
+  if (strip.size === 0 && stepsBySlide.size === 0) return { zip: null, slideMedia, videos, pageNotes, fonts }
 
   const replace = new Map<string, Buffer>()
   const add: { name: string; data: Buffer }[] = []
@@ -794,7 +805,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
     replace.set('[Content_Types].xml', Buffer.from(contentTypes))
   }
 
-  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, videos, pageNotes }
+  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, videos, pageNotes, fonts }
 }
 
 // ── Публичный вход ───────────────────────────────────────────────────────────
@@ -812,7 +823,10 @@ async function readManifest(
     const parsed = JSON.parse(raw) as MediaManifest
     if (!Array.isArray(parsed.slideMedia)) return { current: null, pdfValid: false }
     const current =
-      parsed.version === MANIFEST_VERSION && parsed.pageNotes && typeof parsed.pageNotes === 'object'
+      parsed.version === MANIFEST_VERSION &&
+      parsed.pageNotes &&
+      typeof parsed.pageNotes === 'object' &&
+      Array.isArray(parsed.fonts)
         ? parsed
         : null
     return { current, pdfValid: COMPATIBLE_PDF_VERSIONS.has(parsed.version) }
@@ -839,6 +853,7 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
   const original: PreparedPptxMedia = {
     slideMedia: [],
     pageNotes: {},
+    fonts: [],
     convertSource: pptxPath,
     temporary: false,
   }
@@ -848,7 +863,12 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
   try {
     const { current: cached, pdfValid } = await readManifest(sha1)
     if (cached) {
-      const fromCache = { ...original, slideMedia: cached.slideMedia, pageNotes: cached.pageNotes }
+      const fromCache = {
+        ...original,
+        slideMedia: cached.slideMedia,
+        pageNotes: cached.pageNotes,
+        fonts: cached.fonts,
+      }
       if (!cached.rebuilt || existsSync(cachedPdfPathFor(sha1))) return fromCache
       // PDF из кэша пропал — пересобираем копию заново.
       const data = await readFile(pptxPath)
@@ -857,6 +877,7 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
       return {
         slideMedia: t.slideMedia,
         pageNotes: t.pageNotes,
+        fonts: t.fonts,
         convertSource: await writeRebuilt(sha1, t.zip),
         temporary: true,
       }
@@ -883,10 +904,11 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
       rebuilt: t.zip !== null,
       slideMedia: t.slideMedia,
       pageNotes: t.pageNotes,
+      fonts: t.fonts,
     }
     await writeFile(manifestPathFor(sha1), JSON.stringify(manifest))
 
-    const parsed = { ...original, slideMedia: t.slideMedia, pageNotes: t.pageNotes }
+    const parsed = { ...original, slideMedia: t.slideMedia, pageNotes: t.pageNotes, fonts: t.fonts }
     if (!t.zip) return parsed
     // Манифест прошлой версии: PDF собран от такой же пересборки — годен.
     if (pdfValid && existsSync(cachedPdfPathFor(sha1))) return parsed

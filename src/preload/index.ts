@@ -251,6 +251,14 @@ const api: PresenterApi = {
     hasLast: () => ipcRenderer.invoke('session:has-last'),
     restore: () => ipcRenderer.invoke('session:restore'),
   },
+  fonts: {
+    info: () => ipcRenderer.invoke('fonts:info'),
+    add: () => ipcRenderer.invoke('fonts:add'),
+    remove: () => ipcRenderer.invoke('fonts:remove'),
+  },
+  pptx: {
+    rebuild: (path: string) => ipcRenderer.invoke('pptx:rebuild', path),
+  },
   soffice: {
     current: () => ipcRenderer.invoke('soffice:current'),
     check: () => ipcRenderer.invoke('soffice:check'),

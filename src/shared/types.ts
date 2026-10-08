@@ -250,6 +250,11 @@ export interface AppState {
    * записи для пачки из сорока файлов ничего не говорит оператору.
    */
   missingPaths: string[]
+  /**
+   * PPTX, у которых LibreOffice подставил другие шрифты (путь → названия из
+   * презентации). Вёрстка таких слайдов может отличаться от PowerPoint.
+   */
+  fontIssues: Record<string, string[]>
   currentPlaylistId: string | null
   playlistCompact: boolean
   autoAdvance: boolean

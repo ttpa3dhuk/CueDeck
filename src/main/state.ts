@@ -83,6 +83,7 @@ export function initialState(): AppState {
     playlist: [],
     missingIds: [],
     missingPaths: [],
+    fontIssues: {},
     currentPlaylistId: null,
     playlistCompact: false,
     autoAdvance: false,

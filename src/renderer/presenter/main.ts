@@ -16,6 +16,7 @@ import {
 } from '../shared/video'
 import { elementAudioStream, LiveMeter, LivePool, LiveView, listMediaDevices } from '../shared/live-stream'
 import { liveDisplayName, liveFitFor, parseLiveUri } from '../../shared/live'
+import { isMicrosoftFont } from '../../shared/ms-fonts'
 import { WINDOW_TITLES } from '../../shared/window-titles'
 import { getLang, t, type Lang } from '../../shared/i18n'
 import { translateDom } from '../shared/i18n-dom'
@@ -999,12 +1000,20 @@ async function activateEntry(entry: PlaylistEntry, live: boolean): Promise<void>
       showLoModal()
       return
     }
-    showBanner(t('Конвертация PPTX через LibreOffice…'), 60_000)
   }
+  // Из кэша PPTX открывается мгновенно — баннер нужен только при настоящей
+  // конвертации, иначе он мигает на каждом переключении.
+  const convertTimer =
+    entry.kind === 'pptx'
+      ? window.setTimeout(() => showBanner(t('Конвертация PPTX через LibreOffice…'), 60_000), 600)
+      : null
   const res = live
     ? await window.api.playlist.activateLive(entry.id)
     : await window.api.playlist.activate(entry.id)
-  if (entry.kind === 'pptx') banner.classList.add('hidden')
+  if (convertTimer !== null) {
+    window.clearTimeout(convertTimer)
+    banner.classList.add('hidden')
+  }
   if (!res.ok && res.error) showBanner(t('Ошибка: {error}', { error: res.error }), 8000)
 }
 
@@ -1352,6 +1361,185 @@ function renderPlaylist(state: AppState): void {
 
   updateLibreOfficeNotice(state)
   updateMissingNotice(state)
+  updateFontNotice(state)
+}
+
+/** Названия шрифтов для подсказки: первые три, остальное счётом. */
+function fontListText(fonts: string[]): string {
+  const head = fonts.slice(0, 3).join(', ')
+  return fonts.length > 3 ? `${head} ${t('и ещё {n}', { n: fonts.length - 3 })}` : head
+}
+
+/**
+ * Окошко у значка ⚠: какие шрифты подменены и кнопка «Пересобрать» — после
+ * установки шрифтов PDF из кэша устарел, его надо сконвертировать заново.
+ */
+function showFontPopup(anchor: HTMLElement, path: string): void {
+  document.getElementById('font-popup')?.remove()
+  const fonts = getState().fontIssues[path] ?? []
+
+  const pop = document.createElement('div')
+  pop.id = 'font-popup'
+  pop.dataset.path = path
+  const title = document.createElement('div')
+  title.className = 'fp-title'
+  title.textContent =
+    fonts.length > 0
+      ? t('Этих шрифтов нет на компьютере, вместо них подставлены другие. Текст на слайдах может переноситься иначе.')
+      : t('Шрифты в порядке: всё, что просит презентация, найдено.')
+  const list = document.createElement('ul')
+  for (const f of fonts) {
+    const li = document.createElement('li')
+    li.textContent = f
+    if (isMicrosoftFont(f)) {
+      // Оператору — чтобы не гонялся: это шрифт Windows/Office, заказчика о нём не просим.
+      const note = document.createElement('span')
+      note.className = 'fp-note'
+      note.textContent = t('шрифт Microsoft, идёт с Windows и Office')
+      li.append(' ', note)
+    }
+    list.append(li)
+  }
+  const hint = document.createElement('div')
+  hint.className = 'fp-hint'
+  hint.textContent =
+    fonts.length > 0
+      ? t('Поставил шрифты? Пересобери: старый PDF лежит в кэше. Открытый сейчас слайд не изменится, пока спикера не выберут снова.')
+      : t('Шрифты менялись? Пересобери: старый PDF лежит в кэше. Открытый сейчас слайд не изменится, пока спикера не выберут снова.')
+  const rebuild = document.createElement('button')
+  rebuild.className = 'primary'
+  rebuild.textContent = t('Пересобрать')
+  const copyBtn = document.createElement('button')
+  copyBtn.textContent = t('Скопировать список')
+  copyBtn.title = t('Текст для заказчика: какие шрифты прислать')
+  // Шрифты Microsoft заказчику не называем: они ставятся с Windows и Office.
+  const customerFonts = fonts.filter((f) => !isMicrosoftFont(f))
+  copyBtn.hidden = customerFonts.length === 0
+  copyBtn.addEventListener('click', () => {
+    const msg = t('В презентации «{name}» не хватает шрифтов: {fonts}. Пришлите, пожалуйста, файлы этих шрифтов (.ttf или .otf).', {
+      name: baseName(path),
+      fonts: customerFonts.join(', '),
+    })
+    void navigator.clipboard.writeText(msg)
+    copyBtn.textContent = t('Скопировано')
+  })
+  const addBtn = document.createElement('button')
+  addBtn.textContent = t('Добавить шрифты…')
+  addBtn.hidden = true
+  void window.api.fonts.info().then((i) => { addBtn.hidden = !i.supported }).catch(() => undefined)
+  const close = document.createElement('button')
+  close.textContent = t('Закрыть')
+  const row = document.createElement('div')
+  row.className = 'fp-row'
+  row.append(copyBtn, addBtn, rebuild, close)
+  pop.append(title, ...(fonts.length > 0 ? [list] : []), hint, row)
+  document.body.append(pop)
+
+  const r = anchor.getBoundingClientRect()
+  pop.style.left = `${Math.min(r.left, window.innerWidth - pop.offsetWidth - 12)}px`
+  pop.style.top = `${Math.min(r.bottom + 6, window.innerHeight - pop.offsetHeight - 12)}px`
+
+  const dismiss = (): void => {
+    pop.remove()
+    document.removeEventListener('mousedown', onOutside, true)
+    document.removeEventListener('keydown', onKey, true)
+  }
+  const onOutside = (e: MouseEvent): void => {
+    if (!pop.contains(e.target as Node)) dismiss()
+  }
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') dismiss()
+  }
+  document.addEventListener('mousedown', onOutside, true)
+  document.addEventListener('keydown', onKey, true)
+  close.addEventListener('click', dismiss)
+  const runRebuild = async (): Promise<void> => {
+    addBtn.disabled = true
+    rebuild.disabled = true
+    rebuild.textContent = t('Пересобираю…')
+    const res = await window.api.pptx.rebuild(path)
+    dismiss()
+    if (!res.ok) showBanner(t('Ошибка: {error}', { error: res.error ?? '' }), 8000)
+    else if (res.remaining && res.remaining.length > 0)
+      showBanner(t('Шрифты всё ещё не найдены: {fonts}', { fonts: fontListText(res.remaining) }), 8000)
+    else showBanner(t('Готово: шрифты на месте. Выбери спикера заново, чтобы увидеть новый вид'), 8000)
+  }
+  rebuild.addEventListener('click', () => void runRebuild())
+  addBtn.addEventListener('click', async () => {
+    addBtn.disabled = true
+    const res = await addFontsFromDialog()
+    if (res === 'added') {
+      // macOS замечает новые файлы шрифтов не мгновенно.
+      await new Promise((r) => window.setTimeout(r, 1200))
+      await runRebuild()
+    } else {
+      addBtn.disabled = false
+    }
+  })
+}
+
+/**
+ * Выбрать папку или файлы шрифтов и скопировать их в папку шрифтов пользователя.
+ * 'added' — что-то скопировано, 'none' — отмена или нечего добавлять.
+ */
+async function addFontsFromDialog(): Promise<'added' | 'none'> {
+  const res = await window.api.fonts.add()
+  if (res.cancelled) return 'none'
+  if (!res.ok) {
+    showBanner(t('Ошибка: {error}', { error: res.error ?? '' }), 8000)
+    return 'none'
+  }
+  if (!res.found) {
+    showBanner(t('В выбранном нет файлов шрифтов (.ttf, .otf, .ttc, .otc)'), 6000)
+    return 'none'
+  }
+  if (res.failed && res.failed.length > 0) {
+    showBanner(t('Не приняты системой: {fonts}', { fonts: fontListText(res.failed) }), 8000)
+  }
+  if (!res.added) {
+    if (!res.failed?.length) showBanner(t('Эти шрифты уже стоят в папке шрифтов, ничего не копирую'), 6000)
+    return 'none'
+  }
+  return 'added'
+}
+
+/** Пути PPTX, о подмене шрифтов в которых оператору уже сказали баннером. */
+const fontWarned = new Set<string>()
+
+/**
+ * Подмена шрифтов в PPTX: на карточке плейлиста значок ⚠ с названиями, а при
+ * первом открытии файла с проблемой — баннер. Узнать об этом надо на
+ * подготовке, а не когда слайд с уехавшим текстом уже в зале.
+ */
+function updateFontNotice(state: AppState): void {
+  if (!isOperator) return
+  for (const entry of state.playlist) {
+    const badge = playlistNodes.get(entry.id)?.querySelector<HTMLElement>('.kind-badge')
+    if (!badge || entry.kind !== 'pptx') continue
+    const fonts = state.fontIssues[entry.filePath]
+    badge.textContent = fonts ? 'PPTX ⚠' : 'PPTX'
+    const node = playlistNodes.get(entry.id)!
+    // Подсказка `title` показывается с задержкой в пару секунд — поэтому
+    // окошко по клику на значок и по правой кнопке на карточке.
+    // Окошко доступно у любого PPTX, не только с ⚠: после установки или
+    // удаления шрифтов «Пересобрать» нужна и тогда, когда тревоги нет.
+    badge.onclick = (e): void => {
+      e.stopPropagation()
+      showFontPopup(badge, entry.filePath)
+    }
+    node.oncontextmenu = (e): void => {
+      e.preventDefault()
+      showFontPopup(badge, entry.filePath)
+    }
+    badge.style.cursor = 'pointer'
+    if (!fonts) badge.title = t('Шрифты: добавить, пересобрать')
+  }
+  for (const path of [...fontWarned]) if (!state.fontIssues[path]) fontWarned.delete(path)
+  for (const [path, fonts] of Object.entries(state.fontIssues)) {
+    if (fontWarned.has(path)) continue
+    fontWarned.add(path)
+    showBanner(t('⚠ {name}: нет шрифтов {fonts}. Слайды могут выглядеть иначе', { name: baseName(path), fonts: fontListText(fonts) }), 12000)
+  }
 }
 
 /**
@@ -3356,6 +3544,18 @@ async function renderLoSection(): Promise<void> {
     pathsEl.textContent = t('Искали здесь: {paths} — а также по PATH. Установить: libreoffice.org.', { paths: paths.join(' · ') })
     pathsEl.classList.remove('hidden')
   }
+  await renderFontsSettings()
+}
+
+/** Строка «Шрифты из презентаций» в Настройки → PPTX / LibreOffice (только мак). */
+async function renderFontsSettings(): Promise<void> {
+  const info = await window.api.fonts.info()
+  $('fonts-settings').classList.toggle('hidden', !info.supported)
+  $('fonts-settings-status').textContent =
+    info.added > 0
+      ? t('Добавлено файлов: {n}. Лежат в папке шрифтов пользователя, «Убрать» стирает только их.', { n: info.added })
+      : t('Ничего не добавлено. Шрифты, которые принесли с презентацией, можно добавить сюда или из окошка у значка ⚠.')
+  ;($('fonts-settings-remove') as HTMLButtonElement).disabled = info.added === 0
 }
 
 function openSettings(section: SettingsSection = 'screens'): void {
@@ -3387,6 +3587,18 @@ function openSettings(section: SettingsSection = 'screens'): void {
     $('lo-settings-pick').addEventListener('click', async () => {
       await pickLibreOffice()
       void renderLoSection()
+    })
+    $('fonts-settings-add').addEventListener('click', async () => {
+      if ((await addFontsFromDialog()) === 'added') {
+        showBanner(t('Шрифты добавлены. Чтобы презентация их подхватила, нажми «Пересобрать» у значка ⚠'), 8000)
+      }
+      void renderFontsSettings()
+    })
+    $('fonts-settings-remove').addEventListener('click', async () => {
+      const res = await window.api.fonts.remove()
+      if (!res.ok) showBanner(t('Ошибка: {error}', { error: res.error ?? '' }), 8000)
+      else showBanner(t('Убрано шрифтов: {n}', { n: res.removed ?? 0 }), 5000)
+      void renderFontsSettings()
     })
   }
   wireRemoteSection(getState().remote)
