@@ -44,6 +44,8 @@ The timer on a transparent background, the hall (with sound) and the prompter go
 
 Set it up in Settings → OMT outputs (name, 720p / 1080p / 4K, 15–60 fps). Use a wired network for video: each receiver gets its own stream, about 60 Mbit/s at 1080p30.
 
+We haven't tested live vMix 29 yet, only OBS. If something goes wrong in vMix, [open an issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose).
+
 ## Stream Deck and Companion
 
 A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live timer, TAKE with the speaker's name, speakers lit green for preview and red on air. HTTP and OSC cover everything else ([setup](companion/README.md)).
