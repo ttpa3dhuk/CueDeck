@@ -25,6 +25,7 @@ const T = {
 		sTimer: 'Таймер',
 		sProgram: 'Эфир',
 		sStream: 'Трансляция',
+		sOmt: 'OMT',
 		sVideo: 'Ролик в эфире',
 		sPlaylist: 'Плейлист',
 		sMessage: 'Сообщение спикеру',
@@ -53,6 +54,9 @@ const T = {
 		blackout: 'ЗАСТАВКА',
 		onAir: 'В ЭФИРЕ',
 		stream: 'СТРИМ',
+		omtAir: 'ЭФИР',
+		omtPreview: 'ПРЕВЬЮ',
+		omtOff: 'выкл',
 		video: 'РОЛИК ▶⏸',
 		videoRestart: 'РОЛИК\nс начала',
 		videoStop: 'РОЛИК\nстоп',
@@ -76,6 +80,7 @@ const T = {
 		sTimer: 'Timer',
 		sProgram: 'Program',
 		sStream: 'Stream',
+		sOmt: 'OMT',
 		sVideo: 'Video on air',
 		sPlaylist: 'Playlist',
 		sMessage: 'Speaker message',
@@ -104,6 +109,9 @@ const T = {
 		blackout: 'BLACKOUT',
 		onAir: 'ON AIR',
 		stream: 'STREAM',
+		omtAir: 'ON AIR',
+		omtPreview: 'PREVIEW',
+		omtOff: 'off',
 		video: 'VIDEO ▶⏸',
 		videoRestart: 'VIDEO\nfrom start',
 		videoStop: 'VIDEO\nstop',
@@ -144,7 +152,7 @@ const TIMER_PRESETS = 4
 const QUICK_MINUTES = [5, 10, 15, 20]
 
 export function UpdatePresets(self: ModuleInstance): void {
-	const t = T[self.config.lang] ?? T.ru
+	const t = T[self.presetLang()] ?? T.en
 	const v = (name: string): string => `$(${self.label}:${name})`
 
 	const presets: CompanionPresetDefinitions<ModuleSchema> = {}
@@ -273,6 +281,31 @@ export function UpdatePresets(self: ModuleInstance): void {
 		),
 	]
 
+	// ── OMT: лампа tally выхода «Зал», нажатие ничего не делает ──
+	const omt = [
+		add(
+			'omt_lamp',
+			'OMT Program tally lamp (display only): red — on air in vMix, green — in preview',
+			`OMT\n${t.omtOff}`,
+			[],
+			[
+				// Порядок важен: поздний фидбэк перекрывает ранний. Включён без tally — только «OMT».
+				{ feedbackId: 'omt_on', options: {}, style: { text: 'OMT', size: '24', color: C.white } },
+				{
+					feedbackId: 'omt_preview',
+					options: {},
+					style: { bgcolor: C.greenBg, text: `OMT\n${t.omtPreview}`, size: '14' },
+				},
+				{
+					feedbackId: 'omt_program',
+					options: {},
+					style: { bgcolor: C.redBg, text: `OMT\n${t.omtAir}`, size: '14' },
+				},
+			],
+			{ color: C.muted },
+		),
+	]
+
 	// ── Ролик ──
 	const video = [
 		add(
@@ -380,6 +413,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 		},
 		{ id: 'program', name: t.sProgram, definitions: program },
 		{ id: 'stream', name: t.sStream, definitions: stream },
+		{ id: 'omt', name: t.sOmt, definitions: omt },
 		{ id: 'video', name: t.sVideo, definitions: video },
 		{
 			id: 'playlist',

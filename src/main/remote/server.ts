@@ -14,7 +14,7 @@ import { configureCompanionPush } from './companion-push.js'
 import { store, type RemoteSettings, type RemoteStatus } from '../state.js'
 import { DEFAULT_REMOTE_SETTINGS } from '../../shared/types.js'
 import { elapsedMs, formatMs, remainingMs, timerView } from '../../renderer/shared/timer.js'
-import { neighbour, programHasVideo, resolveRemote, type RemoteArg } from './commands.js'
+import { neighbour, programHasVideo, rawUrlToUtf8, resolveRemote, type RemoteArg } from './commands.js'
 import { helpPage } from './help-page.js'
 import { parseOscPacket } from './osc.js'
 import { getLang, t } from '../../shared/i18n.js'
@@ -203,6 +203,8 @@ function statusJson(): Record<string, unknown> {
       warn: s.stream.warn,
       uptimeSec: s.stream.startedAt ? Math.floor((now - s.stream.startedAt) / 1000) : 0,
     },
+    /** Язык интерфейса CueDeck: по нему модуль Companion выбирает язык кнопок. */
+    lang: getLang(),
     /** Выходы OMT: включён ли, сколько получателей, tally от vMix (в эфире / в превью). */
     omt: Object.fromEntries(
       (['timer', 'program', 'prompter'] as const).map((id) => {
@@ -262,7 +264,7 @@ async function onHttp(req: http.IncomingMessage, res: http.ServerResponse): Prom
   }
   let url: URL
   try {
-    url = new URL(req.url ?? '/', 'http://x')
+    url = new URL(rawUrlToUtf8(req.url ?? '/'), 'http://x')
   } catch {
     json(res, 400, { ok: false, error: t('кривой адрес') })
     return

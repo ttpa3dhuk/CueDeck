@@ -26,6 +26,9 @@ export type FeedbacksSchema = {
 	blackout: { type: 'boolean'; options: NoOptions }
 	stream_running: { type: 'boolean'; options: NoOptions }
 	stream_warn: { type: 'boolean'; options: { blink: boolean } }
+	omt_on: { type: 'boolean'; options: NoOptions }
+	omt_program: { type: 'boolean'; options: NoOptions }
+	omt_preview: { type: 'boolean'; options: NoOptions }
 	video_playing: { type: 'boolean'; options: NoOptions }
 	muted: { type: 'boolean'; options: NoOptions }
 	video_loop: { type: 'boolean'; options: NoOptions }
@@ -106,12 +109,43 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 		stream_warn: {
 			type: 'boolean',
 			name: 'Stream: something is wrong',
-			description: 'A destination is reconnecting, no picture, or the network can’t keep up. With “Blink” the style flashes every half second.',
+			description:
+				'A destination is reconnecting, no picture, or the network can’t keep up. With “Blink” the style flashes every half second.',
 			defaultStyle: { bgcolor: C.amberBg, color: C.white },
 			options: [{ id: 'blink', type: 'checkbox', label: 'Blink', default: true }],
 			callback: (fb) => {
 				const s = st()
 				return !!s?.stream?.running && !!s.stream.warn && (!fb.options.blink || blinkOn())
+			},
+		},
+		omt_on: {
+			type: 'boolean',
+			name: 'OMT Program output: enabled',
+			description: 'The Program OMT output is on in CueDeck (Settings → OMT outputs).',
+			defaultStyle: { color: C.white },
+			options: [],
+			callback: () => !!st()?.omt?.program?.on,
+		},
+		omt_program: {
+			type: 'boolean',
+			name: 'OMT Program output: on air in vMix',
+			description: 'vMix has CueDeck’s Program OMT source on air — red lamp.',
+			defaultStyle: { bgcolor: C.redBg, color: C.white },
+			options: [],
+			callback: () => {
+				const o = st()?.omt?.program
+				return !!o?.on && !!o.program
+			},
+		},
+		omt_preview: {
+			type: 'boolean',
+			name: 'OMT Program output: in preview in vMix',
+			description: 'vMix has CueDeck’s Program OMT source in preview — green lamp.',
+			defaultStyle: { bgcolor: C.greenBg, color: C.white },
+			options: [],
+			callback: () => {
+				const o = st()?.omt?.program
+				return !!o?.on && !!o.preview
 			},
 		},
 		video_playing: {

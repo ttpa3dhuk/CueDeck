@@ -177,12 +177,31 @@ describe('модуль Companion: /api/state → переменные', () => {
       stream_warn: false,
       stream_live: '',
       stream_total: '',
+      omt_receivers: '',
     })
   })
 
   it('трансляция: идёт, площадка не в порядке', () => {
     const v = variableValues({ ...s, stream: { running: true, live: 1, total: 2, warn: true } })
     expect(v).toMatchObject({ stream_running: true, stream_warn: true, stream_live: 1, stream_total: 2 })
+  })
+
+  it('лампа OMT: «Зал» включён и vMix держит в эфире / превью', () => {
+    const omt = (o: { on: boolean; receivers: number; program: boolean; preview: boolean }) =>
+      variableValues({ ...s, omt: { program: o } })
+    expect(omt({ on: true, receivers: 2, program: true, preview: false })).toMatchObject({
+      omt_on: true,
+      omt_program: true,
+      omt_preview: false,
+      omt_receivers: 2,
+    })
+    expect(omt({ on: true, receivers: 1, program: false, preview: true })).toMatchObject({ omt_program: false, omt_preview: true })
+    // Выход выключили — старый tally не светит.
+    expect(omt({ on: false, receivers: 0, program: true, preview: true })).toMatchObject({ omt_on: false, omt_program: false, omt_preview: false })
+  })
+
+  it('CueDeck до 0.10 (нет поля omt) — лампа выключена, без падения', () => {
+    expect(variableValues(s)).toMatchObject({ omt_on: false, omt_program: false, omt_preview: false, omt_receivers: '' })
   })
 
   it('трансляция выключена — предупреждение не горит, даже если warn пришёл true', () => {

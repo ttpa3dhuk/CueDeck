@@ -19,6 +19,28 @@ export function remainingMs(timer: TimerState, now: number = Date.now()): number
   return timer.durationMs - elapsedMs(timer, now)
 }
 
+/**
+ * Кнопки ± у таймера. Обратный отсчёт — сдвигает длительность, секундомер —
+ * показанное время (идущий секундомер перепривязывается к «сейчас»), не ниже 0.
+ * Часы — null: сдвигать нечего.
+ */
+export function adjustPatch(
+  timer: TimerState,
+  mode: TimerMode,
+  deltaMs: number,
+  now: number = Date.now(),
+): Partial<TimerState> | null {
+  const d = Math.floor(deltaMs)
+  if (mode === 'clock') return null
+  if (mode === 'stopwatch') {
+    const shown = Math.max(0, elapsedMs(timer, now) + d)
+    return timer.running && timer.startedAt !== null
+      ? { elapsedMs: shown, startedAt: now }
+      : { elapsedMs: shown }
+  }
+  return { durationMs: Math.max(0, timer.durationMs + d) }
+}
+
 export function timerColor(remaining: number, duration: number): TimerColor {
   if (remaining <= 0) return 'red'
   if (duration <= 0) return 'green'

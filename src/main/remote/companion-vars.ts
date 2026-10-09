@@ -38,6 +38,22 @@ export const COMPANION_VARS = {
   cuedeck_stream_warn: 'С трансляцией что-то не так — площадка переподключается, нет картинки, сеть не успевает: 1 / 0',
   cuedeck_stream_live: 'Сколько площадок сейчас в эфире: 2',
   cuedeck_stream_total: 'Сколько площадок включено всего: 3',
+  cuedeck_timer_preset_1: 'Пресет таймера 1, минуты: 5 (пусто, если пресета нет)',
+  cuedeck_timer_preset_2: 'Пресет таймера 2, минуты: 10 (пусто, если пресета нет)',
+  cuedeck_timer_preset_3: 'Пресет таймера 3, минуты: 15 (пусто, если пресета нет)',
+  cuedeck_timer_preset_4: 'Пресет таймера 4, минуты: 20 (пусто, если пресета нет)',
+  cuedeck_program_index: 'Номер записи плейлиста в эфире, как на карточке: 3 (пусто, если в эфире не из плейлиста)',
+  cuedeck_preview_index: 'Номер записи плейлиста в превью, как на карточке: 4 (пусто, если нет)',
+  cuedeck_message_preset_1: 'Текст пресета сообщения 1 (пусто, если пресета нет)',
+  cuedeck_message_preset_2: 'Текст пресета сообщения 2 (пусто, если пресета нет)',
+  cuedeck_message_preset_3: 'Текст пресета сообщения 3 (пусто, если пресета нет)',
+  cuedeck_message_preset_4: 'Текст пресета сообщения 4 (пусто, если пресета нет)',
+  cuedeck_message_preset_5: 'Текст пресета сообщения 5 (пусто, если пресета нет)',
+  cuedeck_message_preset_6: 'Текст пресета сообщения 6 (пусто, если пресета нет)',
+  cuedeck_omt_on: 'Выход OMT «Зал» включён: 1 / 0',
+  cuedeck_omt_program: 'vMix держит «Зал» в эфире (красная лампа OMT): 1 / 0',
+  cuedeck_omt_preview: 'vMix держит «Зал» в превью (зелёная лампа OMT): 1 / 0',
+  cuedeck_omt_receivers: 'Сколько получателей забирают «Зал» по OMT: 2',
 } as const
 
 export type CompanionVarName = keyof typeof COMPANION_VARS
@@ -65,11 +81,27 @@ export const COMPANION_VARS_EN: Record<CompanionVarName, string> = {
   cuedeck_stream_warn: 'Something is wrong with the stream — a destination is reconnecting, no picture, or the network can’t keep up: 1 / 0',
   cuedeck_stream_live: 'How many destinations are live right now: 2',
   cuedeck_stream_total: 'How many destinations are enabled in total: 3',
+  cuedeck_timer_preset_1: 'Timer preset 1, minutes: 5 (empty if there is no such preset)',
+  cuedeck_timer_preset_2: 'Timer preset 2, minutes: 10 (empty if there is no such preset)',
+  cuedeck_timer_preset_3: 'Timer preset 3, minutes: 15 (empty if there is no such preset)',
+  cuedeck_timer_preset_4: 'Timer preset 4, minutes: 20 (empty if there is no such preset)',
+  cuedeck_program_index: 'Playlist entry number on air, as on the card: 3 (empty if what is on air is not from the playlist)',
+  cuedeck_preview_index: 'Playlist entry number in preview, as on the card: 4 (empty if none)',
+  cuedeck_message_preset_1: 'Text of speaker message preset 1 (empty if there is no such preset)',
+  cuedeck_message_preset_2: 'Text of speaker message preset 2 (empty if there is no such preset)',
+  cuedeck_message_preset_3: 'Text of speaker message preset 3 (empty if there is no such preset)',
+  cuedeck_message_preset_4: 'Text of speaker message preset 4 (empty if there is no such preset)',
+  cuedeck_message_preset_5: 'Text of speaker message preset 5 (empty if there is no such preset)',
+  cuedeck_message_preset_6: 'Text of speaker message preset 6 (empty if there is no such preset)',
+  cuedeck_omt_on: 'OMT output “Program” is on: 1 / 0',
+  cuedeck_omt_program: 'vMix has the Program output on air (red OMT lamp): 1 / 0',
+  cuedeck_omt_preview: 'vMix has the Program output in preview (green OMT lamp): 1 / 0',
+  cuedeck_omt_receivers: 'How many receivers are pulling the Program output over OMT: 2',
 }
 export type CompanionVars = Record<CompanionVarName, string>
 
 export type CompanionStateView = RemoteStateView &
-  Pick<AppState, 'timerMode' | 'totalSlides' | 'speakerMessage'>
+  Pick<AppState, 'timerMode' | 'totalSlides' | 'speakerMessage' | 'omt'>
 
 const flag = (v: boolean): string => (v ? '1' : '0')
 
@@ -96,6 +128,20 @@ export function companionVars(s: CompanionStateView, now: number, videoPosSec: n
   const hasVideo = programHasVideo(s)
   const dur = s.video.durationSec
   const next = neighbour(s, 1)
+  // Лампа OMT — только выход «Зал»; tally горит, пока выход включён.
+  const omt = s.omt.outputs.program
+  const omtOn = omt.state === 'on'
+  // Минуты пресета строкой; нет такого пресета — пусто (на кнопке будет «—»).
+  // Номер записи с 1, как на карточке (и в playlist/select/N); нет — пусто.
+  const indexOf = (id: string | null): string => {
+    const i = id ? s.playlist.findIndex((e) => e.id === id) : -1
+    return i >= 0 ? String(i + 1) : ''
+  }
+  const msgPreset = (i: number): string => (s.speakerMsgPresets[i] ?? '').trim()
+  const preset = (i: number): string => {
+    const m = s.timerPresets[i]
+    return typeof m === 'number' ? String(m) : ''
+  }
   return {
     cuedeck_online: '1',
     cuedeck_seen: String(Math.floor(now / 1000)),
@@ -117,6 +163,22 @@ export function companionVars(s: CompanionStateView, now: number, videoPosSec: n
     cuedeck_stream_warn: flag(s.stream.running && s.stream.warn),
     cuedeck_stream_live: String(s.stream.destinations.filter((d) => d.state === 'live').length),
     cuedeck_stream_total: String(s.stream.destinations.length),
+    cuedeck_timer_preset_1: preset(0),
+    cuedeck_timer_preset_2: preset(1),
+    cuedeck_timer_preset_3: preset(2),
+    cuedeck_timer_preset_4: preset(3),
+    cuedeck_program_index: indexOf(s.currentPlaylistId),
+    cuedeck_preview_index: indexOf(s.preview.playlistId),
+    cuedeck_message_preset_1: msgPreset(0),
+    cuedeck_message_preset_2: msgPreset(1),
+    cuedeck_message_preset_3: msgPreset(2),
+    cuedeck_message_preset_4: msgPreset(3),
+    cuedeck_message_preset_5: msgPreset(4),
+    cuedeck_message_preset_6: msgPreset(5),
+    cuedeck_omt_on: flag(omtOn),
+    cuedeck_omt_program: flag(omtOn && omt.program),
+    cuedeck_omt_preview: flag(omtOn && omt.preview),
+    cuedeck_omt_receivers: String(omt.receivers),
   }
 }
 
@@ -131,6 +193,10 @@ export function companionOfflineVars(): Partial<CompanionVars> {
     cuedeck_video_playing: '0',
     cuedeck_stream_running: '0',
     cuedeck_stream_warn: '0',
+    cuedeck_omt_on: '0',
+    cuedeck_omt_program: '0',
+    cuedeck_omt_preview: '0',
+    cuedeck_omt_receivers: '0',
   }
 }
 

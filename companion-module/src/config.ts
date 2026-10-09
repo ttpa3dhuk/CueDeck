@@ -2,14 +2,18 @@ import { Regex, type SomeCompanionConfigField } from '@companion-module/base'
 
 export type Lang = 'ru' | 'en'
 
+/** Язык кнопок в настройках: «auto» — как в интерфейсе CueDeck. */
+export type LangSetting = Lang | 'auto'
+
 export type ModuleConfig = {
 	host: string
 	port: number
-	lang: Lang
+	lang: LangSetting
 }
 
-// Язык подписей по умолчанию — английский, как у CueDeck (Азат 2026-09-25).
-export const DEFAULT_CONFIG: ModuleConfig = { host: '127.0.0.1', port: 9420, lang: 'en' }
+// По умолчанию кнопки на языке CueDeck («auto»); пока он не ответил — английский.
+// Подключения, где язык выбран руками (en / ru), остаются как были.
+export const DEFAULT_CONFIG: ModuleConfig = { host: '127.0.0.1', port: 9420, lang: 'auto' }
 
 export function GetConfigFields(): SomeCompanionConfigField[] {
 	return [
@@ -48,6 +52,7 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			width: 8,
 			default: DEFAULT_CONFIG.lang,
 			choices: [
+				{ id: 'auto', label: 'Auto (as in CueDeck) / Как в CueDeck' },
 				{ id: 'en', label: 'English' },
 				{ id: 'ru', label: 'Русский' },
 			],

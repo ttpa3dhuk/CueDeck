@@ -56,6 +56,10 @@ export interface CueDeckState {
 	messagePresets?: string[]
 	/** Появилось после 0.8.1 — с более старыми версиями просто отсутствует. */
 	stream?: { running: boolean; live: number; total: number; warn: boolean }
+	/** Появилось в CueDeck 0.10 — раньше выходов OMT не было. Нас интересует только «Зал» (`program`). */
+	omt?: { program?: { on: boolean; receivers: number; program: boolean; preview: boolean } }
+	/** Язык интерфейса CueDeck: по нему выбирается язык кнопок в режиме «Auto». Старые версии его не отдают. */
+	lang?: 'ru' | 'en'
 }
 
 export type VarValue = string | number | boolean
@@ -118,6 +122,10 @@ export function variableNames(s: CueDeckState | null): Record<string, string> {
 		stream_warn: 'Something is wrong with the stream — reconnecting, no picture, network can’t keep up (true / false)',
 		stream_live: 'Destinations live right now',
 		stream_total: 'Destinations enabled in total',
+		omt_on: 'OMT output “Program” is on (true / false)',
+		omt_program: 'vMix has the Program output on air (true / false)',
+		omt_preview: 'vMix has the Program output in preview (true / false)',
+		omt_receivers: 'Receivers pulling the Program output over OMT',
 	}
 	for (let i = 1; i <= speakerCount(s); i++) out[`speaker_${i}`] = `Playlist entry ${i}: name`
 	const p = presetCounts(s)
@@ -143,8 +151,14 @@ export function variableValues(s: CueDeckState | null): Record<string, VarValue>
 			blackout: false,
 			stream_running: false,
 			stream_warn: false,
+			omt_on: false,
+			omt_program: false,
+			omt_preview: false,
 		}
 	}
+	// Лампа горит, только пока выход включён: tally от vMix мог остаться от прошлого раза.
+	const omt = s.omt?.program
+	const omtOn = !!omt?.on
 	const v: Record<string, VarValue> = {
 		connected: true,
 		version: s.version ?? '',
@@ -177,6 +191,10 @@ export function variableValues(s: CueDeckState | null): Record<string, VarValue>
 		stream_warn: !!s.stream?.running && !!s.stream.warn,
 		stream_live: s.stream ? s.stream.live : '',
 		stream_total: s.stream ? s.stream.total : '',
+		omt_on: omtOn,
+		omt_program: omtOn && !!omt?.program,
+		omt_preview: omtOn && !!omt?.preview,
+		omt_receivers: omt ? omt.receivers : '',
 	}
 	for (let i = 1; i <= speakerCount(s); i++) v[`speaker_${i}`] = shortName(s.playlist.names?.[i - 1])
 	const p = presetCounts(s)

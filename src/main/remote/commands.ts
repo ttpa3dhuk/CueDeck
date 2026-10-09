@@ -190,6 +190,17 @@ export function neighbour(s: RemoteStateView, dir: 1 | -1): { id: string } | str
   return e ?? (dir === 1 ? t('это последняя запись') : t('это первая запись'))
 }
 
+/**
+ * Node отдаёт `req.url` как latin1: если клиент прислал сырой UTF-8 («Время!»
+ * без %-кодирования), кириллица приходит кракозябрами. Строка только из
+ * кодов 0–255 с байтами ≥ 0x80 — это UTF-8, прочитанный как latin1: читаем заново.
+ */
+export function rawUrlToUtf8(url: string): string {
+  if (!/[\x80-\xff]/.test(url) || /[^\x00-\xff]/.test(url)) return url
+  const fixed = Buffer.from(url, 'latin1').toString('utf8')
+  return fixed.includes('\ufffd') ? url : fixed
+}
+
 const onOff = (
   base: string,
   group: Group,
@@ -359,20 +370,22 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     path: 'playlist/next',
     arg: 'none',
     group: 'Плейлист',
-    title: 'Следующая запись — в превью (от той, что в превью, иначе от эфира)',
+    title: 'Следующая запись — в превью (от той, что в превью, иначе от эфира); на последней ничего не делает',
     build: (_a, s) => {
       const e = neighbour(s, 1)
-      return typeof e === 'string' ? e : [call('playlist:activate', e.id)]
+      // Край списка — не ошибка: как кликер на последнем слайде, просто ничего не происходит.
+      return typeof e === 'string' ? (s.playlist.length ? [] : e) : [call('playlist:activate', e.id)]
     },
   },
   {
     path: 'playlist/prev',
     arg: 'none',
     group: 'Плейлист',
-    title: 'Предыдущая запись — в превью',
+    title: 'Предыдущая запись — в превью; на первой ничего не делает',
     build: (_a, s) => {
       const e = neighbour(s, -1)
-      return typeof e === 'string' ? e : [call('playlist:activate', e.id)]
+      // Край списка — не ошибка: как кликер на последнем слайде, просто ничего не происходит.
+      return typeof e === 'string' ? (s.playlist.length ? [] : e) : [call('playlist:activate', e.id)]
     },
   },
 
@@ -458,11 +471,11 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     path: 'timer/set',
     arg: 'duration',
     group: 'Таймер',
-    title: 'Задать длительность',
+    title: 'Задать длительность и сбросить прошедшее время (без запуска)',
     example: '15',
     build: (a) => {
       const ms = parseDurationMs(a)
-      return ms === null ? t('нужна длительность: 15 (минуты), 1:30, 90s') : [call('timer:set-duration', ms)]
+      return ms === null ? t('нужна длительность: 15 (минуты), 1:30, 90s') : [call('timer:set-duration', ms), call('timer:reset')]
     },
   },
   {
@@ -491,13 +504,13 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     path: 'timer/preset',
     arg: 'index',
     group: 'Таймер',
-    title: 'Пресет длительности (кнопки 5/10/15/20 у оператора)',
+    title: 'Пресет длительности (кнопки 5/10/15/20 у оператора); прошедшее время сбрасывается, без запуска',
     example: '1',
     build: (a, s) => {
       const i = parseIndex(a)
       const min = i === null ? undefined : s.timerPresets[i]
       if (i === null || typeof min !== 'number') return t('нет пресета с таким номером (есть 1–{n})', { n: s.timerPresets.length })
-      return [call('timer:set-duration', min * 60_000)]
+      return [call('timer:set-duration', min * 60_000), call('timer:reset')]
     },
   },
   {

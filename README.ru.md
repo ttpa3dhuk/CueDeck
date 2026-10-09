@@ -50,7 +50,7 @@
 
 ## Stream Deck и Companion
 
-Готовая страница для [Bitfocus Companion](https://bitfocus.io/companion): живой таймер, TAKE с именем спикера, спикеры подсвечены зелёным в превью и красным в эфире. Для всего остального есть HTTP и OSC ([как подключить](companion/README.md)).
+Готовая страница для [Bitfocus Companion](https://bitfocus.io/companion): живой таймер, TAKE с именем спикера, лампа OMT (горит красным, когда vMix взял нас в эфир). На двух дополнительных страницах есть кнопка под каждую команду CueDeck, их можно копировать и раскладывать под свою деку. Ещё есть HTTP и OSC ([как подключить](companion/README.md)).
 
 <img src="docs/screenshots/streamdeck.png" width="480" alt="Кнопки CueDeck на Stream Deck через Companion">
 

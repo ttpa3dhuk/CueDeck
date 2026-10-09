@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { elapsedMs, formatMs, remainingMs, timerColor, timerView } from '../src/renderer/shared/timer'
+import { adjustPatch, elapsedMs, formatMs, remainingMs, timerColor, timerView } from '../src/renderer/shared/timer'
 import type { TimerState } from '../src/shared/types'
 
 const T0 = 1_000_000
@@ -103,5 +103,27 @@ describe('timerView', () => {
   it('пауза замораживает значение', () => {
     const t = timer({ durationMs: 60_000, elapsedMs: 30_000, running: false })
     expect(timerView(t, 'countdown', T0).text).toBe(timerView(t, 'countdown', T0 + 99_000).text)
+  })
+})
+
+describe('adjustPatch — кнопки ±', () => {
+  const MIN = 60_000
+  it('обратный отсчёт: сдвигает длительность, не ниже 0', () => {
+    expect(adjustPatch(timer(), 'countdown', MIN, T0)).toEqual({ durationMs: 11 * MIN })
+    expect(adjustPatch(timer({ durationMs: 30_000 }), 'countdown', -MIN, T0)).toEqual({ durationMs: 0 })
+  })
+  it('секундомер на паузе: сдвигает показанное время, не ниже 0', () => {
+    const t = timer({ elapsedMs: 90_000 })
+    expect(adjustPatch(t, 'stopwatch', MIN, T0)).toEqual({ elapsedMs: 150_000 })
+    expect(adjustPatch(t, 'stopwatch', -2 * MIN, T0)).toEqual({ elapsedMs: 0 })
+  })
+  it('идущий секундомер: прибавка к показанному, отсчёт заново от «сейчас»', () => {
+    const t = timer({ running: true, startedAt: T0 - 10_000, elapsedMs: 5_000 })
+    const p = adjustPatch(t, 'stopwatch', MIN, T0)
+    expect(p).toEqual({ elapsedMs: 15_000 + MIN, startedAt: T0 })
+    expect(elapsedMs({ ...t, ...p }, T0)).toBe(15_000 + MIN)
+  })
+  it('часы: ничего', () => {
+    expect(adjustPatch(timer(), 'clock', MIN, T0)).toBeNull()
   })
 })

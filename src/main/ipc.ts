@@ -76,6 +76,7 @@ import { cachedPdfPathFor, convertPptxToPdf, findSoffice, recheckSoffice, setMan
 import { preparePptxMedia } from './pptx-media.js'
 import { substitutedFonts } from './pptx-fonts.js'
 import { log } from './diag.js'
+import { adjustPatch } from '../renderer/shared/timer.js'
 import { addFonts, addedFontsCount, removeAddedFonts, type FontHooks } from './user-fonts.js'
 import { installWinFont, uninstallWinFont } from './win-fonts.js'
 import {
@@ -1056,10 +1057,12 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('timer:adjust', (_e, deltaMs: number) => {
-    const t = store.get().timer
-    const next = Math.max(0, t.durationMs + Math.floor(deltaMs))
-    store.patchTimer({ durationMs: next })
-    setLastDurationMs(next)
+    const st = store.get()
+    const patch = adjustPatch(st.timer, st.timerMode, deltaMs)
+    if (!patch) return
+    store.patchTimer(patch)
+    // В секундомере длительность не менялась — «последнюю длительность» не трогаем.
+    if (patch.durationMs !== undefined) setLastDurationMs(patch.durationMs)
   })
 
   ipcMain.handle('timer:set-mode', (_e, mode: TimerMode) => {

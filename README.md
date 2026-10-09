@@ -48,7 +48,7 @@ We haven't tested live vMix 29 yet, only OBS. If something goes wrong in vMix, [
 
 ## Stream Deck and Companion
 
-A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live timer, TAKE with the speaker's name, speakers lit green for preview and red on air. HTTP and OSC cover everything else ([setup](companion/README.md)).
+A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live timer, TAKE with the speaker's name, and an OMT lamp that turns red when vMix takes us on air. Two more pages have a button for every CueDeck command, so you can copy them and lay out your own deck. HTTP and OSC are there too ([setup](companion/README.md)).
 
 <img src="docs/screenshots/streamdeck.png" width="480" alt="CueDeck buttons on a Stream Deck via Companion">
 

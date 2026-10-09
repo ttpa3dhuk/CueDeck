@@ -1,7 +1,7 @@
 import { InstanceBase, InstanceStatus, type SomeCompanionConfigField } from '@companion-module/base'
 import { UpdateActions, type ActionsSchema } from './actions.js'
 import { commandUrl, type Command } from './commands.js'
-import { DEFAULT_CONFIG, GetConfigFields, type ModuleConfig } from './config.js'
+import { DEFAULT_CONFIG, GetConfigFields, type Lang, type ModuleConfig } from './config.js'
 import { UpdateFeedbacks, type FeedbacksSchema } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
 import {
@@ -75,9 +75,9 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	}
 
 	async configUpdated(config: ModuleConfig): Promise<void> {
-		const prevLang = this.config.lang
+		const prevLang = this.presetLang()
 		this.applyConfig(config)
-		if (config.lang !== prevLang) this.updatePresets()
+		if (this.presetLang() !== prevLang) this.updatePresets()
 		this.start()
 	}
 
@@ -91,6 +91,13 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 
 	updateFeedbacks(): void {
 		UpdateFeedbacks(this)
+	}
+
+	/** Язык кнопок в пресетах: выбранный руками или (auto) язык CueDeck, пока не ответил — английский. */
+	presetLang(): Lang {
+		const l = this.config.lang
+		if (l === 'ru' || l === 'en') return l
+		return this.state?.lang === 'ru' ? 'ru' : 'en'
 	}
 
 	updatePresets(): void {
@@ -128,7 +135,8 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		this.config = {
 			host: (config.host ?? '').trim() || DEFAULT_CONFIG.host,
 			port: Number(config.port) || DEFAULT_CONFIG.port,
-			lang: config.lang === 'ru' ? 'ru' : 'en',
+			// Старые конфиги с 'en' / 'ru' остаются как есть; всё незнакомое — auto.
+			lang: config.lang === 'ru' || config.lang === 'en' ? config.lang : 'auto',
 		}
 	}
 
@@ -206,7 +214,11 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 
 	private setState(s: CueDeckState | null): void {
 		const wasOver = !!this.state?.timer.overtime
+		const prevLang = this.presetLang()
 		this.state = s
+		// Язык CueDeck сменился (или только что стал известен) — пересобрать пресеты.
+		// При обрыве связи s === null: язык остаётся прежним, пресеты не дёргаем.
+		if (s && this.presetLang() !== prevLang) this.updatePresets()
 		// Список переменных зависит от длины плейлиста и числа пресетов.
 		if (this.shapeOf(s) !== this.varShape) this.updateVariableDefinitions()
 		const changed = diffValues(variableValues(s), this.lastValues)

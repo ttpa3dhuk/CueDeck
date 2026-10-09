@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { encodeOscBundle, encodeOscMessage, parseOscPacket } from '../src/main/remote/osc'
-import { parseDurationMs, resolveRemote, type RemoteStateView } from '../src/main/remote/commands'
+import { parseDurationMs, rawUrlToUtf8, resolveRemote, type RemoteStateView } from '../src/main/remote/commands'
+import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF } from '../src/shared/types'
 import { COMPANION_VARS, companionVars, diffVars, type CompanionStateView } from '../src/main/remote/companion-vars'
 
 const video = { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: false }
@@ -145,6 +146,11 @@ describe('resolveRemote', () => {
     expect(a.ok && a.calls).toEqual([{ channel: 'timer:adjust', args: [300_000] }])
   })
 
+  it('timer/set: длительность и сброс прошедшего', () => {
+    const r = resolveRemote(seg('timer/set/5'), [], state())
+    expect(r.ok && r.calls.map((c) => c.channel)).toEqual(['timer:set-duration', 'timer:reset'])
+  })
+
   it('sub убавляет', () => {
     const r = resolveRemote(seg('timer/sub/0:30'), [], state())
     expect(r.ok && r.calls).toEqual([{ channel: 'timer:adjust', args: [-30_000] }])
@@ -152,7 +158,11 @@ describe('resolveRemote', () => {
 
   it('пресет берётся из текущих настроек оператора', () => {
     const r = resolveRemote(seg('timer/preset/2'), [], state({ timerPresets: [3, 7, 11, 13] }))
-    expect(r.ok && r.calls).toEqual([{ channel: 'timer:set-duration', args: [420_000] }])
+    // Длительность и сразу сброс прошедшего (без запуска): «5 мин» = ровно 05:00.
+    expect(r.ok && r.calls).toEqual([
+      { channel: 'timer:set-duration', args: [420_000] },
+      { channel: 'timer:reset', args: [] },
+    ])
     expect(resolveRemote(seg('timer/preset/9'), [], state()).ok).toBe(false)
     expect(resolveRemote(seg('timer/preset/0'), [], state()).ok).toBe(false)
   })
@@ -277,7 +287,13 @@ describe('resolveRemote — эфир (сразу в эфир, решение 202
     expect(arg(resolveRemote(seg('playlist/next'), [], state({ ...base, currentPlaylistId: 'a' })))).toBe('b')
     const inPreview = state({ ...base, currentPlaylistId: 'a', preview: { ...emptyDeck, playlistId: 'b' } })
     expect(arg(resolveRemote(seg('playlist/next'), [], inPreview))).toBe('c')
-    expect(resolveRemote(seg('playlist/next'), [], state({ ...base, currentPlaylistId: 'c' })).ok).toBe(false)
+    // Край списка — не ошибка (иначе Companion вешает ⚠ на все кнопки), просто ничего не происходит.
+    const atEnd = resolveRemote(seg('playlist/next'), [], state({ ...base, currentPlaylistId: 'c' }))
+    expect(atEnd.ok && atEnd.calls).toEqual([])
+    const atStart = resolveRemote(seg('playlist/prev'), [], state({ ...base, currentPlaylistId: 'b', preview: { ...emptyDeck, playlistId: 'a' } }))
+    expect(atStart.ok && atStart.calls).toEqual([])
+    // Пустой плейлист — по-прежнему ошибка.
+    expect(resolveRemote(seg('playlist/next'), [], state()).ok).toBe(false)
     // После ЭФИРа прежний спикер (a) уехал в превью, в эфире b → следующий c, а не снова b.
     const swapped = state({ ...base, currentPlaylistId: 'b', preview: { ...emptyDeck, playlistId: 'a' } })
     expect(arg(resolveRemote(seg('playlist/next'), [], swapped))).toBe('c')
@@ -294,12 +310,32 @@ describe('resolveRemote — эфир (сразу в эфир, решение 202
   })
 })
 
+describe('rawUrlToUtf8 — сырой UTF-8 в пути', () => {
+  it('сырые байты UTF-8, прочитанные как latin1, возвращаются в кириллицу', () => {
+    const raw = Buffer.from('/api/message/text/Время! ok', 'utf8').toString('latin1')
+    expect(rawUrlToUtf8(raw)).toBe('/api/message/text/Время! ok')
+  })
+  it('ASCII и %-кодированный путь не трогает', () => {
+    expect(rawUrlToUtf8('/api/message/text/%D0%92')).toBe('/api/message/text/%D0%92')
+    expect(rawUrlToUtf8('/api/timer/set/5')).toBe('/api/timer/set/5')
+  })
+  it('уже нормальную кириллицу (коды > 255) не ломает', () => {
+    expect(rawUrlToUtf8('/api/message/text/Время')).toBe('/api/message/text/Время')
+  })
+})
+
 describe('companionVars — что уходит на кнопки Companion', () => {
   const cstate = (over: Partial<CompanionStateView> = {}): CompanionStateView => ({
     ...state(),
     timerMode: 'countdown',
     totalSlides: 0,
     speakerMessage: null,
+    omt: {
+      ...DEFAULT_OMT_SETTINGS,
+      available: null,
+      error: null,
+      outputs: { timer: OMT_OUTPUT_OFF, program: OMT_OUTPUT_OFF, prompter: OMT_OUTPUT_OFF },
+    },
     ...over,
   })
 
@@ -344,6 +380,52 @@ describe('companionVars — что уходит на кнопки Companion', ()
       0,
     )
     expect([v.cuedeck_program, v.cuedeck_preview, v.cuedeck_next]).toEqual(['Иванов', 'Петров', 'Ролик'])
+  })
+
+  it('пресеты таймера уходят минутами строкой, нет пресета — пусто', () => {
+    const v = companionVars(cstate({ timerPresets: [5, 10] }), 0, 0)
+    expect([v.cuedeck_timer_preset_1, v.cuedeck_timer_preset_2, v.cuedeck_timer_preset_3, v.cuedeck_timer_preset_4]).toEqual(['5', '10', '', ''])
+  })
+
+  it('номера записей в эфире и превью — как на карточке, с 1', () => {
+    const v = companionVars(
+      cstate({ playlist: [entry('a'), entry('b'), entry('c')], currentPlaylistId: 'c', preview: { ...emptyDeck, playlistId: 'a' } }),
+      0,
+      0,
+    )
+    expect([v.cuedeck_program_index, v.cuedeck_preview_index]).toEqual(['3', '1'])
+    const none = companionVars(cstate({ playlist: [entry('a')] }), 0, 0)
+    expect([none.cuedeck_program_index, none.cuedeck_preview_index]).toEqual(['', ''])
+  })
+
+  it('тексты пресетов сообщений уходят как есть, нет пресета — пусто', () => {
+    const v = companionVars(cstate({ speakerMsgPresets: ['Заканчивайте', ' Ближе к микрофону ', ''] }), 0, 0)
+    expect([1, 2, 3, 4, 5, 6].map((i) => v[`cuedeck_message_preset_${i}` as keyof typeof v])).toEqual([
+      'Заканчивайте',
+      'Ближе к микрофону',
+      '',
+      '',
+      '',
+      '',
+    ])
+  })
+
+  it('лампа OMT: только «Зал», tally горит лишь у включённого выхода', () => {
+    const omt = (program: Partial<typeof OMT_OUTPUT_OFF>): CompanionStateView['omt'] => ({
+      ...DEFAULT_OMT_SETTINGS,
+      available: true,
+      error: null,
+      outputs: { timer: { ...OMT_OUTPUT_OFF, state: 'on', program: true }, program: { ...OMT_OUTPUT_OFF, ...program }, prompter: OMT_OUTPUT_OFF },
+    })
+    const pick = (o: CompanionStateView['omt']) => {
+      const v = companionVars(cstate({ omt: o }), 0, 0)
+      return [v.cuedeck_omt_on, v.cuedeck_omt_program, v.cuedeck_omt_preview, v.cuedeck_omt_receivers]
+    }
+    expect(pick(omt({}))).toEqual(['0', '0', '0', '0'])
+    expect(pick(omt({ state: 'on', receivers: 2, program: true }))).toEqual(['1', '1', '0', '2'])
+    expect(pick(omt({ state: 'on', receivers: 1, preview: true }))).toEqual(['1', '0', '1', '1'])
+    // Выход выключили, а старый tally ещё не сброшен — лампа не горит.
+    expect(pick(omt({ state: 'off', program: true, preview: true }))).toEqual(['0', '0', '0', '0'])
   })
 
   it('отправляется только разница', () => {
