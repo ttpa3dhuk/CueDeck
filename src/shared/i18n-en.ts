@@ -142,7 +142,8 @@ export const EN: Record<string, string> = {
   'С какого слайда выдавать презентацию в эфир': 'Which slide to take the presentation on air from',
   '▶ с первого слайда': '▶ from the first slide',
   '▶ с этого слайда': '▶ from this slide',
-  'Выдать превью в эфир (Enter)': 'Take the preview on air (Enter)',
+  'Выдать превью в эфир': 'Take the preview on air',
+  'Выдать превью в эфир ({key})': 'Take the preview on air ({key})',
   'ЭФИР ▶': 'TAKE ▶',
   'Play / Pause превью': 'Play / Pause preview',
   'Превью пусто': 'Preview is empty',
@@ -166,7 +167,8 @@ export const EN: Record<string, string> = {
   'ролик': 'clip',
   'фото': 'photo',
   'Сейчас на экране идёт видео. Прервать его и выдать в эфир «{name}»?': 'A video is playing on screen. Stop it and take “{name}” on air?',
-  'Загружено в превью — Enter, чтобы выдать в эфир': 'Loaded into preview — Enter to take it on air',
+  'Загружено в превью — {key}, чтобы выдать в эфир': 'Loaded into preview — {key} to take it on air',
+  'Загружено в превью': 'Loaded into preview',
 
   // ── Правая колонка: дальше, заметки, сообщение спикеру ──
   'Дальше': 'Next',
@@ -362,6 +364,9 @@ export const EN: Record<string, string> = {
   // ── Настройки → Горячие клавиши ──
   'Сбросить по умолчанию': 'Reset to defaults',
   'ЭФИР / take (превью → эфир)': 'TAKE (preview → program)',
+  'ЭФИР: вторая клавиша': 'TAKE: second key',
+  'Выключить клавишу': 'Turn this key off',
+  'выкл': 'off',
   'Эфир: следующий слайд': 'Program: next slide',
   'Эфир: предыдущий слайд': 'Program: previous slide',
   'Видео: play / pause': 'Video: play / pause',
@@ -437,14 +442,16 @@ export const EN: Record<string, string> = {
 
   // ── Сообщить о проблеме (диагностика) ──
   'Сообщить о проблеме': 'Report a problem',
-  'Отчёт собирается в zip на рабочем столе: журнал действий, состояние программы, скриншоты окон, версия и ОС. Содержимого презентаций и текста заметок в нём нет — только имена файлов. Файл пришли Азату в Telegram.': 'The report is saved as a zip on your Desktop: action log, app state, window screenshots, version and OS. It contains no presentation content or note text — only file names. Send the file to the developer (Telegram or a GitHub issue).',
+  'Отчёт собирается в zip на рабочем столе: журнал действий, состояние программы, скриншоты окон, версия и ОС. Содержимого презентаций и текста заметок в нём нет, только имена файлов. Файл пришли в бот поддержки в Telegram.': 'The report is saved as a zip on your Desktop: action log, app state, window screenshots, version and OS. It contains no presentation content or note text, only file names. Send the file to the support bot in Telegram.',
   'Что делал, что ожидал, что получил': 'What you did, what you expected, what you got',
   'Например: нажал TAKE на втором спикере, зал остался на первом слайде предыдущего.': 'For example: pressed TAKE on the second speaker, the audience stayed on the first slide of the previous one.',
   'Открыть папку журналов': 'Open logs folder',
   'Показать файл': 'Show file',
   'Сохранить отчёт': 'Save report',
   'Собираю отчёт…': 'Building the report…',
-  'Сохранено на рабочий стол: {name}. Пришли этот файл Азату в Telegram.': 'Saved to Desktop: {name}. Send this file to the developer (Telegram or a GitHub issue).',
+  'Сохранено на рабочий стол: {name}. Пришли этот файл в бот поддержки в Telegram.': 'Saved to Desktop: {name}. Send this file to the support bot in Telegram.',
+  'Открыть бота поддержки': 'Open the support bot',
+  'Поддержка в Telegram…': 'Support in Telegram…',
   'Не удалось собрать отчёт: {error}': 'Could not build the report: {error}',
   '⚑ Отмеченные моменты: {list} — они есть в журнале, опиши, что было в эти моменты.': '⚑ Marked moments: {list} — they are in the log; describe what happened at those moments.',
   '⚑ Момент #{n} отмечен в журнале. После шоу: Help → Сообщить о проблеме': '⚑ Moment #{n} marked in the log. After the show: Help → Report a problem',

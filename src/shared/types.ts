@@ -607,6 +607,9 @@ export const DEFAULT_TIMER_PRESETS = [5, 10, 15, 20]
  */
 export const DONATE_URL = 'https://pay.cloudtips.ru/p/b79fa042'
 
+/** Бот поддержки в Telegram: сюда присылают zip из «Сообщить о проблеме», вопросы и идеи. */
+export const SUPPORT_URL = 'https://t.me/CueDeckSupport_Bot'
+
 export interface DisplayInfo {
   id: number
   label: string

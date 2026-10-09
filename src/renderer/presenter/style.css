@@ -511,7 +511,7 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   background: #14161b;
   border-radius: 6px;
 }
-.hk-label { font-size: 13px; color: var(--text); }
+.hk-label { flex: 1; font-size: 13px; color: var(--text); }
 .hk-key {
   min-width: 130px;
   font-size: 12px;
@@ -522,6 +522,15 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   font-variant-numeric: tabular-nums;
 }
 .hk-key.capturing { border-color: var(--accent); color: var(--accent); }
+.hk-key.off { color: var(--muted); font-weight: 400; }
+.hk-off {
+  margin-left: -6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.hk-off:disabled { opacity: 0.3; cursor: default; }
 
 .playlist {
   background: var(--panel);
@@ -915,6 +924,13 @@ body.remote-on .playlist-item .row::before {
 /* Help modal */
 .help-modal-content {
   width: 420px;
+  max-height: 90vh;
+}
+/* Таблица прокручивается сама, кнопка «Закрыть» всегда на виду даже на низком экране. */
+.help-modal-content .help-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 .help-modal-content h2 {
   margin: 0 0 16px;

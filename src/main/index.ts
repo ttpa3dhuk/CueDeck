@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
-import { DONATE_URL } from '../shared/types.js'
+import { DONATE_URL, SUPPORT_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
 import { initDiag, instrumentIpc, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
 import { captureIpcHandlers, initRemote, registerRemoteIpc } from './remote/server.js'
@@ -251,6 +251,10 @@ function buildMenu(): void {
         {
           label: t('Сообщить о проблеме…'),
           click: () => openReportDialog(),
+        },
+        {
+          label: t('Поддержка в Telegram…'),
+          click: () => shell.openExternal(SUPPORT_URL).catch(() => undefined),
         },
         ...(DONATE_URL
           ? ([

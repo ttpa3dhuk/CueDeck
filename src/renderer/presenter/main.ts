@@ -23,7 +23,7 @@ import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
 import { OMT_OUTPUTS } from '../../shared/types'
 import type { ListMode, OmtFps, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
-import { DONATE_URL } from '../../preload/api'
+import { DONATE_URL, SUPPORT_URL } from '../../preload/api'
 import { initStreamUi } from './stream-ui'
 import type {
   AppState,
@@ -1826,15 +1826,22 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
 }
 
 async function openPdf(): Promise<void> {
-  // Open stages into the off-air preview deck; Take (Enter) promotes it to air.
+  // Open stages into the off-air preview deck; Take (Tab/Enter) promotes it to air.
   const res = await window.api.preview.openDialog()
   if (!res.ok && !res.cancelled) showBanner(t('Не удалось открыть: {error}', { error: res.error }))
   if (res.ok && res.sha1Mismatch) showBanner(t('Заметки в sidecar-файле относятся к другому PDF. Перезаписать их.'))
-  if (res.ok) showBanner(t('Загружено в превью — Enter, чтобы выдать в эфир'), 4000)
+  if (res.ok) {
+    const key = takeKeyLabel()
+    showBanner(key ? t('Загружено в превью — {key}, чтобы выдать в эфир', { key }) : t('Загружено в превью'), 4000)
+  }
 }
 
 function showHelpModal(): void {
   document.getElementById('help-modal')?.classList.remove('hidden')
+}
+function isHelpOpen(): boolean {
+  const modal = document.getElementById('help-modal')
+  return !!modal && !modal.classList.contains('hidden')
 }
 
 function hideHelpModal(): void {
@@ -1850,6 +1857,8 @@ async function openReportModal(): Promise<void> {
   result.classList.add('hidden')
   result.textContent = ''
   $('report-reveal').classList.add('hidden')
+  $('report-support').classList.add('hidden')
+  $('report-save').classList.remove('hidden')
   $<HTMLButtonElement>('report-save').disabled = false
 
   const markersEl = $('report-markers')
@@ -1879,10 +1888,13 @@ async function saveReport(): Promise<void> {
   btn.disabled = false
   if (res.ok) {
     result.classList.add('ok')
-    result.textContent = t('Сохранено на рабочий стол: {name}. Пришли этот файл Азату в Telegram.', { name: baseName(res.path) })
+    result.textContent = t('Сохранено на рабочий стол: {name}. Пришли этот файл в бот поддержки в Telegram.', { name: baseName(res.path) })
     const reveal = $<HTMLButtonElement>('report-reveal')
     reveal.classList.remove('hidden')
     reveal.onclick = () => window.api.diag.showInFolder(res.path)
+    // Отчёт готов: главная кнопка теперь «в бот» — человек сразу попадает в чат и кидает туда zip.
+    btn.classList.add('hidden')
+    $('report-support').classList.remove('hidden')
   } else {
     result.classList.add('err')
     result.textContent = t('Не удалось собрать отчёт: {error}', { error: res.error })
@@ -1989,9 +2001,13 @@ function hideBanner(): void {
 // Remappable single-key actions, persisted per-window in localStorage. The legacy
 // hardware/clicker keys (PageUp/PageDown/Period) and modifier combos (Shift+T,
 // Shift/Ctrl+digits) stay handled by the switch below and are NOT remappable.
+// Любое действие можно выключить (крестик в настройках): в localStorage пишется
+// пустая строка. У кликеров бывают кнопки, которые шлют Tab/Enter, — спикер
+// не должен случайно выдавать превью в эфир.
 interface HotkeyAction { id: string; label: string; def: string }
 const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'take', label: t('ЭФИР / take (превью → эфир)'), def: 'Tab' },
+  { id: 'takeAlt', label: t('ЭФИР: вторая клавиша'), def: 'Enter' },
   { id: 'programNext', label: t('Эфир: следующий слайд'), def: 'ArrowRight' },
   { id: 'programPrev', label: t('Эфир: предыдущий слайд'), def: 'ArrowLeft' },
   { id: 'previewNext', label: t('Превью: следующий слайд'), def: 'BracketRight' },
@@ -2012,19 +2028,43 @@ function loadHotkeys(): void {
   const overrides = readHotkeyOverrides()
   hotkeyMap = {}
   codeToAction = {}
+  // Сначала то, что пользователь назначил сам, потом умолчания — и только на
+  // свободные клавиши: у кого Enter раньше был отдан другому действию, тот его
+  // и сохранит, а новая строка «ЭФИР: вторая клавиша» встанет выключенной.
   for (const a of HOTKEY_ACTIONS) {
-    const code = overrides[a.id] || a.def
+    if (!(a.id in overrides)) continue
+    const code = overrides[a.id]
     hotkeyMap[a.id] = code
-    codeToAction[code] = a.id
+    if (code) codeToAction[code] = a.id
   }
+  for (const a of HOTKEY_ACTIONS) {
+    if (a.id in overrides) continue
+    const code = codeToAction[a.def] ? '' : a.def
+    hotkeyMap[a.id] = code
+    if (code) codeToAction[code] = a.id
+  }
+  updateTakeHints()
+}
+/** Первая включённая клавиша ЭФИРа — для подсказок; '' если обе выключены. */
+function takeKeyLabel(): string {
+  const code = hotkeyMap.take || hotkeyMap.takeAlt
+  return code ? keyLabel(code) : ''
+}
+function updateTakeHints(): void {
+  const btn = document.getElementById('take-btn')
+  if (!btn) return
+  const key = takeKeyLabel()
+  btn.title = key ? t('Выдать превью в эфир ({key})', { key }) : t('Выдать превью в эфир')
 }
 function saveHotkey(actionId: string, code: string): void {
   const o = readHotkeyOverrides()
   // Клавиша занята другим действием → отдаём ему нашу прежнюю (swap),
   // чтобы никогда не было двух действий на одной клавише.
   const prevCode = hotkeyMap[actionId]
-  for (const a of HOTKEY_ACTIONS) {
-    if (a.id !== actionId && hotkeyMap[a.id] === code) o[a.id] = prevCode
+  if (code) {
+    for (const a of HOTKEY_ACTIONS) {
+      if (a.id !== actionId && hotkeyMap[a.id] === code) o[a.id] = prevCode
+    }
   }
   o[actionId] = code
   try { localStorage.setItem('cuedeck.hotkeys', JSON.stringify(o)) } catch { /* ignore */ }
@@ -2050,7 +2090,8 @@ function dispatchHotkey(action: string): void {
   // спикер кликером идёт дальше, даже если ролик на слайде ещё крутится.
   const hasVideo = programHasVideo(state)
   switch (action) {
-    case 'take': window.api.preview.take(); break
+    case 'take':
+    case 'takeAlt': window.api.preview.take(); break
     // Видео-логика (свежий ролик → play, играющий → ±5с) — в main (programNext/Prev)
     case 'programNext': window.api.nav.next(); break
     case 'programPrev': window.api.nav.prev(); break
@@ -2074,16 +2115,28 @@ function renderHotkeysSection(): void {
     const lbl = document.createElement('span')
     lbl.className = 'hk-label'
     lbl.textContent = a.label
+    const code = hotkeyMap[a.id]
     const key = document.createElement('button')
     key.className = 'hk-key'
-    key.textContent = keyLabel(hotkeyMap[a.id])
+    key.classList.toggle('off', !code)
+    key.textContent = code ? keyLabel(code) : t('выкл')
     key.addEventListener('click', () => {
       if (capturingHotkey) capturingHotkey.btn.classList.remove('capturing')
       capturingHotkey = { actionId: a.id, btn: key }
       key.textContent = t('Нажми клавишу… (Esc — отмена)')
       key.classList.add('capturing')
     })
-    row.append(lbl, key)
+    const off = document.createElement('button')
+    off.className = 'hk-off'
+    off.textContent = '✕'
+    off.title = t('Выключить клавишу')
+    off.disabled = !code
+    off.addEventListener('click', () => {
+      cancelHotkeyCapture()
+      saveHotkey(a.id, '')
+      renderHotkeysSection()
+    })
+    row.append(lbl, key, off)
     list.appendChild(row)
   }
 }
@@ -2138,7 +2191,7 @@ function setupKeyboard(): void {
     // e.code — физическая позиция клавиши, не зависит от языка раскладки.
     // Одиночные клавиши обрабатывает карта хоткеев выше — в switch только
     // непереназначаемое: кликерные клавиши (PageDown/PageUp/Period — их шлют
-    // Logitech R400 и т.п.), Enter (легаси-Take) и комбинации с модификаторами.
+    // Logitech R400 и т.п.) и комбинации с модификаторами.
     // Дублировать коды дефолтов карты здесь нельзя: иначе переназначенная
     // клавиша продолжит срабатывать по-старому.
     switch (e.code) {
@@ -2153,11 +2206,6 @@ function setupKeyboard(): void {
       case 'Period':
         e.preventDefault()
         window.api.blackout.toggle()
-        break
-      case 'Enter':
-        // Take: promote the staged preview deck onto the audience feed.
-        e.preventDefault()
-        window.api.preview.take()
         break
       case 'KeyT':
         if (e.shiftKey) {
@@ -2622,6 +2670,13 @@ function setupOperatorControls(): void {
   // Help button + menu
   $<HTMLButtonElement>('help-btn').addEventListener('click', showHelpModal)
   document.getElementById('help-modal-close')?.addEventListener('click', hideHelpModal)
+  // Клик по затемнению вокруг окна и Esc тоже закрывают справку.
+  document.getElementById('help-modal')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) hideHelpModal()
+  })
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isHelpOpen()) { e.preventDefault(); hideHelpModal() }
+  })
   window.api.menu.onHelp(() => showHelpModal())
 
   // Отчёт о проблеме + маркеры (diag)
@@ -2647,6 +2702,7 @@ function setupOperatorControls(): void {
     }
   })
   $('report-logs').addEventListener('click', () => void window.api.diag.openLogFolder())
+  $('report-support').addEventListener('click', () => window.api.external.open(SUPPORT_URL))
   window.api.diag.onMarked((n) =>
     showBanner(t('⚑ Момент #{n} отмечен в журнале. После шоу: Help → Сообщить о проблеме', { n }), 3000),
   )

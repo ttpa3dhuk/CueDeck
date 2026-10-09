@@ -89,6 +89,11 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
     },
   })
 
+  // Меню приложения на Windows садится в каждое окно строкой File / View / Help.
+  // Зал и суфлёр — выходные поверхности, там её быть не должно (на маке меню
+  // живёт вверху экрана и окна не трогает).
+  if (role !== 'operator' && process.platform !== 'darwin') win.removeMenu()
+
   loadRenderer(win, rendererForRole(role))
 
   win.once('ready-to-show', () => {

@@ -40,4 +40,4 @@ Get-NetFirewallRule -DisplayName CueDeck | Set-NetFirewallRule -Action Allow
 
 ## Still stuck
 
-In CueDeck open the Help menu, "Report a problem…". A zip appears on the desktop: send it to the author or attach it to an [issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose).
+In CueDeck open the Help menu, "Report a problem…". A zip appears on the desktop: send it to the support bot [@CueDeckSupport_Bot](https://t.me/CueDeckSupport_Bot) in Telegram or attach it to an [issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose).

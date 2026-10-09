@@ -142,7 +142,7 @@ npm run package:win   # Windows zip
 Electron + TypeScript.
 </details>
 
-Found a bug? [Open an issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose). Help → Report a problem saves a zip with logs you can attach.
+Found a bug? [Open an issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose) or write to the support bot [@CueDeckSupport_Bot](https://t.me/CueDeckSupport_Bot) in Telegram. Help → Report a problem saves a zip with logs you can attach.
 
 CueDeck is free and built in spare time. If it saved your show, you can [buy me a coffee](https://pay.cloudtips.ru/p/b79fa042).
 

@@ -40,4 +40,4 @@ Get-NetFirewallRule -DisplayName CueDeck | Set-NetFirewallRule -Action Allow
 
 ## Не помогло
 
-В CueDeck открой меню Help, «Сообщить о проблеме…». На рабочем столе появится zip, пришли его автору или приложи к [issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose).
+В CueDeck открой меню Help, «Сообщить о проблеме…». На рабочем столе появится zip, пришли его в бот поддержки [@CueDeckSupport_Bot](https://t.me/CueDeckSupport_Bot) в Telegram или приложи к [issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose).

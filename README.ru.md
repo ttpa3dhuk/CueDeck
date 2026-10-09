@@ -144,7 +144,7 @@ npm run package:win   # zip для Windows
 Electron + TypeScript.
 </details>
 
-Нашёл баг? [Заведи issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose). Пункт «Сообщить о проблеме…» в меню Help (на маке оно называется «Справка») сохраняет zip с журналом, его можно приложить.
+Нашёл баг? [Заведи issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose) или напиши в бот поддержки [@CueDeckSupport_Bot](https://t.me/CueDeckSupport_Bot) в Telegram. Пункт «Сообщить о проблеме…» в меню Help (на маке оно называется «Справка») сохраняет zip с журналом, его можно приложить.
 
 CueDeck бесплатный и делается в свободное время. Если выручил на шоу, можно [на кофе через CloudTips](https://pay.cloudtips.ru/p/b79fa042).
 

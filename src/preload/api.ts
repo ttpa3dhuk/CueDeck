@@ -32,7 +32,7 @@ import type {
 } from '../shared/types.js'
 import type { LiveSource } from '../shared/live.js'
 
-export { DONATE_URL } from '../shared/types.js'
+export { DONATE_URL, SUPPORT_URL } from '../shared/types.js'
 export type { LiveSource } from '../shared/live.js'
 
 export type {
