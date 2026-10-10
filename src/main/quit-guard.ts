@@ -4,6 +4,7 @@ import { shutdownStream } from './stream/streamer.js'
 import { flushPendingWrites, saveProject } from './ipc.js'
 import { markCleanExit } from './diag.js'
 import { t } from '../shared/i18n.js'
+import { isProjectTransferRunning } from './project-transfer.js'
 
 /**
  * Подтверждение при закрытии.
@@ -48,6 +49,21 @@ export async function requestQuit(opts: { relaunch?: boolean } = {}): Promise<vo
   if (asking) {
     // Диалог уже висит — не плодим второй, просто показываем его.
     if (operatorWin && !operatorWin.isDestroyed()) operatorWin.focus()
+    return
+  }
+  if (isProjectTransferRunning()) {
+    relaunch = false
+    asking = true
+    try {
+      const options = {
+        type: 'info' as const,
+        buttons: [t('Понятно')],
+        message: t('Сборка проекта ещё идёт'),
+        detail: t('Дождись проверки и сообщения о готовности. После этого CueDeck можно закрыть.'),
+      }
+      if (operatorWin && !operatorWin.isDestroyed()) await dialog.showMessageBox(operatorWin, options)
+      else await dialog.showMessageBox(options)
+    } finally { asking = false }
     return
   }
   if (!confirmed) {

@@ -994,18 +994,10 @@ async function activateEntry(entry: PlaylistEntry, live: boolean): Promise<void>
       if (!ok) return
     }
   }
-  if (entry.kind === 'pptx') {
-    const hasLo = await checkSoffice()
-    if (!hasLo) {
-      showLoModal()
-      return
-    }
-  }
-  // Из кэша PPTX открывается мгновенно — баннер нужен только при настоящей
-  // конвертации, иначе он мигает на каждом переключении.
+  // Slow source reads can take time even with a cached PDF; do not call that conversion.
   const convertTimer =
     entry.kind === 'pptx'
-      ? window.setTimeout(() => showBanner(t('Конвертация PPTX через LibreOffice…'), 60_000), 600)
+      ? window.setTimeout(() => showBanner(t('Открываю презентацию…'), 60_000), 600)
       : null
   const res = live
     ? await window.api.playlist.activateLive(entry.id)
@@ -1014,7 +1006,8 @@ async function activateEntry(entry: PlaylistEntry, live: boolean): Promise<void>
     window.clearTimeout(convertTimer)
     banner.classList.add('hidden')
   }
-  if (!res.ok && res.error) showBanner(t('Ошибка: {error}', { error: res.error }), 8000)
+  if (res.needsLibreOffice) showLoModal()
+  else if (!res.ok && res.error) showBanner(t('Ошибка: {error}', { error: res.error }), 8000)
 }
 
 // Inline rename of a playlist entry's display label (the file on disk is untouched).
@@ -1592,7 +1585,31 @@ function updateOutputMonitors(state: AppState): void {
   monitorsShownPrev = show
 }
 
+function applyProjectTransfer(state: AppState): void {
+  const status = state.projectTransfer
+  const row = document.getElementById('project-transfer')!
+  row.classList.toggle('hidden', !status)
+  if (!status) return
+  row.dataset.phase = status.phase
+  const text = document.getElementById('project-transfer-text')!
+  const progress = document.getElementById('project-transfer-progress') as HTMLProgressElement
+  const reveal = document.getElementById('project-transfer-reveal')!
+  reveal.classList.toggle('hidden', status.phase !== 'done')
+  progress.classList.toggle('hidden', status.phase === 'done' || status.phase === 'error')
+  if (status.total) { progress.max = status.total; progress.value = status.completed }
+  else progress.removeAttribute('value')
+  const count = `${status.completed}/${status.total}`
+  const phase = status.phase === 'copying' ? t('Копирую')
+    : status.phase === 'preparing' ? t('Готовлю презентацию') : t('Проверяю')
+  text.textContent = status.phase === 'choosing' ? t('Выбери папку для сборки проекта')
+    : status.phase === 'done' ? t('Проект готов и проверен: {file}', { file: baseName(status.path ?? '') })
+    : status.phase === 'error' ? t('Не удалось собрать: {error}', { error: status.error ?? '' })
+    : `${phase} ${count}: ${status.file}`
+  row.title = status.path ?? text.textContent
+}
+
 function applyState(state: AppState): void {
+  if (isOperator) applyProjectTransfer(state)
   // Номера на карточках плейлиста — только при внешнем управлении: по ним
   // настраивают кнопки «запись N» на Stream Deck (CSS-счётчик, style.css).
   if (isOperator) document.body.classList.toggle('remote-on', state.remote.enabled)
@@ -1775,15 +1792,13 @@ async function projectOpen(): Promise<void> {
  * потому что пути внутри проекта станут относительными.
  */
 async function projectConsolidate(): Promise<void> {
-  showBanner(t('Собираю проект: копирую материалы…'), 120000)
   const res = await window.api.project.consolidate()
   if (res.cancelled) return hideBanner()
   if (!res.ok) {
     showBanner(t('Не удалось собрать: {error}', { error: res.error ?? t('неизвестная ошибка') }), 8000)
     return
   }
-  const skipped = res.skipped ? t(', пропущено ненайденных: {n}', { n: res.skipped }) : ''
-  showBanner(t('Проект собран в {name}: скопировано файлов {n}', { name: baseName(res.path ?? ''), n: res.copied }) + skipped, 10000)
+  showBanner(t('Проект готов и проверен: {file}', { file: baseName(res.path ?? '') }), 20000)
 }
 
 async function projectSave(saveAs: boolean = false): Promise<void> {
@@ -1828,7 +1843,8 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
 async function openPdf(): Promise<void> {
   // Open stages into the off-air preview deck; Take (Tab/Enter) promotes it to air.
   const res = await window.api.preview.openDialog()
-  if (!res.ok && !res.cancelled) showBanner(t('Не удалось открыть: {error}', { error: res.error }))
+  if (res.needsLibreOffice) showLoModal()
+  else if (!res.ok && !res.cancelled) showBanner(t('Не удалось открыть: {error}', { error: res.error }))
   if (res.ok && res.sha1Mismatch) showBanner(t('Заметки в sidecar-файле относятся к другому PDF. Перезаписать их.'))
   if (res.ok) {
     const key = takeKeyLabel()
@@ -4669,3 +4685,5 @@ bootstrap().catch((err) => {
   window.api.diag.log('error', 'bootstrap упал', String(err?.stack ?? err))
   showBanner(t('Не удалось запустить: {error}', { error: err.message }))
 })
+
+document.getElementById('project-transfer-reveal')?.addEventListener('click', () => { void window.api.project.revealTransfer() })

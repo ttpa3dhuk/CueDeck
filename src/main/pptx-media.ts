@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { deflateRawSync, inflateRawSync } from 'node:zlib'
 import { join } from 'node:path'
-import { app } from 'electron'
+import { localPptxCacheDir, pptxReadCacheDir, PPTX_MANIFEST_VERSION } from './project-cache.js'
 import type { SlideMedia } from '../shared/types.js'
 import { cachedPdfPathFor } from './pptx-converter.js'
 import { requestedFonts } from './pptx-fonts.js'
@@ -38,7 +38,7 @@ const PLAYABLE_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm'])
 /** Всё видеообразное стрипаем из копии для LibreOffice (вес PDF). */
 const STRIP_EXTS = new Set([...PLAYABLE_EXTS, 'avi', 'wmv', 'mpg', 'mpeg', 'mkv', '3gp', 'asf'])
 
-const MANIFEST_VERSION = 5
+const MANIFEST_VERSION = PPTX_MANIFEST_VERSION
 /** Манифесты с этими версиями писались от той же пересборки — PDF в кэше годен. */
 const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5])
 
@@ -75,17 +75,15 @@ export interface PreparedPptxMedia {
   temporary: boolean
 }
 
-function cacheDir(): string {
-  return join(app.getPath('userData'), 'pptx-cache')
-}
+const cacheDir = localPptxCacheDir
 
 /** Папка с извлечёнными роликами данного PPTX (раздаётся через cuedeck-media://). */
 export function mediaDirFor(sha1: string): string {
-  return join(cacheDir(), `${sha1}.media`)
+  return join(pptxReadCacheDir(sha1), `${sha1}.media`)
 }
 
 function manifestPathFor(sha1: string): string {
-  return join(cacheDir(), `${sha1}.media.json`)
+  return join(pptxReadCacheDir(sha1), `${sha1}.media.json`)
 }
 
 function extOf(name: string): string {
@@ -889,7 +887,7 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
 
     // Извлечь ролики (для оверлеев), даже если пересборка не нужна.
     if (t.videos.length > 0) {
-      const dir = mediaDirFor(sha1)
+      const dir = join(cacheDir(), `${sha1}.media`)
       await mkdir(dir, { recursive: true })
       const byName = new Map(entries.map((e) => [e.name, e]))
       for (const v of t.videos) {
@@ -906,7 +904,7 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
       pageNotes: t.pageNotes,
       fonts: t.fonts,
     }
-    await writeFile(manifestPathFor(sha1), JSON.stringify(manifest))
+    await writeFile(join(cacheDir(), `${sha1}.media.json`), JSON.stringify(manifest))
 
     const parsed = { ...original, slideMedia: t.slideMedia, pageNotes: t.pageNotes, fonts: t.fonts }
     if (!t.zip) return parsed

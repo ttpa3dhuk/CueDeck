@@ -196,6 +196,15 @@ export interface DeckState {
   slideMedia: SlideMedia[]
 }
 
+export interface ProjectTransferStatus {
+  phase: 'choosing' | 'copying' | 'preparing' | 'checking' | 'done' | 'error'
+  completed: number
+  total: number
+  file: string
+  path?: string
+  error?: string
+}
+
 export interface AppState {
   pdfPath: string | null
   pdfSha1: string | null
@@ -260,6 +269,7 @@ export interface AppState {
   autoAdvance: boolean
   keyVisualPath: string | null
   projectPath: string | null
+  projectTransfer: ProjectTransferStatus | null
   audienceWindowed: boolean
   /** Output device id for video sound (setSinkId). null = system default. */
   audioOutputId: string | null
@@ -619,6 +629,7 @@ export interface DisplayInfo {
 
 export interface OpenPdfResult {
   ok: boolean
+  needsLibreOffice?: boolean
   path?: string
   totalSlides?: number
   sha1?: string

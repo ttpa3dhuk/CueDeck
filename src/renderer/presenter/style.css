@@ -1498,25 +1498,31 @@ body[data-role="operator"] #current-slide {
 
 .bottombar {
   display: grid;
-  /* Две колонки: «Клавиши…» слева, остальное прижато вправо (третья
-     пустая колонка в 3-колоночном гриде утаскивала правый блок в центр). */
-  grid-template-columns: 1fr auto;
+  /* Статус сборки занимает центр; кнопки остаются по краям. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   padding: 0 16px;
   background: var(--panel);
   border-top: 1px solid var(--border);
 }
 .bottombar-left {
+  grid-column: 1;
   justify-self: start;
   display: flex;
   gap: 6px;
 }
 .bottombar-right {
+  grid-column: 3;
   justify-self: end;
   display: flex;
   gap: 6px;
 }
 .bottombar button { white-space: nowrap; }
+.project-transfer { grid-column: 2; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; }
+.project-transfer span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-transfer progress { width: 90px; flex: 0 0 90px; height: 6px; accent-color: var(--accent); }
+.project-transfer[data-phase="error"] { color: var(--danger); }
+.project-transfer[data-phase="done"] { color: var(--timer-green); }
 /* Нижняя панель — одни значки (просьба Азата 2026-09-24); подпись — в title. */
 .bottombar .icon-btn { min-width: 34px; padding: 4px 8px; font-size: 16px; line-height: 1; text-align: center; }
 

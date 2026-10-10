@@ -288,6 +288,7 @@ export interface PresenterApi {
     read(): Promise<{ bytes: Uint8Array; mime: string } | null>
   }
   project: {
+    revealTransfer(): Promise<void>
     create(): Promise<void>
     save(saveAs?: boolean): Promise<{ ok: boolean; path?: string; error?: string }>
     /** `missing`/`total` — сколько материалов проекта не нашлось на диске. */

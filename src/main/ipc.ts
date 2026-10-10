@@ -1,6 +1,6 @@
-import { app, dialog, globalShortcut, ipcMain, screen } from 'electron'
+import { app, dialog, globalShortcut, ipcMain, screen, shell } from 'electron'
 import { homedir } from 'node:os'
-import { access, copyFile, mkdir, readFile, rm } from 'node:fs/promises'
+import { access, copyFile, readFile, rm } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { basename, join } from 'node:path'
 import type { DisplayMap, Layout } from './layout.js'
@@ -70,9 +70,13 @@ import {
   getUiLang,
   setUiLang,
 } from './display-mapping.js'
-import { indexFolder, pickBestCandidate, uniqueName } from './project-files.js'
+import { indexFolder, pickBestCandidate } from './project-files.js'
 import { countPdfPages } from './pdf-pages.js'
-import { cachedPdfPathFor, convertPptxToPdf, findSoffice, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
+import { cachedPdfPathFor, convertPptxToPdf, findSoffice, LibreOfficeMissingError, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
+import { beginProjectTransfer, endProjectTransfer, isProjectTransferRunning, transferProject } from './project-transfer.js'
+import { runPptxWork } from './pptx-work.js'
+import type { ProjectTransferStatus } from '../shared/types.js'
+import { exportProjectCache, forgetProjectCache, useProjectCache } from './project-cache.js'
 import { preparePptxMedia } from './pptx-media.js'
 import { substitutedFonts } from './pptx-fonts.js'
 import { log } from './diag.js'
@@ -187,7 +191,7 @@ function setFontIssues(filePath: string, fonts: string[]): void {
 }
 
 /** Read a file's identity + page count + sidecar notes. Shared by both decks. */
-async function inspectFile(filePath: string): Promise<InspectedFile> {
+async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; cacheSourcePath?: string; cacheProjectPath?: string | null; reportFontIssues?: boolean } = {}): Promise<InspectedFile> {
   const kind = kindOf(filePath)
   if (!kind) throw new Error(t('Неподдерживаемый формат файла'))
 
@@ -210,20 +214,23 @@ async function inspectFile(filePath: string): Promise<InspectedFile> {
     totalSlides = countPdfPages(buf)
   } else if (kind === 'pptx') {
     sha1 = await computePdfSha1(filePath)
-    // Вшитые видео (2.10): извлечь ролики + manifest, LibreOffice получает
-    // копию без видеофайлов — иначе он зашивает mp4 внутрь PDF целиком.
-    const prepared = await preparePptxMedia(filePath, sha1)
-    slideMedia = prepared.slideMedia
-    pptxNotes = prepared.pageNotes
-    pptxNotesBySha1.set(sha1, pptxNotes)
-    try {
-      const cachedPath = await convertPptxToPdf(prepared.convertSource, sha1)
-      const buf = await readFile(cachedPath)
-      totalSlides = countPdfPages(buf)
-      setFontIssues(filePath, substitutedFonts(prepared.fonts, buf))
-    } finally {
-      if (prepared.temporary) rm(prepared.convertSource, { force: true }).catch(() => undefined)
-    }
+    await runPptxWork(async () => {
+      if (!opts.forceLocalCache) await useProjectCache(sha1, opts.cacheSourcePath ?? filePath, opts.cacheProjectPath === undefined ? store.get().projectPath : opts.cacheProjectPath)
+      // Вшитые видео (2.10): извлечь ролики + manifest, LibreOffice получает
+      // копию без видеофайлов — иначе он зашивает mp4 внутрь PDF целиком.
+      const prepared = await preparePptxMedia(filePath, sha1)
+      slideMedia = prepared.slideMedia
+      pptxNotes = prepared.pageNotes
+      pptxNotesBySha1.set(sha1, pptxNotes)
+      try {
+        const cachedPath = await convertPptxToPdf(prepared.convertSource, sha1)
+        const buf = await readFile(cachedPath)
+        totalSlides = countPdfPages(buf)
+        if (opts.reportFontIssues !== false) setFontIssues(filePath, substitutedFonts(prepared.fonts, buf))
+      } finally {
+        if (prepared.temporary) await rm(prepared.convertSource, { force: true }).catch(() => undefined)
+      }
+    })
   } else if (kind === 'video') {
     // video: don't read the whole (possibly multi-GB) file — id from stat only
     sha1 = await computeStatSha1(filePath)
@@ -440,7 +447,7 @@ async function openFile(
       kind: info.kind,
     }
   } catch (err) {
-    return { ok: false, error: openErrorMessage(err, filePath) }
+    return { ok: false, error: openErrorMessage(err, filePath), needsLibreOffice: err instanceof LibreOfficeMissingError }
   }
 }
 
@@ -471,7 +478,7 @@ async function loadPreview(
       kind: info.kind,
     }
   } catch (err) {
-    return { ok: false, error: openErrorMessage(err, filePath) }
+    return { ok: false, error: openErrorMessage(err, filePath), needsLibreOffice: err instanceof LibreOfficeMissingError }
   }
 }
 
@@ -1755,10 +1762,12 @@ export function registerIpcHandlers(): void {
    */
   ipcMain.handle('pptx:rebuild', async (_e, filePath: string) => {
     try {
+      if (isProjectTransferRunning()) return { ok: false, error: t('Дождись окончания сборки проекта перед пересборкой презентации') }
       if (kindOf(filePath) !== 'pptx') return { ok: false, error: t('Это не PPTX') }
       const sha1 = await computePdfSha1(filePath)
+      forgetProjectCache(sha1)
       await rm(cachedPdfPathFor(sha1), { force: true })
-      await inspectFile(filePath)
+      await inspectFile(filePath, { forceLocalCache: true })
       return { ok: true, remaining: store.get().fontIssues[filePath] ?? [] }
     } catch (err) {
       return { ok: false, error: (err as Error).message }
@@ -2026,123 +2035,55 @@ export function registerIpcHandlers(): void {
     },
   )
 
-  /**
-   * Собрать проект в папку (шаг 4): копируем все материалы в подпапку рядом с
-   * .pdpres и переписываем пути — на выходе самодостаточная папка под флешку,
-   * которая откроется на любой машине (пути станут относительными, см.
-   * project.ts). Пропавшие файлы копировать нечего — сообщаем сколько.
-   */
-  ipcMain.handle(
-    'project:consolidate',
-    async (): Promise<{
-      ok: boolean
-      copied?: number
-      skipped?: number
-      path?: string
-      error?: string
-      cancelled?: boolean
-    }> => {
-      const op = getOperatorWindow()
-      const state = store.get()
-      if (state.playlist.length === 0 && !state.keyVisualPath) {
-        return { ok: false, error: t('Проект пуст — нечего собирать') }
-      }
-      const res = await dialog.showOpenDialog(op!, {
+  ipcMain.handle('project:reveal-transfer', () => {
+    const status = store.get().projectTransfer
+    if (status?.phase === 'done' && status.path) shell.showItemInFolder(status.path)
+  })
+
+  ipcMain.handle('project:consolidate', async () => {
+    if (!beginProjectTransfer()) return { ok: false, error: t('Сборка проекта уже идёт') }
+    const snapshot = structuredClone(store.get())
+    const progress = (projectTransfer: ProjectTransferStatus | null): void => { store.patch({ projectTransfer }) }
+    progress({ phase: 'choosing', completed: 0, total: 0, file: '' })
+    try {
+      if (!snapshot.playlist.length && !snapshot.keyVisualPath) throw new Error(t('Проект пуст — нечего собирать'))
+      const res = await dialog.showOpenDialog(getOperatorWindow()!, {
         title: t('Куда собрать проект'),
         message: t('Выбери папку — внутри появится папка проекта со всеми материалами'),
         properties: ['openDirectory', 'createDirectory'],
       })
-      if (res.canceled || res.filePaths.length === 0) return { ok: false, cancelled: true }
-
-      const projectName = state.projectPath
-        ? basename(state.projectPath, `.${PROJECT_EXTENSION}`)
-        : t('CueDeck-проект')
-      const targetDir = join(res.filePaths[0], projectName)
-      const mediaDir = join(targetDir, t('материалы'))
-
-      try {
-        await mkdir(mediaDir, { recursive: true })
-        const taken = new Set<string>()
-        let copied = 0
-        let skipped = 0
-
-        // Один и тот же файл может стоять в плейлисте дважды (тот же ролик у
-        // двух спикеров) — копируем его один раз, иначе двухгиговое видео
-        // ляжет в папку двумя копиями.
-        const copiedByPath = new Map<string, string>()
-
-        const copyMaterial = async (src: string): Promise<string | null> => {
-          const already = copiedByPath.get(src)
-          if (already) return already
-          try {
-            await access(src)
-          } catch {
-            skipped += 1
-            return null
-          }
-          const name = uniqueName(basename(src), taken)
-          const dest = join(mediaDir, name)
-          await copyFile(src, dest)
-          copiedByPath.set(src, dest)
-          copied += 1
-          return dest
-        }
-
-        const playlist: PlaylistEntry[] = []
-        for (const e of state.playlist) {
-          if (e.kind === 'live') {
-            playlist.push(e) // живой вход копировать нечего
-            continue
-          }
-          if (e.kind === 'list') {
-            const items = []
-            for (const it of e.items ?? []) {
-              const dest = await copyMaterial(it.path)
-              items.push(dest ? { ...it, path: dest } : it)
-            }
-            playlist.push({ ...e, items })
-            continue
-          }
-          const dest = await copyMaterial(e.filePath)
-          playlist.push(dest ? { ...e, filePath: dest } : e)
-        }
-        const keyVisualPath = state.keyVisualPath
-          ? ((await copyMaterial(state.keyVisualPath)) ?? state.keyVisualPath)
-          : null
-
-        // Заметки-спутники живут рядом с исходником и ключуются по SHA1 —
-        // копия файла та же, поэтому переносим их следом, иначе заметки
-        // спикеров потеряются при переезде.
-        for (const e of playlist) {
-          if (e.kind === 'live' || e.kind === 'list') continue
-          const oldPath = state.playlist.find((x) => x.id === e.id)?.filePath
-          // Материал не скопировался (не найден) — путь остался прежним, и
-          // копирование заметок «само в себя» затёрло бы их.
-          if (!oldPath || oldPath === e.filePath) continue
-          const from = sidecarPathFor(oldPath)
-          const to = sidecarPathFor(e.filePath)
-          try {
-            await access(from)
-            await copyFile(from, to)
-          } catch {
-            /* заметок нет — нормально */
-          }
-        }
-
-        const projectPath = join(targetDir, `${projectName}.${PROJECT_EXTENSION}`)
-        await saveProjectFile(projectPath, { playlist, keyVisualPath })
-
-        store.patch({ playlist, keyVisualPath, projectPath })
-        persistPlaylist()
-        setKeyVisualPath(keyVisualPath)
-        setProjectPath(projectPath)
-        await refreshMissingFiles()
-        return { ok: true, copied, skipped, path: projectPath }
-      } catch (err) {
-        return { ok: false, error: (err as Error).message }
+      if (res.canceled || !res.filePaths.length) {
+        progress(null)
+        return { ok: false, cancelled: true }
       }
-    },
-  )
+      await flushPendingWrites()
+      const name = snapshot.projectPath ? basename(snapshot.projectPath, `.${PROJECT_EXTENSION}`) : t('CueDeck-проект')
+      const result = await transferProject({
+        parent: res.filePaths[0], name,
+        playlist: snapshot.playlist, keyVisualPath: snapshot.keyVisualPath,
+        progress,
+        prepare: async (source, target, directory) => {
+          if (kindOf(source) !== 'pptx') return []
+          const info = await inspectFile(target, {
+            cacheSourcePath: source, cacheProjectPath: snapshot.projectPath, reportFontIssues: false,
+          })
+          return exportProjectCache(info.sha1, source, directory)
+        },
+      })
+      log.info(`project:consolidate verified → ${result.path}`)
+      // Keep the live project and playlist: the operator may have edited them during transfer.
+      return { ok: true, ...result }
+    } catch (err) {
+      const error = (err as NodeJS.ErrnoException).code === 'ENOSPC'
+        ? t('На выбранном диске закончилось место. Освободи место или выбери другой диск и повтори сборку.')
+        : (err as Error).message
+      progress({ phase: 'error', completed: 0, total: 0, file: '', error })
+      log.error('project:consolidate', error)
+      return { ok: false, error }
+    } finally {
+      endProjectTransfer()
+    }
+  })
 
   /** Ручная перепроверка материалов — кнопка «Проверить файлы» у оператора. */
   ipcMain.handle(

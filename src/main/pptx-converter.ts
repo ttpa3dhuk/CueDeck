@@ -3,7 +3,7 @@ import { log } from './diag.js'
 import { mkdir, rename, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, parse } from 'node:path'
-import { app } from 'electron'
+import { localPptxCacheDir, pptxReadCacheDir } from './project-cache.js'
 import { getSofficePath, setSofficePath } from './display-mapping.js'
 import { t } from '../shared/i18n.js'
 
@@ -151,12 +151,16 @@ export function sofficeSearchPaths(): string[] {
   return sofficeCandidates()
 }
 
-function cacheDir(): string {
-  return join(app.getPath('userData'), 'pptx-cache')
+const cacheDir = localPptxCacheDir
+
+export class LibreOfficeMissingError extends Error {
+  constructor() {
+    super(t('LibreOffice не установлен — скачай с libreoffice.org и перезапусти CueDeck'))
+  }
 }
 
 export function cachedPdfPathFor(sha1: string): string {
-  return join(cacheDir(), `${sha1}.pdf`)
+  return join(pptxReadCacheDir(sha1), `${sha1}.pdf`)
 }
 
 export function cachedPdfExists(sha1: string): boolean {
@@ -164,12 +168,13 @@ export function cachedPdfExists(sha1: string): boolean {
 }
 
 export async function convertPptxToPdf(pptxPath: string, sourceSha1: string): Promise<string> {
-  const target = cachedPdfPathFor(sourceSha1)
-  if (existsSync(target)) return target
+  const cached = cachedPdfPathFor(sourceSha1)
+  if (existsSync(cached)) return cached
+  const target = join(cacheDir(), `${sourceSha1}.pdf`)
 
   const soffice = await findSoffice()
   if (!soffice) {
-    throw new Error(t('LibreOffice не установлен — скачай с libreoffice.org и перезапусти CueDeck'))
+    throw new LibreOfficeMissingError()
   }
 
   await mkdir(cacheDir(), { recursive: true })

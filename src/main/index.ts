@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { DONATE_URL, SUPPORT_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
-import { initDiag, instrumentIpc, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
+import { initDiag, instrumentIpc, markCleanExit, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
+import { isMovingToApplications, offerMacInstall } from './mac-install.js'
 import { captureIpcHandlers, initRemote, registerRemoteIpc } from './remote/server.js'
 import { initStream } from './stream/streamer.js'
 import { initOmt, registerOmtIpc } from './omt/outputs.js'
@@ -331,6 +332,11 @@ function watchDisplayChanges(): void {
 }
 
 app.whenReady().then(async () => {
+  // Relocate before opening windows or starting outputs. On a fresh install,
+  // use the system language until the regular language picker is shown.
+  setLang(getUiLang() ?? (app.getLocale().startsWith('ru') ? 'ru' : DEFAULT_LANG))
+  if (await offerMacInstall()) return
+
   protocol.handle(MEDIA_SCHEME, handleMediaRequest)
 
   // Allow microphone/output-device access so enumerateDevices() returns real
@@ -487,6 +493,10 @@ app.on('window-all-closed', async () => {
 // Cmd+Q / Alt+F4 / меню → тот же путь, что и крестик окна оператора:
 // спросить, дописать файлы, выйти (quit-guard.ts).
 app.on('before-quit', (e) => {
+  if (isMovingToApplications()) {
+    markCleanExit()
+    return
+  }
   e.preventDefault()
   void requestQuit()
 })

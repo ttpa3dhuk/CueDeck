@@ -89,6 +89,7 @@ export function initialState(): AppState {
     autoAdvance: false,
     keyVisualPath: null,
     projectPath: null,
+    projectTransfer: null,
     audienceWindowed: false,
     audioOutputId: null,
     previewAudioOutputId: null,

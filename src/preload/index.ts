@@ -177,6 +177,7 @@ const api: PresenterApi = {
     read: () => ipcRenderer.invoke('keyvisual:read'),
   },
   project: {
+    revealTransfer: () => ipcRenderer.invoke('project:reveal-transfer'),
     create: () => ipcRenderer.invoke('project:new'),
     save: (saveAs) => ipcRenderer.invoke('project:save', { saveAs: Boolean(saveAs) }),
     open: () => ipcRenderer.invoke('project:open'),

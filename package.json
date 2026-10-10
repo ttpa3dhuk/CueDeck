@@ -83,6 +83,12 @@
     "win": {
       "target": [
         {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
           "target": "zip",
           "arch": [
             "x64"
@@ -95,6 +101,16 @@
           "to": "omt"
         }
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "CueDeck-${version}-Setup.${ext}",
+      "installerLanguages": ["en_US", "ru_RU"],
+      "include": "build/installer.nsh",
+      "deleteAppDataOnUninstall": false
     },
     "asar": true,
     "compression": "normal",

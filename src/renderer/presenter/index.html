@@ -125,7 +125,7 @@
             <span class="lo-icon">⚠️</span>
             <div class="lo-body">
               <strong>LibreOffice не установлен</strong>
-              <span>Нужен для открытия PPTX / PPT / KEY файлов</span>
+              <span>Нужен для конвертации новых презентаций. Готовый кэш открывается без него.</span>
             </div>
             <button id="lo-install-btn" class="lo-btn">Как установить</button>
           </div>
@@ -291,6 +291,11 @@
         <div class="bottombar-left">
           <button id="stream-btn" class="stream-btn" title="Трансляция: площадки, ключи, качество"><span class="stream-btn-label">STREAM</span><span id="stream-btn-time" class="stream-btn-time"></span></button>
           <button id="omt-btn" class="omt-btn"><span class="omt-btn-label">OMT</span><span id="omt-btn-tally" class="omt-btn-tally"></span></button>
+        </div>
+        <div id="project-transfer" class="project-transfer hidden" role="status" aria-live="polite">
+          <span id="project-transfer-text"></span>
+          <progress id="project-transfer-progress" max="1"></progress>
+          <button id="project-transfer-reveal" class="hidden" title="Показать готовый проект в папке">Показать</button>
         </div>
         <div class="bottombar-right">
           <button id="settings-btn" class="icon-btn" title="Настройки: экраны, звук, клавиши, тема и язык, LibreOffice, внешнее управление, MIDI (Cmd+,)" aria-label="Настройки">⚙️</button>
