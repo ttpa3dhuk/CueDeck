@@ -290,7 +290,7 @@
       <footer class="bottombar op-only">
         <div class="bottombar-left">
           <button id="stream-btn" class="stream-btn" title="Трансляция: площадки, ключи, качество"><span class="stream-btn-label">STREAM</span><span id="stream-btn-time" class="stream-btn-time"></span></button>
-          <button id="omt-btn" class="omt-btn hidden"><span class="omt-btn-label">OMT</span><span id="omt-btn-tally" class="omt-btn-tally"></span></button>
+          <button id="omt-btn" class="omt-btn"><span class="omt-btn-label">OMT</span><span id="omt-btn-tally" class="omt-btn-tally"></span></button>
         </div>
         <div class="bottombar-right">
           <button id="settings-btn" class="icon-btn" title="Настройки: экраны, звук, клавиши, тема и язык, LibreOffice, внешнее управление, MIDI (Cmd+,)" aria-label="Настройки">⚙️</button>
@@ -604,6 +604,7 @@
                 <p id="lo-settings-status" class="audio-hint compact">…</p>
               </div>
               <div class="remote-row">
+                <button id="lo-settings-install">Установить LibreOffice…</button>
                 <button id="lo-settings-recheck">Проверить снова</button>
                 <button id="lo-settings-pick">Указать папку вручную…</button>
               </div>
@@ -824,11 +825,12 @@
           <button id="lo-download-btn" class="primary lo-download-btn">
             Скачать LibreOffice → libreoffice.org
           </button>
+          <p id="lo-install-hint" class="audio-hint compact"></p>
         </div>
-        <div class="lo-install-option">
+        <div id="lo-command-option" class="lo-install-option">
           <div id="lo-option-label" class="lo-option-label">Вариант 2 — через терминал</div>
           <div class="lo-code-block">
-            <code id="lo-cmd">brew install --cask libreoffice</code>
+            <code id="lo-cmd"></code>
             <button id="lo-copy-btn" class="lo-copy-btn" title="Скопировать">⧉</button>
           </div>
         </div>

@@ -1908,7 +1908,7 @@ async function saveReport(): Promise<void> {
  */
 function installCommandFor(platform: string): { label: string; cmd: string } | null {
   if (platform === 'darwin') {
-    return { label: t('Вариант 2 — через Homebrew (терминал)'), cmd: 'brew install --cask libreoffice' }
+    return { label: t('Если Homebrew уже установлен (терминал)'), cmd: 'brew install --cask libreoffice' }
   }
   if (platform === 'win32') {
     return {
@@ -1924,7 +1924,17 @@ function showLoModal(): void {
   const cmd = installCommandFor(window.api.platform)
   const cmdEl = document.getElementById('lo-cmd')
   const labelEl = document.getElementById('lo-option-label')
-  const block = cmdEl?.parentElement
+  const block = document.getElementById('lo-command-option')
+  const hint = document.getElementById('lo-install-hint')
+  if (hint) {
+    hint.textContent = window.api.platform === 'darwin'
+      ? t('Homebrew не нужен. На сайте выбери macOS (Apple Silicon) для M1–M4 и новее или macOS (Intel). Открой скачанный DMG и перетащи LibreOffice в «Программы».')
+      : t('Скачай установщик для своей системы и следуй его подсказкам.')
+  }
+  const pickHint = modal?.querySelector<HTMLElement>('[data-i18n-html="loPickHint"]')
+  if (pickHint && window.api.platform === 'darwin') {
+    pickHint.textContent = t('Если LibreOffice уже установлен, выбери LibreOffice.app в папке «Программы» или там, куда ты его перенёс.')
+  }
   if (cmd && cmdEl && labelEl) {
     cmdEl.textContent = cmd.cmd
     labelEl.textContent = cmd.label
@@ -3636,6 +3646,7 @@ function openSettings(section: SettingsSection = 'screens'): void {
       })
     })
     $('ui-lang-restart').addEventListener('click', () => void window.api.ui.relaunch())
+    $('lo-settings-install').addEventListener('click', showLoModal)
     $('lo-settings-recheck').addEventListener('click', async () => {
       await recheckLibreOffice()
       void renderLoSection()
@@ -4207,7 +4218,7 @@ function omtLabel(id: OmtOutputId): string {
 }
 
 /**
- * Кнопка OMT на нижней панели: видна, пока включён хоть один выход. Красная —
+ * Кнопка OMT на нижней панели всегда видна. Красная —
  * какой-то наш источник в эфире у vMix (tally), зелёная — в превью; в подписи —
  * какие именно. Подробности — во всплывающей подсказке, клик — в «Настройки».
  */
@@ -4216,7 +4227,6 @@ function renderOmtButton(o: OmtStatus): void {
   const tally = document.getElementById('omt-btn-tally')
   if (!btn || !tally) return
   const on = OMT_OUTPUTS.filter((id) => o.enabled[id])
-  btn.classList.toggle('hidden', on.length === 0)
   const inProgram = on.filter((id) => o.outputs[id].program)
   const inPreview = on.filter((id) => o.outputs[id].preview && !o.outputs[id].program)
   const broken = on.some((id) => o.outputs[id].state === 'error')
@@ -4225,7 +4235,7 @@ function renderOmtButton(o: OmtStatus): void {
   btn.classList.toggle('warn', broken && inProgram.length === 0 && inPreview.length === 0)
   const shown = inProgram.length ? inProgram : inPreview
   tally.textContent = shown.map(omtLabel).join(', ')
-  btn.title = on
+  btn.title = on.length === 0 ? t('Выходы OMT выключены. Нажми, чтобы настроить.') : on
     .map((id) => {
       const st = o.outputs[id]
       const parts = [omtLabel(id)]
