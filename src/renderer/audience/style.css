@@ -86,3 +86,15 @@ canvas, .slide-image, .slide-video {
   z-index: 0;
 }
 .slide-image.fade-under.hidden { display: none; }
+
+.take-fade-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+  pointer-events: none;
+  z-index: 6;
+}

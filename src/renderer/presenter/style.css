@@ -485,14 +485,60 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   gap: 12px;
 }
 .op-bottombar .topbar-row.timer-controls .pdf-name { display: none; }
-.op-bottombar .take-big {
+/* Two equal rows replace the original TAKE area. */
+.take-controls { display: flex; gap: 4px; }
+.fade-controls { display: flex; position: relative; min-height: 0; }
+.fade-duration { display: flex; align-items: center; gap: 3px; font-size: 11px; }
+.fade-duration input { width: 64px; min-width: 0; font-variant-numeric: tabular-nums; }
+.op-bottombar .take-controls {
   flex: none;
   align-self: stretch;
-  min-width: 150px;
-  font-size: 22px;
+  width: 150px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px;
+}
+.op-bottombar .take-controls .take-btn {
+  min-height: 0;
+  padding: 4px 6px;
+  font-size: 19px;
   font-weight: 800;
-  letter-spacing: 0.04em;
-  border-radius: 8px;
+  border-radius: 6px;
+}
+.op-bottombar .fade-controls .take-btn { width: 100%; min-width: 0; }
+.op-bottombar .fade-duration { position: absolute; left: 50%; bottom: 5px; transform: translateX(-50%); }
+.op-bottombar .fade-duration input {
+  width: 54px;
+  padding: 3px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  background: #cbd2dc;
+  color: #202735;
+  text-align: center;
+  appearance: textfield;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+}
+.op-bottombar .fade-duration input::-webkit-inner-spin-button,
+.op-bottombar .fade-duration input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.op-bottombar .fade-duration input:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+.op-bottombar .fade-duration span { position: absolute; left: calc(100% + 3px); }
+#fade-btn { background: var(--accent); border-color: var(--accent); }
+.take-fade-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+  pointer-events: none;
+  z-index: 6;
 }
 
 /* Hotkeys editor modal */

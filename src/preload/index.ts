@@ -43,7 +43,8 @@ const api: PresenterApi = {
     next: () => ipcRenderer.invoke('preview:next'),
     prev: () => ipcRenderer.invoke('preview:prev'),
     clear: () => ipcRenderer.invoke('preview:clear'),
-    take: () => ipcRenderer.invoke('preview:take'),
+    take: (transition) => ipcRenderer.invoke('preview:take', transition),
+    setFadeMs: (ms) => ipcRenderer.invoke('preview:set-fade-ms', ms),
     setVideoTakeMode: (mode) => ipcRenderer.invoke('preview:set-video-take-mode', mode),
     setSlideTakeMode: (mode) => ipcRenderer.invoke('preview:set-slide-take-mode', mode),
     video: {

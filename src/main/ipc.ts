@@ -1,3 +1,4 @@
+import { sanitizeTakeFadeMs, type TakeTransition } from '../shared/take-transition.js'
 import { app, dialog, globalShortcut, ipcMain, screen, shell } from 'electron'
 import { homedir } from 'node:os'
 import { access, copyFile, readFile, rm } from 'node:fs/promises'
@@ -45,6 +46,7 @@ import {
   sanitizeSpeakerMsgLayout,
   setVideoTakeMode,
   setSlideTakeMode,
+  setTakeFadeMs,
   setNotesFontSize,
   setPlaylist,
   setCurrentPlaylistId,
@@ -309,7 +311,7 @@ function listEntryById(id: string | null): PlaylistEntry | undefined {
 }
 
 /** Показать элемент списка с индексом index; при выходе за край — цикл или стоп. */
-async function playListItem(entryId: string, pos: number): Promise<void> {
+async function playListItem(entryId: string, pos: number, transition?: TakeTransition): Promise<void> {
   const entry = listEntryById(entryId)
   const items = entry?.items ?? []
   if (!entry || items.length === 0) {
@@ -338,7 +340,7 @@ async function playListItem(entryId: string, pos: number): Promise<void> {
   const index = listOrder[pos] ?? pos
   const item = items[index]
   store.patch({ listIndex: index, listPos: pos })
-  const res = await openFile(item.path, { playlistId: entryId, fromList: true })
+  const res = await openFile(item.path, { playlistId: entryId, fromList: true, transition })
   if (!res.ok) {
     // Битый или пропавший файл не должен вешать всю пачку — идём дальше.
     if (items.length > 1) scheduleListAdvance(entry, 0.5)
@@ -361,8 +363,8 @@ function scheduleListAdvance(entry: PlaylistEntry, sec: number): void {
 }
 
 /** Стартовать список с начала (выдача в эфир). */
-export async function startListPlayback(entryId: string): Promise<void> {
-  await playListItem(entryId, 0)
+export async function startListPlayback(entryId: string, transition?: TakeTransition): Promise<void> {
+  await playListItem(entryId, 0, transition)
 }
 
 /** Шаг по списку кликером/клавишами; direction = ±1. */
@@ -391,7 +393,7 @@ function openErrorMessage(err: unknown, filePath: string): string {
 
 async function openFile(
   filePath: string,
-  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean } = {},
+  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; transition?: TakeTransition } = {},
 ): Promise<OpenPdfResult> {
   // Любая загрузка в эфир мимо проигрывателя снимает список с эфира — иначе
   // его таймер продолжил бы подменять картинку под уже другим материалом.
@@ -415,6 +417,7 @@ async function openFile(
       // У списка `loop` — про всю пачку, а не про отдельный ролик внутри неё:
       // элемент доигрывает и уступает место следующему.
       videoLoop: Boolean(entry?.loop) && entry?.kind !== 'list',
+      takeTransition: opts.transition ?? null,
       pdfPath: filePath,
       pdfSha1: info.sha1,
       fileKind: info.kind,
@@ -867,10 +870,14 @@ export function registerIpcHandlers(): void {
   // entry applies its per-speaker timer (duration + reset, NOT started — the
   // operator starts it manually); taking a loose file leaves the timer alone.
   // Video behaviour on take follows AppState.videoTakeMode.
-  ipcMain.handle('preview:take', () => {
+  ipcMain.handle('preview:take', (_e, mode?: string) => {
     const state = store.get()
     const p = state.preview
     if (!p.path) return
+    const transition: TakeTransition = {
+      id: randomUUID(),
+      durationMs: mode === 'fade' ? sanitizeTakeFadeMs(state.takeFadeMs) : 0,
+    }
 
     // В превью лежит первый элемент списка — в эфир уходит весь список,
     // с его циклом и таймингом фотографий.
@@ -880,7 +887,7 @@ export function registerIpcHandlers(): void {
     if (previewList) {
       store.patch({ previewListIndex: -1 })
       store.patchPreview(initialDeckState())
-      void startListPlayback(previewList.id)
+      void startListPlayback(previewList.id, transition)
       store.patchTimer({
         durationMs: previewList.durationMs,
         startedAt: null,
@@ -943,6 +950,7 @@ export function registerIpcHandlers(): void {
         : p.currentSlide
 
     store.patch({
+      takeTransition: transition,
       pdfPath: p.path,
       pdfSha1: p.sha1,
       fileKind: p.kind,
@@ -973,6 +981,12 @@ export function registerIpcHandlers(): void {
       })
       setLastDurationMs(entry.durationMs)
     }
+  })
+
+  ipcMain.handle('preview:set-fade-ms', (_e, ms: unknown) => {
+    const value = sanitizeTakeFadeMs(ms)
+    store.patch({ takeFadeMs: value })
+    setTakeFadeMs(value)
   })
 
   ipcMain.handle('preview:set-video-take-mode', (_e, mode: VideoTakeMode) => {

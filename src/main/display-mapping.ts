@@ -1,3 +1,4 @@
+import { DEFAULT_TAKE_FADE_MS, sanitizeTakeFadeMs } from '../shared/take-transition.js'
 import Store from 'electron-store'
 import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
@@ -43,6 +44,7 @@ interface PersistedShape {
   speakerMsgLayout: { pos: { x: number; y: number } | null; scale: number }
   videoTakeMode: VideoTakeMode
   slideTakeMode: SlideTakeMode
+  takeFadeMs: number
   notesFontSize: number
   playlist: PlaylistEntry[]
   currentPlaylistId: string | null
@@ -104,6 +106,7 @@ const STORE_DEFAULTS: PersistedShape = {
   speakerMsgLayout: { pos: null, scale: 1 },
   videoTakeMode: 'play-start',
   slideTakeMode: 'from-start',
+  takeFadeMs: DEFAULT_TAKE_FADE_MS,
   notesFontSize: 18,
   playlist: [],
   currentPlaylistId: null,
@@ -661,4 +664,12 @@ export function getVenueProfiles(): unknown {
 
 export function setVenueProfiles(list: VenueProfile[]): void {
   store().set('venueProfiles', list)
+}
+
+export function getTakeFadeMs(): number {
+  return sanitizeTakeFadeMs(store().get('takeFadeMs'))
+}
+
+export function setTakeFadeMs(value: number): void {
+  store().set('takeFadeMs', sanitizeTakeFadeMs(value))
 }

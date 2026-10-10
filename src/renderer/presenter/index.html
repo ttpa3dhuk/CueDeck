@@ -196,7 +196,16 @@
               <option value="cover">⛶ заполнить (обрезать)</option>
               <option value="fill">↔ растянуть</option>
             </select>
-            <button id="take-btn" class="take-btn" title="Выдать превью в эфир" disabled>ЭФИР ▶</button>
+            <div id="take-controls" class="take-controls">
+              <button id="take-btn" class="take-btn" title="Выдать превью в эфир" disabled>ЭФИР ▶</button>
+              <div class="fade-controls">
+                <button id="fade-btn" class="take-btn" title="Плавно выдать превью в эфир" disabled>Fade</button>
+                <label class="fade-duration" title="Длительность Fade в миллисекундах">
+                  <input id="take-fade-ms" type="number" min="100" max="5000" step="50" value="300" aria-label="Длительность Fade в миллисекундах" />
+                  <span>мс</span>
+                </label>
+              </div>
+            </div>
           </div>
           <canvas id="preview-canvas" class="hidden"></canvas>
           <img id="preview-image" class="slide-image hidden" alt="" />

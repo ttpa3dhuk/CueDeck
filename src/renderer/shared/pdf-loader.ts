@@ -53,22 +53,23 @@ export class PdfLoader {
   private latestRequest = new WeakMap<HTMLCanvasElement, number>()
   private doc: PDFDocumentProxy | null = null
   private docToken = 0
+  private loadRequest = 0
 
   async loadDocument(bytes: Uint8Array): Promise<PDFDocumentProxy> {
+    const request = ++this.loadRequest
     const copy = new Uint8Array(bytes)
     const loadingTask = pdfjs.getDocument({ data: copy })
     const newDoc = await loadingTask.promise
-    if (this.doc) {
-      try {
-        await this.doc.destroy()
-      } catch {
-        /* ignore */
-      }
+    if (request !== this.loadRequest) {
+      await newDoc.destroy().catch(() => undefined)
+      return newDoc
     }
+    const previous = this.doc
     this.doc = newDoc
     this.docToken++
     this.cache.clear()
     this.inflight.clear()
+    if (previous) await previous.destroy().catch(() => undefined)
     return newDoc
   }
 

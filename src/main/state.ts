@@ -1,3 +1,4 @@
+import { DEFAULT_TAKE_FADE_MS } from '../shared/take-transition.js'
 import { BrowserWindow } from 'electron'
 import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'
 import type { AppState, DeckState, Role, TimerState, VideoState } from '../shared/types.js'
@@ -72,6 +73,8 @@ export function initialState(): AppState {
     speakerMsgLayout: { pos: null, scale: 1 },
     videoTakeMode: 'play-start',
     slideTakeMode: 'from-start',
+    takeFadeMs: DEFAULT_TAKE_FADE_MS,
+    takeTransition: null,
     notesFontSize: 18,
     notes: {},
     layout: 'solo',

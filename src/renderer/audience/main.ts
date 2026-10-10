@@ -1,3 +1,4 @@
+import { TakeFade } from '../shared/take-fade'
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender } from '../shared/pdf-loader'
 import {
@@ -18,7 +19,7 @@ import { elementAudioStream, LiveMeter, LivePool, LiveView } from '../shared/liv
 function listFadeMs(state: AppState): number {
   if (state.listIndex < 0) return 0
   const entry = state.playlist.find((e) => e.id === state.currentPlaylistId)
-  return entry?.fadeMs ?? 0
+  return state.takeTransition?.durationMs ? 0 : entry?.fadeMs ?? 0
 }
 import { liveFitFor } from '../../shared/live'
 import { WINDOW_TITLES } from '../../shared/window-titles'
@@ -37,6 +38,17 @@ const kvImage = document.getElementById('keyvisual') as HTMLImageElement
 const kvVideo = document.getElementById('keyvisual-video') as HTMLVideoElement
 const slideImageUnder = document.getElementById('slide-image-under') as HTMLImageElement
 
+const takeFade = new TakeFade(document.body, [slideImageUnder, canvas, slideImage, slideVideo, liveVideo, mediaOverlay])
+
+function programFrameReady(): boolean {
+  const s = getState()
+  if (s.fileKind === 'video') return slideVideo.readyState >= 2
+  if (s.fileKind === 'live') return liveVideo.readyState >= 2
+  if (s.fileKind === 'image') return slideImage.complete && slideImage.naturalWidth > 0
+  return docLoaded && lastRenderedSlide === s.currentSlide
+}
+
+let programLoadGeneration = 0
 let docLoaded = false
 let lastRenderedSlide = -1
 let lastFilePath: string | null = null
@@ -175,7 +187,9 @@ async function loadFile(): Promise<void> {
   disposeSlideImage(listFadeMs(getState()) + 500)
   docLoaded = false
   lastRenderedSlide = -1
+  const generation = ++programLoadGeneration
   const state = getState()
+  const stale = (): boolean => generation !== programLoadGeneration || getState().pdfPath !== state.pdfPath
   const t0 = performance.now()
   // В журнал: сколько зал грузил файл до первого кадра — по этим цифрам ищем
   // промаргивание/задержки (diag.ts).
@@ -209,6 +223,7 @@ async function loadFile(): Promise<void> {
   unloadVideo()
 
   const data = await window.api.pdf.read()
+  if (stale()) return
   if (!data) {
     window.api.diag.log('warn', `pdf:read вернул null для ${state.fileKind} ${state.pdfPath}`)
     return
@@ -220,6 +235,7 @@ async function loadFile(): Promise<void> {
     canvas.classList.add('hidden')
     // Фотографии списка перетекают друг в друга, если оператор задал FADE.
     await crossfadeToImage(slideImage, slideImageUnder, slideImageBlobUrl, listFadeMs(state))
+    if (stale()) return
     slideImage.classList.remove('hidden')
     done('картинка показана') // i18n-ok: журнал
     return
@@ -230,6 +246,7 @@ async function loadFile(): Promise<void> {
   slideImage.removeAttribute('src')
   canvas.classList.remove('hidden')
   await loadDocument(data.bytes)
+  if (stale()) return
   docLoaded = true
   await renderSlide()
   done(`${state.fileKind} открыт (${Math.round(data.bytes.byteLength / 1024)} КБ), первый слайд отрисован`) // i18n-ok: журнал
@@ -364,8 +381,16 @@ async function bootstrap(): Promise<void> {
     unloadMediaOverlay()
   })
 
-  subscribe((state) => {
-    applyState(state).catch((err) => window.api.diag.log('error', 'applyState упал', String(err?.stack ?? err)))
+  subscribe((state, patch) => {
+    if (patch && Object.hasOwn(patch, 'takeTransition')) {
+      takeFade.begin(patch.takeTransition ?? null, state.preview.path === lastFilePath)
+    } else if (!state.pdfPath || (patch && Object.hasOwn(patch, 'currentSlide'))) {
+      takeFade.cancel()
+    }
+    const contentChanged = patch && (Object.hasOwn(patch, 'takeTransition') || Object.hasOwn(patch, 'pdfPath'))
+    applyState(state).then(() => {
+      if (contentChanged) void takeFade.reveal(state.takeTransition, programFrameReady)
+    }).catch((err) => window.api.diag.log('error', 'applyState упал', String(err?.stack ?? err)))
   })
 
   const initial = getState()

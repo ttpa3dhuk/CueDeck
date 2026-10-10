@@ -1,3 +1,4 @@
+import { TakeFade } from '../shared/take-fade'
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
@@ -155,6 +156,7 @@ const banner = $('banner')
 const setupModal = $('setup-section')
 const settingsModal = $('settings-modal')
 
+let programLoadGeneration = 0
 let docLoaded = false
 let lastRenderedSlide = -1
 let currentImageBlobUrl: string | null = null
@@ -182,6 +184,8 @@ const previewPrevBtn = isOperator ? $<HTMLButtonElement>('preview-prev') : null
 const previewNextBtn = isOperator ? $<HTMLButtonElement>('preview-next') : null
 const previewCounter = isOperator ? $('preview-counter') : null
 const takeBtn = isOperator ? $<HTMLButtonElement>('take-btn') : null
+const fadeBtn = isOperator ? $<HTMLButtonElement>('fade-btn') : null
+const takeFadeInput = isOperator ? $<HTMLInputElement>('take-fade-ms') : null
 const videoTakeModeSelect = isOperator ? $<HTMLSelectElement>('video-take-mode') : null
 const slideTakeModeSelect = isOperator ? $<HTMLSelectElement>('slide-take-mode') : null
 
@@ -486,7 +490,9 @@ function applyPreviewLive(state: AppState): void {
 }
 
 async function loadCurrentFile(): Promise<void> {
+  const generation = ++programLoadGeneration
   const state = getState()
+  const stale = (): boolean => generation !== programLoadGeneration || getState().pdfPath !== state.pdfPath
   {
     // Внутри списка с наплывом уходящий кадр ещё нужен нижнему слою.
     const listEntry = state.playlist.find((e) => e.id === state.currentPlaylistId)
@@ -533,6 +539,7 @@ async function loadCurrentFile(): Promise<void> {
   unloadCurrentVideo()
 
   const data = await window.api.pdf.read()
+  if (stale()) return
   if (!data) return
 
   slidePlaceholder.classList.add('hidden')
@@ -542,8 +549,9 @@ async function loadCurrentFile(): Promise<void> {
     currentImageBlobUrl = URL.createObjectURL(blob)
     // Оператор должен видеть ровно то же, что зал, — включая наплыв.
     const entry = state.playlist.find((e) => e.id === state.currentPlaylistId)
-    const fade = state.listIndex >= 0 ? (entry?.fadeMs ?? 0) : 0
+    const fade = state.takeTransition?.durationMs ? 0 : state.listIndex >= 0 ? (entry?.fadeMs ?? 0) : 0
     await crossfadeToImage(currentImage, currentImageUnder, currentImageBlobUrl, fade)
+    if (stale()) return
     currentImage.classList.remove('hidden')
     currentCanvas.classList.add('hidden')
     clearCanvas(nextCanvas)
@@ -560,6 +568,7 @@ async function loadCurrentFile(): Promise<void> {
   nextCanvas.classList.remove('hidden')
   nextEmpty.classList.add('hidden')
   await loadDocument(data.bytes)
+  if (stale()) return
   docLoaded = true
   await window.api.pdf.reportTotal(totalPages())
   await renderCurrent()
@@ -748,6 +757,8 @@ function updatePreviewUI(state: AppState): void {
   if (!isOperator) return
   const p = state.preview
   if (takeBtn) takeBtn.disabled = !p.path
+  if (fadeBtn) fadeBtn.disabled = !p.path
+  if (takeFadeInput && document.activeElement !== takeFadeInput) takeFadeInput.value = String(state.takeFadeMs)
   if (previewCounter) {
     previewCounter.textContent = p.path
       ? p.kind === 'video'
@@ -1810,10 +1821,27 @@ async function projectSave(saveAs: boolean = false): Promise<void> {
   }
 }
 
+const takeFade = new TakeFade(currentCanvas.parentElement!, [
+  ...(currentImageUnder ? [currentImageUnder] : []), currentCanvas, currentImage, currentVideo, currentLive, mediaOverlay,
+])
+
+function programFrameReady(): boolean {
+  const s = getState()
+  if (s.fileKind === 'video') return currentVideo.readyState >= 2
+  if (s.fileKind === 'live') return currentLive.readyState >= 2
+  if (s.fileKind === 'image') return currentImage.complete && currentImage.naturalWidth > 0
+  return docLoaded && lastRenderedSlide === s.currentSlide
+}
+
 let prevFilePath: string | null = null
 let prevSlide = 0
 
 async function handleStateChange(state: AppState, patch: Partial<AppState> | null): Promise<void> {
+  if (patch && Object.hasOwn(patch, 'takeTransition')) {
+    takeFade.begin(patch.takeTransition ?? null, Boolean(state.preview.sha1 && state.preview.sha1 === state.pdfSha1) || state.preview.path === prevFilePath)
+  } else if (!state.pdfPath || (patch && Object.hasOwn(patch, 'currentSlide'))) {
+    takeFade.cancel()
+  }
   applyState(state)
   applyProgramLive(state)
   applyPreviewLive(state)
@@ -1838,6 +1866,9 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
   }
 
   updateMediaOverlay(getState())
+  if (patch && (Object.hasOwn(patch, 'takeTransition') || Object.hasOwn(patch, 'pdfPath'))) {
+    void takeFade.reveal(state.takeTransition, programFrameReady)
+  }
 }
 
 async function openPdf(): Promise<void> {
@@ -2585,6 +2616,11 @@ function setupOperatorControls(): void {
 
   // ── Preview deck controls ────────────────────────────────────────────────
   takeBtn!.addEventListener('click', () => window.api.preview.take())
+  fadeBtn!.addEventListener('click', () => window.api.preview.take('fade'))
+  takeFadeInput!.addEventListener('change', async () => {
+    await window.api.preview.setFadeMs(Number(takeFadeInput!.value))
+    takeFadeInput!.value = String(getState().takeFadeMs)
+  })
   slideTakeModeSelect!.addEventListener('change', () => {
     window.api.preview.setSlideTakeMode(slideTakeModeSelect!.value as SlideTakeMode)
     slideTakeModeSelect!.blur()
@@ -4378,11 +4414,11 @@ function buildOperatorBottomBar(): void {
   timerBox.append(head, timerControlsRow)
 
 
-  takeBtn.classList.add('take-big')
+  const takeControls = $('take-controls')
   // Order: timer (left), notes, speaker message, TAKE (far right).
   // The message box is already a child of #op-bottombar (declared in HTML);
   // append() moves it into the right slot.
-  bottom.append(timerBox, notes, $('speaker-msg-box'), takeBtn)
+  bottom.append(timerBox, notes, $('speaker-msg-box'), takeControls)
 }
 
 // Сплиттеры суфлёра (Б-8): вертикальный — ширина колонки «Дальше/Заметки»,

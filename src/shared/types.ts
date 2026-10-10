@@ -1,3 +1,4 @@
+import type { TakeTransition } from './take-transition.js'
 /**
  * Single source of truth for the state types shared by the main process and
  * the preload/renderer side. Type-only module — safe to import from any
@@ -240,6 +241,8 @@ export interface AppState {
   speakerMsgLayout: { pos: { x: number; y: number } | null; scale: number }
   videoTakeMode: VideoTakeMode
   slideTakeMode: SlideTakeMode
+  takeFadeMs: number
+  takeTransition: TakeTransition | null
   notesFontSize: number
   notes: Record<number, string>
   layout: Layout

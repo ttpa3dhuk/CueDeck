@@ -112,7 +112,8 @@ export interface PresenterApi {
     next(): Promise<void>
     prev(): Promise<void>
     clear(): Promise<void>
-    take(): Promise<void>
+    take(transition?: 'fade'): Promise<void>
+    setFadeMs(ms: number): Promise<void>
     setVideoTakeMode(mode: VideoTakeMode): Promise<void>
     /** С какого слайда TAKE выдаёт презентацию: с первого или с текущего в превью (Б-3). */
     setSlideTakeMode(mode: SlideTakeMode): Promise<void>
