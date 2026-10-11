@@ -15,6 +15,9 @@
  * множественного числа ни в одном языке.
  */
 export const EN: Record<string, string> = {
+  'О CueDeck': 'About CueDeck',
+  'Версия {version}': 'Version {version}',
+  'Скачать CueDeck': 'Download CueDeck',
   'Верхняя строка': 'Top bar',
   'На выбранном диске закончилось место. Освободи место или выбери другой диск и повтори сборку.': 'The selected drive is out of space. Free up space or choose another drive and collect the project again.',
   'Дождись окончания сборки проекта перед пересборкой презентации': 'Wait for project collection to finish before rebuilding the presentation',
@@ -559,7 +562,6 @@ export const EN: Record<string, string> = {
   'Больше не спрашивать при запуске': "Don't ask on startup",
   '3 экрана (+ суфлёр)': '3 screens (+ prompter)',
   'Продолжить': 'Continue',
-  'Бесплатно, с открытым исходным кодом.': 'Free and open source.',
   'Программу делает один человек в свободное время. Если она выручает вас на мероприятиях — поддержите разработку.': 'CueDeck is made by one person in their spare time. If it saves your events, please support its development.',
 
   // ── Внешнее управление: справочная страница ──

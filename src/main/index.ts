@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { DONATE_URL, SUPPORT_URL } from '../shared/types.js'
 import { checkForUpdates } from './updater.js'
+import { showAboutDialog } from './about-dialog.js'
 import { initDiag, instrumentIpc, markCleanExit, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
 import { isMovingToApplications, offerMacInstall } from './mac-install.js'
 import { captureIpcHandlers, initRemote, registerRemoteIpc } from './remote/server.js'
@@ -169,9 +170,9 @@ function buildMenu(): void {
     ...(isMac
       ? ([
           {
-            label: app.name,
+            label: 'CueDeck',
             submenu: [
-              { role: 'about' },
+              { label: t('О CueDeck'), click: () => void showAboutDialog() },
               { type: 'separator' },
               {
                 label: t('Настройки…'),
@@ -238,6 +239,8 @@ function buildMenu(): void {
     {
       label: 'Help',
       submenu: [
+        { label: t('О CueDeck'), click: () => void showAboutDialog() },
+        { type: 'separator' },
         {
           label: t('Горячие клавиши…'),
           accelerator: 'Shift+/',

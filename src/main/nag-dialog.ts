@@ -35,7 +35,6 @@ function pageHtml(version: string): string {
     border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 10px;
   }
   h1 { font-size: 16px; font-weight: 600; }
-  .sub { font-size: 12px; color: #8b93a3; }
   p.body { font-size: 13px; line-height: 1.5; color: #c3c9d4; }
   button {
     -webkit-app-region: no-drag; width: 100%; padding: 9px 12px; font-size: 13px;
@@ -49,7 +48,6 @@ function pageHtml(version: string): string {
   #go[disabled]:hover { background: #1f232c; }
 </style></head><body><div class="wrap">
   <h1>CueDeck ${version}</h1>
-  <div class="sub">${t('Бесплатно, с открытым исходным кодом.')}</div>
   <p class="body">${t('Программу делает один человек в свободное время. Если она выручает вас на мероприятиях — поддержите разработку.')}</p>
   ${DONATE_URL ? `<button id="donate">${t('☕ Поддержать проект')}</button>` : ''}
   <button id="go" disabled>${t('Продолжить')} (${COUNTDOWN_SEC})</button>
