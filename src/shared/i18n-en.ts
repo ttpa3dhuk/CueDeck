@@ -15,6 +15,7 @@
  * множественного числа ни в одном языке.
  */
 export const EN: Record<string, string> = {
+  'Правая кнопка мыши — изменить длительность Fade': 'Right-click to change the Fade duration',
   'О CueDeck': 'About CueDeck',
   'Версия {version}': 'Version {version}',
   'Скачать CueDeck': 'Download CueDeck',

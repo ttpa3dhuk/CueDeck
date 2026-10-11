@@ -490,6 +490,8 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 .fade-controls { display: flex; position: relative; min-height: 0; }
 .fade-duration { display: flex; align-items: center; gap: 3px; font-size: 11px; }
 .fade-duration input { width: 64px; min-width: 0; font-variant-numeric: tabular-nums; }
+.fade-controls { cursor: pointer; }
+.fade-duration input[readonly] { pointer-events: none; caret-color: transparent; }
 .op-bottombar .take-controls {
   flex: none;
   align-self: stretch;

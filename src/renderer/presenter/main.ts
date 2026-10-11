@@ -2618,10 +2618,32 @@ function setupOperatorControls(): void {
   // ── Preview deck controls ────────────────────────────────────────────────
   takeBtn!.addEventListener('click', () => window.api.preview.take())
   fadeBtn!.addEventListener('click', () => window.api.preview.take('fade'))
-  takeFadeInput!.addEventListener('change', async () => {
+  const fadeControls = fadeBtn!.parentElement!
+  fadeControls.addEventListener('click', (event) => {
+    if ((event.target as HTMLElement).closest('#fade-btn') || !takeFadeInput!.readOnly) return
+    fadeBtn!.click()
+  })
+  fadeControls.addEventListener('contextmenu', (event) => {
+    event.preventDefault()
+    takeFadeInput!.readOnly = false
+    takeFadeInput!.tabIndex = 0
+    takeFadeInput!.focus()
+    takeFadeInput!.select()
+  })
+  takeFadeInput!.addEventListener('blur', async () => {
+    if (takeFadeInput!.readOnly) return
     const value = sanitizeTakeFadeMs(Number(takeFadeInput!.value))
     takeFadeInput!.value = String(value)
+    takeFadeInput!.readOnly = true
+    takeFadeInput!.tabIndex = -1
     await window.api.preview.setFadeMs(value)
+  })
+  takeFadeInput!.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== 'Escape') return
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.key === 'Escape') takeFadeInput!.value = String(getState().takeFadeMs)
+    takeFadeInput!.blur()
   })
   slideTakeModeSelect!.addEventListener('change', () => {
     window.api.preview.setSlideTakeMode(slideTakeModeSelect!.value as SlideTakeMode)

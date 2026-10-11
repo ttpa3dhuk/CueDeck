@@ -200,10 +200,10 @@
               <button id="take-btn" class="take-btn" title="Выдать превью в эфир" disabled>ЭФИР ▶</button>
               <div class="fade-controls">
                 <button id="fade-btn" class="take-btn" title="Плавно выдать превью в эфир" disabled>Fade</button>
-                <label class="fade-duration" title="Длительность Fade в миллисекундах">
-                  <input id="take-fade-ms" type="number" min="100" max="2000" step="50" value="300" placeholder="100" aria-label="Длительность Fade в миллисекундах" />
+                <div class="fade-duration" title="Правая кнопка мыши — изменить длительность Fade">
+                  <input id="take-fade-ms" type="number" min="100" max="2000" step="50" value="300" placeholder="100" readonly tabindex="-1" aria-label="Длительность Fade в миллисекундах" />
                   <span>мс</span>
-                </label>
+                </div>
               </div>
             </div>
           </div>
