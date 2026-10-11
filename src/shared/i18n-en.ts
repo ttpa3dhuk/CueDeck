@@ -15,6 +15,7 @@
  * множественного числа ни в одном языке.
  */
 export const EN: Record<string, string> = {
+  'Верхняя строка': 'Top bar',
   'На выбранном диске закончилось место. Освободи место или выбери другой диск и повтори сборку.': 'The selected drive is out of space. Free up space or choose another drive and collect the project again.',
   'Дождись окончания сборки проекта перед пересборкой презентации': 'Wait for project collection to finish before rebuilding the presentation',
   'Проект готов и проверен: {file}': 'Project ready and verified: {file}',

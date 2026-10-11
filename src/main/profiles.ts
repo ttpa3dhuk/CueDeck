@@ -62,6 +62,7 @@ function captureSettings(labels: { main: string | null; preview: string | null }
     timerGongEnabled: s.timerGongEnabled,
     timerLoop: s.timerLoop,
     timerPresets: [...s.timerPresets],
+    speakerToolbarScale: s.speakerToolbarScale,
     speakerLayout: { ...s.speakerLayout },
     speakerMsgLayout: { pos: s.speakerMsgLayout.pos ? { ...s.speakerMsgLayout.pos } : null, scale: s.speakerMsgLayout.scale },
     speakerMsgPresets: [...s.speakerMsgPresets],
@@ -102,6 +103,7 @@ async function applySettings(p: VenueProfileSettings, groups: readonly ProfileGr
     await call('timer:set-scale', p.timerScale)
     await call('timer:set-color', p.timerColor)
     await call('timer:set-warn-colors', p.timerWarnColors)
+    await call('prompter:set-toolbar-scale', p.speakerToolbarScale)
     await call('prompter:set-layout', p.speakerLayout)
     await call('speaker-message:set-layout', p.speakerMsgLayout)
   }

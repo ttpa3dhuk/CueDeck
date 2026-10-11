@@ -9,6 +9,7 @@
  * Здесь только разбор и проверка. Применяет профиль profiles.ts — через те же
  * обработчики ipc, что кнопки «Настроек», своей логики настроек здесь нет.
  */
+import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import type {
   Layout,
   ProfileAudioOutput,
@@ -60,7 +61,7 @@ export const PROFILE_GROUPS: readonly ProfileGroup[] = [
 export const GROUP_KEYS: Record<ProfileGroup, readonly (keyof VenueProfileSettings)[]> = {
   screens: ['layout', 'audienceWindowed', 'outputMonitorsEnabled'],
   audio: ['audioMain', 'audioPreview'],
-  prompter: ['timerPosition', 'timerScale', 'timerFree', 'timerColor', 'timerWarnColors', 'speakerLayout', 'speakerMsgLayout'],
+  prompter: ['timerPosition', 'timerScale', 'timerFree', 'timerColor', 'timerWarnColors', 'speakerToolbarScale', 'speakerLayout', 'speakerMsgLayout'],
   timer: ['timerMode', 'timerTickEnabled', 'timerGongEnabled', 'timerLoop'],
   presets: ['timerPresets', 'speakerMsgPresets'],
   take: ['videoTakeMode', 'slideTakeMode', 'autoAdvance'],
@@ -155,6 +156,7 @@ export function sanitizeSettings(raw: unknown): VenueProfileSettings {
     timerPresets: Array.isArray(s.timerPresets)
       ? s.timerPresets.slice(0, 8).map((m) => Math.floor(num(m, 0, 999, 0)))
       : [],
+    speakerToolbarScale: sanitizeSpeakerToolbarScale(s.speakerToolbarScale),
     speakerLayout: {
       sidebarPct: num(speaker.sidebarPct, 18, 60, 37),
       nextPct: speaker.nextPct === null || speaker.nextPct === undefined ? null : num(speaker.nextPct, 15, 85, 50),

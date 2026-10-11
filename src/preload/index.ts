@@ -123,6 +123,7 @@ const api: PresenterApi = {
     relaunch: () => ipcRenderer.invoke('app:relaunch'),
   },
   prompter: {
+    setToolbarScale: (scale) => ipcRenderer.invoke('prompter:set-toolbar-scale', scale),
     setLayout: (layout) => ipcRenderer.invoke('prompter:set-layout', layout),
   },
   midi: {

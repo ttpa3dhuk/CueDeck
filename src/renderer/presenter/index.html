@@ -511,7 +511,13 @@
             </section>
             <section class="settings-section hidden" data-section="prompter">
               <p class="audio-hint">Экран суфлёра в его пропорциях.</p>
+              <div class="remote-row">
+                <label for="prompter-toolbar-scale" class="live-field-label">Верхняя строка</label>
+                <input id="prompter-toolbar-scale" type="range" min="100" max="400" step="10" value="100" />
+                <output id="prompter-toolbar-value" for="prompter-toolbar-scale">100%</output>
+              </div>
               <div id="prompter-stage" class="prompter-stage">
+                <div id="prompter-toolbar" class="prompter-toolbar"></div>
                 <div class="ps-zone ps-slide">слайд</div>
                 <div class="ps-zone ps-next">дальше</div>
                 <div class="ps-zone ps-notes">заметки</div>

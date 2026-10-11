@@ -236,6 +236,7 @@ export interface AppState {
    * по высоте колонки (15–85; null — поровну). Раньше жили в localStorage окна
    * суфлёра — их нельзя было менять от оператора.
    */
+  speakerToolbarScale: number
   speakerLayout: { sidebarPct: number; nextPct: number | null }
   /** Сообщение спикеру: центр в долях экрана (null — сверху по центру) и масштаб. */
   speakerMsgLayout: { pos: { x: number; y: number } | null; scale: number }
@@ -696,6 +697,7 @@ export interface VenueProfileSettings {
   timerGongEnabled: boolean
   timerLoop: boolean
   timerPresets: number[]
+  speakerToolbarScale: number
   speakerLayout: { sidebarPct: number; nextPct: number | null }
   speakerMsgLayout: { pos: { x: number; y: number } | null; scale: number }
   speakerMsgPresets: string[]

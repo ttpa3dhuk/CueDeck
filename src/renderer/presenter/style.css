@@ -1992,13 +1992,29 @@ body[data-role="operator"] #current-slide {
 body[data-role="speaker"] .op-only { display: none !important; }
 body[data-role="speaker"] .topbar { background: transparent; border-bottom: none; }
 body[data-role="speaker"] .bottombar { display: none; }
-body[data-role="speaker"] .app { grid-template-rows: 56px 1fr; }
-body[data-role="speaker"] .topbar-row.main { height: 56px; }
+body[data-role="speaker"] .app { grid-template-rows: auto minmax(0, 1fr); }
+body[data-role="speaker"] .topbar-row.main {
+  grid-template-columns: minmax(0, 1fr);
+  height: auto;
+  min-height: calc(56px * var(--speaker-toolbar-scale, 1));
+  padding: calc(12px * var(--speaker-toolbar-scale, 1)) 16px;
+}
+body[data-role="speaker"] .topbar-left { display: none; }
+body[data-role="speaker"] .topbar-center {
+  justify-content: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: calc(14px * var(--speaker-toolbar-scale, 1));
+}
+body[data-role="speaker"] .topbar-center > span { line-height: 1.15; }
+body[data-role="speaker"] .slide-counter,
+body[data-role="speaker"] .slide-remaining { white-space: nowrap; }
+
 body[data-role="speaker"] .grid { padding: 16px; }
-body[data-role="speaker"] .slide-counter { font-size: 18px; }
-body[data-role="speaker"] .slide-counter.video { font-size: 24px; }
-body[data-role="speaker"] .slide-remaining { font-size: 14px; }
-body[data-role="speaker"] .slide-remaining.big { font-size: 38px; }
+body[data-role="speaker"] .slide-counter { font-size: calc(18px * var(--speaker-toolbar-scale, 1)); }
+body[data-role="speaker"] .slide-counter.video { font-size: calc(24px * var(--speaker-toolbar-scale, 1)); }
+body[data-role="speaker"] .slide-remaining { font-size: calc(14px * var(--speaker-toolbar-scale, 1)); }
+body[data-role="speaker"] .slide-remaining.big { font-size: calc(38px * var(--speaker-toolbar-scale, 1)); }
 body[data-role="speaker"] .pdf-name { display: none; }
 
 /* On speaker, timer is an overlay positioned in one of four corners */
@@ -2185,7 +2201,36 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   text-overflow: ellipsis;
   max-width: 320px;
 }
-body[data-role="speaker"] .next-speaker { font-size: 18px; }
+body[data-role="speaker"] .next-speaker {
+  font-size: calc(18px * var(--speaker-toolbar-scale, 1));
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  text-align: center;
+}
+.prompter-toolbar {
+  color: #e6e8ec;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.prompter-toolbar > span { line-height: 1.15; }
+.prompter-toolbar .slide-counter,
+.prompter-toolbar .slide-remaining { white-space: nowrap; }
+.prompter-toolbar .next-speaker {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: inherit;
+  text-align: center;
+}
+.prompter-toolbar.masked { visibility: hidden; }
+#prompter-toolbar-scale { min-width: 80px; flex: 1; }
+#prompter-toolbar-value { min-width: 48px; font-variant-numeric: tabular-nums; }
+
 
 /* ── Светлая тема окна оператора (data-theme ставится только оператору;
    суфлёр и зал — выходные экраны, всегда тёмные). Палитра через переменные,

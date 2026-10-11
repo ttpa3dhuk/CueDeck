@@ -1718,7 +1718,6 @@ function applyState(state: AppState): void {
   document.documentElement.style.setProperty('--timer-x', String(state.timerFree.x))
   document.documentElement.style.setProperty('--timer-y', String(state.timerFree.y))
   applyPrompterVars(state)
-  if (isOperator && !settingsModal.classList.contains('hidden')) renderPrompterMock(state)
   const notesFontValueEl = document.getElementById('notes-font-value')
   if (notesFontValueEl) notesFontValueEl.textContent = String(state.notesFontSize)
   const scaleValueEl = document.getElementById('timer-scale-value')
@@ -1755,6 +1754,7 @@ function applyState(state: AppState): void {
   if (listEditingId) renderListItems()
   updateSpeakerMessage(state)
   updateNextSpeaker(state)
+  if (isOperator && !settingsModal.classList.contains('hidden')) renderPrompterMock(state)
   refreshKeyVisualPreview(state).catch(() => undefined)
 
   if (isOperator) {
@@ -3767,6 +3767,7 @@ async function openPrompterSection(): Promise<void> {
  */
 function applyPrompterVars(state: AppState): void {
   const root = document.documentElement.style
+  root.setProperty('--speaker-toolbar-scale', String(state.speakerToolbarScale))
   const c = state.timerColor
   const setOrClear = (name: string, v: string | null): void => {
     if (v) root.setProperty(name, v)
@@ -3799,8 +3800,6 @@ function prompterTimerColor(state: AppState, color: TimerView['color']): string 
 }
 
 // Зоны макета (доли), пересчитываются из speakerLayout.
-const PS_TOP = 0.06
-const PS_H = 0.92
 
 function renderPrompterMock(state: AppState): void {
   const stage = $('prompter-stage')
@@ -3810,6 +3809,25 @@ function renderPrompterMock(state: AppState): void {
   const W = stage.clientWidth
   if (!H) return
   const k = H / prompterScreenH
+
+  const toolbarScale = state.speakerToolbarScale
+  $<HTMLInputElement>('prompter-toolbar-scale').value = String(Math.round(toolbarScale * 100))
+  $('prompter-toolbar-value').textContent = `${Math.round(toolbarScale * 100)}%`
+  const toolbar = $('prompter-toolbar')
+  toolbar.replaceChildren(...[slideCounter, slideRemaining, nextSpeakerEl].map((source) => {
+    const copy = source.cloneNode(true) as HTMLElement
+    copy.removeAttribute('id')
+    const base = source === slideRemaining ? (source.classList.contains('big') ? 38 : 14)
+      : source === slideCounter && source.classList.contains('video') ? 24 : 18
+    copy.style.fontSize = `${base * toolbarScale * k}px`
+    return copy
+  }))
+  toolbar.style.gap = `${14 * toolbarScale * k}px`
+  toolbar.style.padding = `${12 * toolbarScale * k}px ${16 * k}px`
+  toolbar.style.minHeight = `${56 * toolbarScale * k}px`
+  toolbar.classList.toggle('masked', isFullTimer(state.timerPosition))
+  const top = Math.min(0.9, (toolbar.offsetHeight + 16 * k) / H)
+  const contentH = Math.max(0, 1 - top - 16 * k / H)
 
   // Колонки: слайд | «Дальше» / «Заметки»
   const side = state.speakerLayout.sidebarPct / 100
@@ -3821,17 +3839,17 @@ function renderPrompterMock(state: AppState): void {
     z.style.width = `${w * 100}%`
     z.style.height = `${h * 100}%`
   }
-  zone('.ps-slide', 0.01, PS_TOP, 1 - side - 0.02, PS_H)
-  zone('.ps-next', 1 - side, PS_TOP, side - 0.01, PS_H * next - 0.005)
-  zone('.ps-notes', 1 - side, PS_TOP + PS_H * next + 0.005, side - 0.01, PS_H * (1 - next) - 0.005)
+  zone('.ps-slide', 0.01, top, 1 - side - 0.02, contentH)
+  zone('.ps-next', 1 - side, top, side - 0.01, contentH * next - 0.005)
+  zone('.ps-notes', 1 - side, top + contentH * next + 0.005, side - 0.01, contentH * (1 - next) - 0.005)
   const vdiv = stage.querySelector<HTMLElement>('.ps-vdiv')!
   vdiv.style.left = `${(1 - side - 0.005) * 100}%`
-  vdiv.style.top = `${PS_TOP * 100}%`
-  vdiv.style.height = `${PS_H * 100}%`
+  vdiv.style.top = `${top * 100}%`
+  vdiv.style.height = `${contentH * 100}%`
   const hdiv = stage.querySelector<HTMLElement>('.ps-hdiv')!
   hdiv.style.left = `${(1 - side) * 100}%`
   hdiv.style.width = `${(side - 0.01) * 100}%`
-  hdiv.style.top = `${(PS_TOP + PS_H * next) * 100}%`
+  hdiv.style.top = `${(top + contentH * next) * 100}%`
 
   // Сообщение спикеру
   if (!msg.classList.contains('dragging')) {
@@ -4011,9 +4029,16 @@ function wirePrompterMock(): void {
   divDrag(stage.querySelector<HTMLElement>('.ps-vdiv')!, (ev, s) => ({
     sidebarPct: clampScale(((s.right - ev.clientX) / s.width) * 100, 18, 60),
   }))
-  divDrag(stage.querySelector<HTMLElement>('.ps-hdiv')!, (ev, s) => ({
-    nextPct: clampScale(((ev.clientY - s.top - PS_TOP * s.height) / (PS_H * s.height)) * 100, 15, 85),
-  }))
+  divDrag(stage.querySelector<HTMLElement>('.ps-hdiv')!, (ev, s) => {
+    const margin = 16 * stage.clientHeight / prompterScreenH
+    const top = $('prompter-toolbar').offsetHeight + margin
+    const height = Math.max(1, stage.clientHeight - top - margin)
+    return { nextPct: clampScale(((ev.clientY - s.top - top) / height) * 100, 15, 85) }
+  })
+  const toolbarScaleInput = $<HTMLInputElement>('prompter-toolbar-scale')
+  const sendToolbarScale = (): void => { void window.api.prompter.setToolbarScale(Number(toolbarScaleInput.value) / 100) }
+  toolbarScaleInput.addEventListener('input', sendToolbarScale)
+  toolbarScaleInput.addEventListener('change', sendToolbarScale)
   $('prompter-layout-reset').addEventListener('click', () => setLayout({ sidebarPct: 37, nextPct: null }))
 
   // Цвет таймера: пресеты, «Свой…» — системная палитра (круг оттенков на маке).

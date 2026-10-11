@@ -1,3 +1,4 @@
+import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { sanitizeTakeFadeMs, type TakeTransition } from '../shared/take-transition.js'
 import { app, dialog, globalShortcut, ipcMain, screen, shell } from 'electron'
 import { homedir } from 'node:os'
@@ -40,6 +41,7 @@ import {
   setTimerColor,
   validTimerColor,
   setTimerWarnColors,
+  setSpeakerToolbarScale,
   setSpeakerLayout,
   sanitizeSpeakerLayout,
   setSpeakerMsgLayout,
@@ -1117,6 +1119,11 @@ export function registerIpcHandlers(): void {
     setTimerWarnColors(on)
   })
   // Колонки суфлёра — с макета в настройках или сплиттерами на самом суфлёре.
+  ipcMain.handle('prompter:set-toolbar-scale', (_e, value: unknown) => {
+    const scale = sanitizeSpeakerToolbarScale(value)
+    store.patch({ speakerToolbarScale: scale })
+    setSpeakerToolbarScale(scale)
+  })
   ipcMain.handle('prompter:set-layout', (_e, v: unknown) => {
     const layout = sanitizeSpeakerLayout(v)
     store.patch({ speakerLayout: layout })

@@ -208,6 +208,7 @@ export interface PresenterApi {
   }
   /** Раскладка экрана суфлёра (колонки «Дальше/Заметки»). */
   prompter: {
+    setToolbarScale(scale: number): Promise<void>
     setLayout(layout: { sidebarPct: number; nextPct: number | null }): Promise<void>
   }
   /** MIDI-входы, которые слушает CueDeck (по имени устройства; персистится). */

@@ -69,6 +69,7 @@ export function initialState(): AppState {
     timerFree: { x: 0.85, y: 0.12 },
     timerColor: null,
     timerWarnColors: true,
+    speakerToolbarScale: 1,
     speakerLayout: { sidebarPct: 37, nextPct: null },
     speakerMsgLayout: { pos: null, scale: 1 },
     videoTakeMode: 'play-start',

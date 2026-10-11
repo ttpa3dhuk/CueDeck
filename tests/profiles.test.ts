@@ -25,6 +25,7 @@ const full = sanitizeSettings({
   timerFree: { x: 0.8, y: 0.2 },
   timerColor: '#ff0000',
   timerPresets: [5, 10, 15, 20],
+  speakerToolbarScale: 2.5,
   speakerLayout: { sidebarPct: 40, nextPct: null },
   speakerMsgLayout: { pos: { x: 0.3, y: 0.1 }, scale: 1.5 },
   speakerMsgPresets: ['Заканчивайте', '', ''],
@@ -38,6 +39,7 @@ describe('sanitizeSettings', () => {
     expect(full.layout).toBe('presenter-audience')
     expect(full.audioMain).toEqual({ id: 'abc', label: 'Focusrite 2i2' })
     expect(full.timerPosition).toBe('free')
+    expect(full.speakerToolbarScale).toBe(2.5)
     expect(full.timerColor).toBe('#ff0000')
     expect(full.speakerMsgLayout.pos).toEqual({ x: 0.3, y: 0.1 })
     expect(full.remote.httpPort).toBe(9500)
@@ -57,6 +59,7 @@ describe('sanitizeSettings', () => {
     })
     expect(s.layout).toBe('operator-speaker-audience')
     expect(s.timerScale).toBe(1)
+    expect(s.speakerToolbarScale).toBe(1)
     expect(s.timerColor).toBeNull()
     expect(s.timerFree).toEqual({ x: 0.85, y: 0.12 })
     expect(s.audioMain).toBeNull()

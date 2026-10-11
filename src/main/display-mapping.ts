@@ -1,3 +1,4 @@
+import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { DEFAULT_TAKE_FADE_MS, sanitizeTakeFadeMs } from '../shared/take-transition.js'
 import Store from 'electron-store'
 import { screen } from 'electron'
@@ -40,6 +41,7 @@ interface PersistedShape {
   timerFree: { x: number; y: number }
   timerColor: string | null
   timerWarnColors: boolean
+  speakerToolbarScale: number
   speakerLayout: { sidebarPct: number; nextPct: number | null }
   speakerMsgLayout: { pos: { x: number; y: number } | null; scale: number }
   videoTakeMode: VideoTakeMode
@@ -102,6 +104,7 @@ const STORE_DEFAULTS: PersistedShape = {
   timerFree: { x: 0.85, y: 0.12 },
   timerColor: null,
   timerWarnColors: true,
+  speakerToolbarScale: 1,
   speakerLayout: { sidebarPct: 37, nextPct: null },
   speakerMsgLayout: { pos: null, scale: 1 },
   videoTakeMode: 'play-start',
@@ -278,6 +281,14 @@ export function sanitizeSpeakerLayout(v: unknown): { sidebarPct: number; nextPct
     sidebarPct: clampRange(raw.sidebarPct, 18, 60, 37),
     nextPct: raw.nextPct === null || raw.nextPct === undefined ? null : clampRange(raw.nextPct, 15, 85, 50),
   }
+}
+
+export function getSpeakerToolbarScale(): number {
+  return sanitizeSpeakerToolbarScale(store().get('speakerToolbarScale'))
+}
+
+export function setSpeakerToolbarScale(v: number): void {
+  store().set('speakerToolbarScale', v)
 }
 
 export function getSpeakerLayout(): { sidebarPct: number; nextPct: number | null } {
