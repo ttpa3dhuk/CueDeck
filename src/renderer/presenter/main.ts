@@ -1,4 +1,5 @@
 import { TakeFade } from '../shared/take-fade'
+import { sanitizeTakeFadeMs } from '../../shared/take-transition'
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
@@ -2618,8 +2619,9 @@ function setupOperatorControls(): void {
   takeBtn!.addEventListener('click', () => window.api.preview.take())
   fadeBtn!.addEventListener('click', () => window.api.preview.take('fade'))
   takeFadeInput!.addEventListener('change', async () => {
-    await window.api.preview.setFadeMs(Number(takeFadeInput!.value))
-    takeFadeInput!.value = String(getState().takeFadeMs)
+    const value = sanitizeTakeFadeMs(Number(takeFadeInput!.value))
+    takeFadeInput!.value = String(value)
+    await window.api.preview.setFadeMs(value)
   })
   slideTakeModeSelect!.addEventListener('change', () => {
     window.api.preview.setSlideTakeMode(slideTakeModeSelect!.value as SlideTakeMode)
