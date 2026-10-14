@@ -2,7 +2,8 @@ import { readFile, rename, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { isLiveUri } from '../shared/live.js'
 import { t } from '../shared/i18n.js'
-import type { PlaylistEntry } from './state.js'
+import { normalizeFolderPlaylist, sanitizePlaylistFolders } from '../shared/playlist-folders.js'
+import type { PlaylistFolder, PlaylistEntry } from './state.js'
 
 /** 2 — пути к материалам внутри папки проекта пишутся относительными. */
 export const PROJECT_SCHEMA_VERSION = 2
@@ -37,11 +38,13 @@ export interface ProjectFile {
   createdAt: string
   updatedAt: string
   playlist: PlaylistEntry[]
+  playlistFolders?: PlaylistFolder[]
   keyVisualPath: string | null
 }
 
 export interface LoadedProject {
   playlist: PlaylistEntry[]
+  playlistFolders: PlaylistFolder[]
   keyVisualPath: string | null
 }
 
@@ -61,6 +64,7 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
     displayName: String(v.displayName ?? ''),
     speakerName: String(v.speakerName ?? ''),
     durationMs: Number(v.durationMs ?? 30 * 60 * 1000),
+    ...(typeof v.folderId === 'string' ? { folderId: v.folderId } : {}),
     ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
     ...(v.loop ? { loop: true } : {}),
     ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
@@ -91,20 +95,23 @@ export async function loadProjectFile(path: string): Promise<LoadedProject> {
     : []
   const keyVisual =
     typeof parsed.keyVisualPath === 'string' ? parsed.keyVisualPath : null
+  const playlistFolders = sanitizePlaylistFolders(parsed.playlistFolders)
   return {
-    playlist,
+    playlistFolders,
+    playlist: normalizeFolderPlaylist(playlist, playlistFolders),
     keyVisualPath: keyVisual ? fromStoredPath(keyVisual, path) : null,
   }
 }
 
 export async function saveProjectFile(
   path: string,
-  data: { playlist: PlaylistEntry[]; keyVisualPath: string | null },
+  data: { playlist: PlaylistEntry[]; playlistFolders?: PlaylistFolder[]; keyVisualPath: string | null },
 ): Promise<void> {
   const project: ProjectFile = {
     schemaVersion: PROJECT_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    playlistFolders: sanitizePlaylistFolders(data.playlistFolders),
     playlist: data.playlist.map((e) => ({
       ...e,
       filePath: toStoredPath(e.filePath, path),

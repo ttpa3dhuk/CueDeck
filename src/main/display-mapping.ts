@@ -3,7 +3,8 @@ import { DEFAULT_TAKE_FADE_MS, sanitizeTakeFadeMs } from '../shared/take-transit
 import Store from 'electron-store'
 import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
-import type { PlaylistEntry, RemoteSettings, VenueProfile, SlideTakeMode, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
+import { sanitizePlaylistFolders } from '../shared/playlist-folders.js'
+import type { PlaylistFolder, PlaylistEntry, RemoteSettings, VenueProfile, SlideTakeMode, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
 import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 import {
   DEFAULT_OMT_SETTINGS,
@@ -49,6 +50,7 @@ interface PersistedShape {
   takeFadeMs: number
   notesFontSize: number
   playlist: PlaylistEntry[]
+  playlistFolders: PlaylistFolder[]
   currentPlaylistId: string | null
   playlistCompact: boolean
   autoAdvance: boolean
@@ -112,6 +114,7 @@ const STORE_DEFAULTS: PersistedShape = {
   takeFadeMs: DEFAULT_TAKE_FADE_MS,
   notesFontSize: 18,
   playlist: [],
+  playlistFolders: [],
   currentPlaylistId: null,
   playlistCompact: false,
   autoAdvance: false,
@@ -353,12 +356,21 @@ export function getPlaylist(): PlaylistEntry[] {
       durationMs: Number(v.durationMs ?? 30 * 60 * 1000),
       // Необязательные поля переносим как есть: раньше они здесь терялись —
       // после перезапуска у живого входа сбрасывался режим вписывания.
-      ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
+      ...(typeof v.folderId === 'string' ? { folderId: v.folderId } : {}),
+    ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
       ...(v.loop ? { loop: true } : {}),
       ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
       ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),
     }
   })
+}
+
+export function getPlaylistFolders(): PlaylistFolder[] {
+  return sanitizePlaylistFolders(store().get('playlistFolders'))
+}
+
+export function setPlaylistFolders(folders: PlaylistFolder[]): void {
+  store().set('playlistFolders', folders)
 }
 
 export function setPlaylist(playlist: PlaylistEntry[]): void {

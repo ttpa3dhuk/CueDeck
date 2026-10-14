@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { access, copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import type { PlaylistEntry, ProjectTransferStatus } from '../shared/types.js'
+import type { PlaylistFolder, PlaylistEntry, ProjectTransferStatus } from '../shared/types.js'
 import { t } from '../shared/i18n.js'
+import { sanitizePlaylistFolders } from '../shared/playlist-folders.js'
 import { loadProjectFile, PROJECT_EXTENSION, saveProjectFile } from './project.js'
 import { uniqueName } from './project-files.js'
 import { sidecarPathFor } from './notes-store.js'
@@ -35,11 +36,12 @@ export async function transferProject(opts: {
   parent: string
   name: string
   playlist: PlaylistEntry[]
+  playlistFolders?: PlaylistFolder[]
   keyVisualPath: string | null
   prepare(source: string, target: string, directory: string): Promise<TransferFile[]>
   progress(status: ProjectTransferStatus): void
 }): Promise<{ path: string; copied: number }> {
-  const snapshot = structuredClone({ playlist: opts.playlist, keyVisualPath: opts.keyVisualPath })
+  const snapshot = structuredClone({ playlist: opts.playlist, playlistFolders: opts.playlistFolders ?? [], keyVisualPath: opts.keyVisualPath })
   const sources = new Set<string>()
   for (const entry of snapshot.playlist) {
     if (entry.kind === 'live') continue
@@ -91,12 +93,12 @@ export async function transferProject(opts: {
     }
     const projectFile = `${opts.name}.${PROJECT_EXTENSION}`
     const stagedProject = join(stage, projectFile)
-    await saveProjectFile(stagedProject, { playlist, keyVisualPath })
+    await saveProjectFile(stagedProject, { playlist, playlistFolders: snapshot.playlistFolders, keyVisualPath })
     const loaded = await loadProjectFile(stagedProject)
     const identity = (entries: PlaylistEntry[]): string => JSON.stringify(entries.map((entry) => ({
-      id: entry.id, path: entry.filePath, items: entry.items?.map((item) => item.path),
+      id: entry.id, folderId: entry.folderId, path: entry.filePath, items: entry.items?.map((item) => item.path),
     })))
-    if (identity(loaded.playlist) !== identity(playlist) || loaded.keyVisualPath !== keyVisualPath) {
+    if (identity(loaded.playlist) !== identity(playlist) || loaded.keyVisualPath !== keyVisualPath || JSON.stringify(loaded.playlistFolders) !== JSON.stringify(sanitizePlaylistFolders(snapshot.playlistFolders))) {
       throw new Error(t('Проверка файла проекта не прошла'))
     }
     // Existing backups are never overwritten by a partial new transfer.

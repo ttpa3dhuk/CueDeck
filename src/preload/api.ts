@@ -260,6 +260,12 @@ export interface PresenterApi {
     addLive(src: LiveSource): Promise<PlaylistEntry[]>
     /** Переназначить устройства у живого входа без пересоздания записи. */
     updateLive(id: string, src: LiveSource): Promise<void>
+    createFolder(name: string): Promise<string>
+    renameFolder(id: string, name: string): Promise<void>
+    removeFolder(id: string, removeContents?: boolean): Promise<void>
+    setFolder(id: string, folderId: string | null): Promise<void>
+    setFolders(ids: string[], folderId: string | null): Promise<void>
+    setFolderCollapsed(id: string, collapsed: boolean): Promise<void>
     remove(id: string): Promise<void>
     reorder(ids: string[]): Promise<void>
     update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number; liveFit?: LiveFit; loop?: boolean }): Promise<void>

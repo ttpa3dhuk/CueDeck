@@ -42,6 +42,16 @@ describe('project transfer', () => {
     expect(await readdir(parent)).toEqual(['show'])
   })
 
+  it('preserves folder metadata and membership from the initial snapshot', async () => {
+    const playlistFolders = [{ id: 'speaker', name: 'Андрей', collapsed: true }, { id: 'empty', name: 'Мария' }]
+    const result = await transferProject({ ...options(), playlist: [{ ...entry(source), folderId: 'speaker' }], playlistFolders,
+      prepare: async () => { playlistFolders[0].name = 'edited'; return [] },
+    })
+    const loaded = await loadProjectFile(result.path)
+    expect(loaded.playlist[0].folderId).toBe('speaker')
+    expect(loaded.playlistFolders).toEqual([{ id: 'speaker', name: 'Андрей', collapsed: true }, { id: 'empty', name: 'Мария', collapsed: false }])
+  })
+
   it('uses the initial playlist despite operator edits and does not modify the live playlist', async () => {
     const playlist = [entry(source)]
     const result = await transferProject({ ...options(), playlist, prepare: async () => {

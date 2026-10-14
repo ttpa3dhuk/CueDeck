@@ -1,5 +1,6 @@
 import { TakeFade } from '../shared/take-fade'
 import { sanitizeTakeFadeMs } from '../../shared/take-transition'
+import { nextPlaylistFolderName } from '../../shared/playlist-folders'
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
@@ -1064,6 +1065,72 @@ function startRename(li: HTMLLIElement, entry: PlaylistEntry): void {
 const LOOP_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>'
 
+let pendingPlaylistClickTimer: number | null = null
+function cancelPlaylistActivation(): void {
+  if (pendingPlaylistClickTimer !== null) window.clearTimeout(pendingPlaylistClickTimer)
+  pendingPlaylistClickTimer = null
+}
+const selectedPlaylistIds = new Set<string>()
+let playlistSelectionAnchor: string | null = null
+function selectedEntries(): string[] {
+  return getState().playlist.filter((entry) => selectedPlaylistIds.has(entry.id)).map((entry) => entry.id)
+}
+function paintPlaylistSelection(): void {
+  for (const [id, node] of playlistNodes) node.classList.toggle('selected', selectedPlaylistIds.has(id))
+}
+function draggedEntries(data: DataTransfer | null): string[] {
+  let ids: string[] = []
+  try { ids = JSON.parse(data?.getData('application/x-cuedeck-playlist') || '[]') } catch { /* external drag */ }
+  if (!Array.isArray(ids)) ids = []
+  if (!ids.length) ids = [data?.getData('text/plain') ?? '']
+  const wanted = new Set(ids)
+  return getState().playlist.filter((entry) => wanted.has(entry.id)).map((entry) => entry.id)
+}
+async function movePlaylistEntries(ids: string[], folderId: string | null, beforeId?: string | null): Promise<void> {
+  if (!ids.length || (beforeId && ids.includes(beforeId))) return
+  await window.api.playlist.setFolders(ids, folderId)
+  if (beforeId === undefined) return
+  const remaining = getState().playlist.map((entry) => entry.id).filter((id) => !ids.includes(id))
+  const at = beforeId ? remaining.indexOf(beforeId) : remaining.length
+  if (at < 0) return
+  remaining.splice(at, 0, ...ids)
+  await window.api.playlist.reorder(remaining)
+}
+function playlistContext(event: MouseEvent, entry: PlaylistEntry, node: HTMLLIElement, withRename: boolean): void {
+  event.preventDefault(); event.stopPropagation()
+  cancelPlaylistActivation()
+  document.getElementById('playlist-context')?.dispatchEvent(new Event('playlist-context-close'))
+  if (!selectedPlaylistIds.has(entry.id)) { selectedPlaylistIds.clear(); selectedPlaylistIds.add(entry.id); paintPlaylistSelection() }
+  const menu = document.createElement('div'); menu.id = 'playlist-context'; menu.className = 'playlist-context'
+  const close = (): void => { menu.remove(); document.removeEventListener('click', close) }
+  menu.addEventListener('playlist-context-close', close)
+  const action = (label: string, run: () => void): void => {
+    const button = document.createElement('button'); button.textContent = label
+    button.onclick = () => { close(); run() }; menu.append(button)
+  }
+  if (withRename) action(t('Переименовать'), () => startRename(node, getState().playlist.find((item) => item.id === entry.id) ?? entry))
+  action(t('Группировать'), () => editPlaylistFolder(undefined, selectedEntries()))
+  if (entry.kind === 'pptx') action(t('Шрифты: добавить, пересобрать'), () => {
+    const badge = node.querySelector<HTMLElement>('.kind-badge')
+    if (badge) showFontPopup(badge, entry.filePath)
+  })
+  document.body.append(menu)
+  menu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8))}px`
+  menu.style.top = `${Math.max(8, Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8))}px`
+  menu.addEventListener('keydown', (keyboard) => {
+    keyboard.stopPropagation()
+    if (keyboard.key === 'Escape') { close(); node.focus() }
+    const buttons = [...menu.querySelectorAll<HTMLButtonElement>('button')]
+    if (keyboard.key === 'ArrowDown' || keyboard.key === 'ArrowUp') {
+      keyboard.preventDefault()
+      const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
+      buttons[(at + (keyboard.key === 'ArrowDown' ? 1 : buttons.length - 1)) % buttons.length]?.focus()
+    }
+  })
+  menu.querySelector<HTMLButtonElement>('button')?.focus()
+  setTimeout(() => { if (menu.isConnected) document.addEventListener('click', close, { once: true }) }, 0)
+}
+
 function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   // Узел живёт дольше объекта entry (стейт иммутабельный) — обработчики берут
   // свежую версию записи из стейта, иначе rename/confirm видят устаревшие поля.
@@ -1115,15 +1182,10 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   name.textContent = entry.displayName || entry.fileName
   name.title = entry.filePath
 
-  const renameBtn = document.createElement('button')
-  renameBtn.className = 'rename'
-  renameBtn.textContent = '✎'
-  renameBtn.title = t('Переименовать в списке (имя файла не меняется)')
-  renameBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    startRename(li, fresh())
+  name.title = t('Правая кнопка по названию — переименовать')
+  name.addEventListener('contextmenu', (event) => {
+    playlistContext(event, fresh(), li, true)
   })
-  renameBtn.addEventListener('dblclick', (e) => e.stopPropagation())
 
   const removeBtn = document.createElement('button')
   removeBtn.className = 'remove'
@@ -1170,7 +1232,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
     row1.append(setupBtn)
   }
 
-  row1.append(renameBtn, removeBtn)
+  row1.append(removeBtn)
 
   const speakerInput = document.createElement('input')
   speakerInput.type = 'text'
@@ -1247,27 +1309,49 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   li.append(row1, speakerInput, durRow, missingRow)
 
   // Single click → stage into preview (safe). Double click → straight to air.
-  let clickTimer: number | null = null
-  li.addEventListener('click', () => {
-    if (clickTimer) window.clearTimeout(clickTimer)
-    clickTimer = window.setTimeout(() => {
-      clickTimer = null
+  li.addEventListener('contextmenu', (event) => playlistContext(event, fresh(), li, false))
+  li.addEventListener('click', (event) => {
+    const modifier = window.api.platform === 'darwin' ? event.metaKey : event.ctrlKey
+    if (modifier || event.shiftKey) {
+      if (pendingPlaylistClickTimer) { window.clearTimeout(pendingPlaylistClickTimer); pendingPlaylistClickTimer = null }
+      if (event.shiftKey && playlistSelectionAnchor) {
+        const entries = getState().playlist
+        const from = entries.findIndex((item) => item.id === playlistSelectionAnchor)
+        const to = entries.findIndex((item) => item.id === entry.id)
+        if (!modifier) selectedPlaylistIds.clear()
+        if (from >= 0 && to >= 0) for (const item of entries.slice(Math.min(from, to), Math.max(from, to) + 1)) selectedPlaylistIds.add(item.id)
+      } else {
+        if (selectedPlaylistIds.has(entry.id)) selectedPlaylistIds.delete(entry.id)
+        else selectedPlaylistIds.add(entry.id)
+        playlistSelectionAnchor = entry.id
+      }
+      paintPlaylistSelection(); return
+    }
+    selectedPlaylistIds.clear(); playlistSelectionAnchor = entry.id; paintPlaylistSelection()
+
+    if (pendingPlaylistClickTimer) window.clearTimeout(pendingPlaylistClickTimer)
+    pendingPlaylistClickTimer = window.setTimeout(() => {
+      pendingPlaylistClickTimer = null
       activateEntry(fresh(), false)
     }, 220)
   })
-  li.addEventListener('dblclick', () => {
-    if (clickTimer) {
-      window.clearTimeout(clickTimer)
-      clickTimer = null
+  li.addEventListener('dblclick', (event) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey) return
+    if (pendingPlaylistClickTimer) {
+      window.clearTimeout(pendingPlaylistClickTimer)
+      pendingPlaylistClickTimer = null
     }
     activateEntry(fresh(), true)
   })
 
   li.addEventListener('dragstart', (e) => {
+    cancelPlaylistActivation()
     li.classList.add('dragging')
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = 'move'
+      if (!selectedPlaylistIds.has(entry.id)) { selectedPlaylistIds.clear(); selectedPlaylistIds.add(entry.id); paintPlaylistSelection() }
       e.dataTransfer.setData('text/plain', entry.id)
+      e.dataTransfer.setData('application/x-cuedeck-playlist', JSON.stringify(selectedEntries()))
     }
   })
   li.addEventListener('dragend', () => {
@@ -1286,9 +1370,15 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   })
   li.addEventListener('drop', (e) => {
     e.preventDefault()
+    if (e.dataTransfer?.types.includes('Files')) return
+    e.stopPropagation()
     li.classList.remove('drop-target')
     const draggedId = e.dataTransfer?.getData('text/plain')
-    if (draggedId && draggedId !== entry.id) reorderAroundTarget(draggedId, entry.id)
+    if (draggedId?.startsWith('folder:')) reorderFolderBlock(draggedId.slice(7), entry.id)
+    else if (draggedId && draggedId !== entry.id) {
+      const ids = draggedEntries(e.dataTransfer)
+      if (ids.every((id) => (getState().playlist.find((item) => item.id === id)?.folderId ?? null) === (fresh().folderId ?? null))) void movePlaylistEntries(ids, fresh().folderId ?? null, entry.id).catch(folderError)
+    }
   })
 
   return li
@@ -1298,7 +1388,7 @@ function updatePlaylistItem(node: HTMLLIElement, entry: PlaylistEntry): void {
   const name = node.querySelector<HTMLSpanElement>('.pdf-name')
   if (name) {
     name.textContent = entry.displayName || entry.fileName
-    name.title = entry.displayName ? `${entry.fileName}\n${entry.filePath}` : entry.filePath
+    name.title = `${t('Правая кнопка по названию — переименовать')}\n${entry.displayName ? entry.fileName + '\n' : ''}${entry.filePath}`
   }
   const speakerInput = node.querySelector<HTMLInputElement>('.speaker-name')
   if (speakerInput && document.activeElement !== speakerInput) {
@@ -1315,15 +1405,6 @@ function updatePlaylistItem(node: HTMLLIElement, entry: PlaylistEntry): void {
   }
 }
 
-function reorderAroundTarget(draggedId: string, targetId: string): void {
-  const state = getState()
-  const ids = state.playlist.map((e) => e.id).filter((id) => id !== draggedId)
-  const targetIdx = ids.indexOf(targetId)
-  if (targetIdx < 0) return
-  ids.splice(targetIdx, 0, draggedId)
-  window.api.playlist.reorder(ids)
-}
-
 function updateLibreOfficeNotice(state: AppState): void {
   const notice = document.getElementById('libreoffice-notice')
   if (!notice) return
@@ -1335,9 +1416,188 @@ function updateLibreOfficeNotice(state: AppState): void {
   }
 }
 
+function reorderFolderBlock(folderId: string, targetId: string): void {
+  const entries = getState().playlist
+  const target = entries.find((entry) => entry.id === targetId)
+  if (!target || target.folderId === folderId) return
+  const members = entries.filter((entry) => entry.folderId === folderId).map((entry) => entry.id)
+  if (!members.length) return
+  const remaining = entries.filter((entry) => entry.folderId !== folderId)
+  const index = remaining.findIndex((entry) => target.folderId ? entry.folderId === target.folderId : entry.id === targetId)
+  const ids = remaining.map((entry) => entry.id)
+  ids.splice(index, 0, ...members)
+  void window.api.playlist.reorder(ids).catch(folderError)
+}
+
+function folderError(error: unknown): void {
+  showBanner(t('Ошибка: {error}', { error: error instanceof Error ? error.message : String(error) }), 6000)
+}
+
+const playlistFolderNodes = new Map<string, HTMLLIElement>()
+
+function editPlaylistFolder(id?: string, groupIds: string[] = []): void {
+  document.getElementById('folder-name-modal')?.remove()
+  const modal = document.createElement('div')
+  const previousFocus = document.activeElement as HTMLElement | null
+  const close = (): void => { modal.remove(); if (previousFocus?.isConnected) previousFocus.focus() }
+  modal.id = 'folder-name-modal'
+  modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'folder-name-title')
+  modal.className = 'modal-overlay'
+  const panel = document.createElement('form')
+  panel.className = 'folder-name-panel'
+  const title = document.createElement('h3')
+  title.id = 'folder-name-title'
+  title.textContent = id ? t('Переименовать папку') : t('Новая папка')
+  const input = document.createElement('input')
+  input.type = 'text'; input.maxLength = 120
+  input.placeholder = id ? t('Название папки') : t('Пустое название → Speaker 001, Speaker 002…'); input.setAttribute('aria-label', t('Название папки'))
+  input.value = getState().playlistFolders?.find((f) => f.id === id)?.name ?? ''
+  const cancel = document.createElement('button')
+  cancel.type = 'button'; cancel.textContent = t('Отмена'); cancel.onclick = close
+  const save = document.createElement('button')
+  save.type = 'submit'; save.textContent = t('Сохранить')
+  save.className = 'folder-primary'
+  const footer = document.createElement('div'); footer.className = 'folder-modal-footer'; footer.append(cancel, save)
+  panel.append(title, input, footer); modal.append(panel); document.body.append(modal)
+  panel.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const name = input.value.trim()
+    if (id && !name) { close(); return }
+    save.disabled = true
+    void (async () => {
+      if (id) await window.api.playlist.renameFolder(id, name)
+      else {
+        const folderId = await window.api.playlist.createFolder(name || nextPlaylistFolderName(getState().playlistFolders))
+        const valid = groupIds.filter((itemId) => getState().playlist.some((entry) => entry.id === itemId))
+        if (valid.length) await window.api.playlist.setFolders(valid, folderId)
+      }
+      close()
+    })().catch((error) => { save.disabled = false; folderError(error) })
+  })
+  modal.addEventListener('click', (event) => { if (event.target === modal) close() })
+  modal.addEventListener('keydown', (event) => {
+    event.stopPropagation()
+    if (event.key === 'Escape') close()
+    if (event.key === 'Tab') {
+      if (event.shiftKey && document.activeElement === input) { event.preventDefault(); save.focus() }
+      else if (!event.shiftKey && document.activeElement === save) { event.preventDefault(); input.focus() }
+    }
+  })
+  input.focus(); input.select()
+}
+
+function removePlaylistFolderDialog(id: string): void {
+  const previous = document.activeElement as HTMLElement | null
+  const modal = document.createElement('div')
+  modal.className = 'folder-action-modal'
+  modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true')
+  modal.setAttribute('aria-labelledby', 'folder-remove-title')
+  const panel = document.createElement('div'); panel.className = 'folder-name-panel'
+  const title = document.createElement('h3'); title.id = 'folder-remove-title'; title.textContent = t('Удалить папку')
+  const name = document.createElement('p'); name.className = 'folder-modal-subtitle'; name.textContent = `«${getState().playlistFolders.find((f) => f.id === id)?.name ?? ''}» · ${t('Материалов: {n}', { n: getState().playlist.filter((entry) => entry.folderId === id).length })}`
+  const hint = document.createElement('p'); hint.textContent = t('Файлы на диске останутся.')
+  const close = (): void => { modal.remove(); if (previous?.isConnected) previous.focus() }
+  const cancel = document.createElement('button'); cancel.textContent = t('Отмена'); cancel.onclick = close
+  const keep = document.createElement('button'); keep.textContent = t('Оставить материалы')
+  keep.onclick = () => { void window.api.playlist.removeFolder(id).catch(folderError); close() }
+  const remove = document.createElement('button'); remove.textContent = t('Удалить с материалами')
+  remove.onclick = () => { void window.api.playlist.removeFolder(id, true).catch(folderError); close() }
+  keep.className = 'folder-choice'; remove.className = 'folder-choice folder-danger'
+  const choices = document.createElement('div'); choices.className = 'folder-modal-choices'; choices.append(keep, remove)
+  const footer = document.createElement('div'); footer.className = 'folder-modal-footer'; footer.append(cancel)
+  panel.append(title, name, hint, choices, footer); modal.append(panel); document.body.append(modal)
+  modal.addEventListener('click', (event) => { if (event.target === modal) close() })
+  modal.addEventListener('keydown', (event) => {
+    event.stopPropagation()
+    if (event.key === 'Escape') close()
+    if (event.key === 'Tab' && event.shiftKey && document.activeElement === keep) { event.preventDefault(); cancel.focus() }
+    else if (event.key === 'Tab' && !event.shiftKey && document.activeElement === cancel) { event.preventDefault(); keep.focus() }
+  })
+  cancel.focus()
+}
+
+let playlistRootDropWired = false
+const playlistDropZones = new Map<string, HTMLLIElement>()
+function playlistInsertionZone(key: string, beforeId: string | null, folderId: string | null): HTMLLIElement {
+  let node = playlistDropZones.get(key)
+  if (!node) {
+    node = document.createElement('li'); playlistDropZones.set(key, node)
+    node.className = 'playlist-insertion-drop'
+    node.addEventListener('dragover', (event) => {
+      if (event.dataTransfer?.types.includes('Files')) return
+      event.preventDefault(); event.stopPropagation(); node!.classList.add('drop-target')
+    })
+    node.addEventListener('dragleave', () => node!.classList.remove('drop-target'))
+    node.addEventListener('drop', (event) => {
+      node!.classList.remove('drop-target')
+      if (event.dataTransfer?.types.includes('Files')) return
+      event.preventDefault(); event.stopPropagation()
+      const id = event.dataTransfer?.getData('text/plain')
+      if (!id) return
+      const targetId = node!.dataset.beforeId || null
+      if (id.startsWith('folder:')) { if (targetId) reorderFolderBlock(id.slice(7), targetId); return }
+      const member = node!.dataset.folderId || null
+      void movePlaylistEntries(draggedEntries(event.dataTransfer), member, targetId).catch(folderError)
+    })
+  }
+  node.dataset.beforeId = beforeId ?? ''; node.dataset.folderId = folderId ?? ''
+  return node
+}
+
+function createPlaylistFolder(id: string): HTMLLIElement {
+  const node = document.createElement('li')
+  node.className = 'playlist-folder'; node.dataset.folderId = id; node.draggable = true
+  node.addEventListener('dragstart', (event) => {
+    event.stopPropagation()
+    event.dataTransfer?.setData('text/plain', `folder:${id}`)
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+  })
+  node.addEventListener('dragend', () => document.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target')))
+  const toggle = document.createElement('button')
+  toggle.className = 'folder-toggle'
+  toggle.onclick = () => {
+    const folder = getState().playlistFolders.find((f) => f.id === id)
+    if (folder) void window.api.playlist.setFolderCollapsed(id, !folder.collapsed).catch(folderError)
+  }
+  toggle.title = t('Правая кнопка по названию — переименовать')
+  toggle.addEventListener('contextmenu', (event) => { event.preventDefault(); event.stopPropagation(); editPlaylistFolder(id) })
+  const remove = document.createElement('button')
+  remove.textContent = '✕'; remove.title = t('Удалить папку')
+  remove.onclick = () => removePlaylistFolderDialog(id)
+  node.append(toggle, remove)
+  node.addEventListener('dragover', (event) => { event.preventDefault(); node.classList.add('drop-target') })
+  node.addEventListener('dragleave', () => node.classList.remove('drop-target'))
+  node.addEventListener('drop', (event) => {
+    node.classList.remove('drop-target')
+    if (event.dataTransfer?.types.includes('Files')) return
+    event.preventDefault(); event.stopPropagation()
+    const entryId = event.dataTransfer?.getData('text/plain')
+    if (entryId?.startsWith('folder:')) {
+      const target = getState().playlist.find((entry) => entry.folderId === id)
+      if (target) reorderFolderBlock(entryId.slice(7), target.id)
+      return
+    }
+    if (entryId) void movePlaylistEntries(draggedEntries(event.dataTransfer), id).catch(folderError)
+  })
+  return node
+}
+
 function renderPlaylist(state: AppState): void {
   if (!playlistList || !playlistEmpty) return
 
+  if (!playlistRootDropWired) {
+    playlistRootDropWired = true
+    playlistList.addEventListener('dragover', (event) => {
+      if (event.target !== playlistList || event.dataTransfer?.types.includes('Files')) return
+      event.preventDefault()
+    })
+    playlistList.addEventListener('drop', (event) => {
+      if (event.target !== playlistList || event.dataTransfer?.types.includes('Files')) return
+      event.preventDefault(); event.stopPropagation()
+      const id = event.dataTransfer?.getData('text/plain')
+      if (id) void movePlaylistEntries(draggedEntries(event.dataTransfer), null).catch(folderError)
+    })
+  }
   const entries = state.playlist
   playlistEmpty.classList.toggle('hidden', entries.length > 0)
 
@@ -1349,19 +1609,56 @@ function renderPlaylist(state: AppState): void {
     }
   }
 
+  const folders = state.playlistFolders ?? []
+  playlistEmpty.classList.toggle('hidden', entries.length > 0 || folders.length > 0)
+  const validFolders = new Set(folders.map((folder) => folder.id))
+  for (const [id, node] of playlistFolderNodes) {
+    if (!validFolders.has(id)) { node.remove(); playlistFolderNodes.delete(id) }
+  }
+  const desired: HTMLElement[] = []
+  const seenFolders = new Set<string>()
+  const addFolder = (id: string): void => {
+    const folder = folders.find((f) => f.id === id)
+    if (!folder || seenFolders.has(id)) return
+    seenFolders.add(id)
+    let header = playlistFolderNodes.get(id)
+    if (!header) { header = createPlaylistFolder(id); playlistFolderNodes.set(id, header) }
+    const members = entries.filter((entry) => entry.folderId === id)
+    const toggle = header.querySelector('.folder-toggle')!
+    const label = `${folder.collapsed ? '▸' : '▾'} 📁 ${folder.name} (${members.length})`
+    if (toggle.textContent !== label) toggle.textContent = label
+    header.classList.toggle('on-air', members.some((e) => e.id === state.currentPlaylistId))
+    header.classList.toggle('in-preview', members.some((e) => e.id === state.preview.playlistId))
+    header.querySelector('.folder-toggle')!.setAttribute('aria-expanded', String(!folder.collapsed))
+    desired.push(playlistInsertionZone(`folder:${id}`, members[0]?.id ?? null, null), header)
+  }
   entries.forEach((entry, idx) => {
+    if (entry.folderId) addFolder(entry.folderId)
     let node = playlistNodes.get(entry.id)
-    if (!node) {
-      node = createPlaylistItem(entry)
-      playlistNodes.set(entry.id, node)
-    } else {
-      updatePlaylistItem(node, entry)
-    }
+    if (!node) { node = createPlaylistItem(entry); playlistNodes.set(entry.id, node) }
+    updatePlaylistItem(node, entry)
+    node.querySelector<HTMLElement>('.row')!.dataset.number = String(idx + 1)
+    node.classList.toggle('folder-member', Boolean(entry.folderId))
+    node.classList.toggle('hidden', Boolean(folders.find((f) => f.id === entry.folderId)?.collapsed))
+    const previous = entries[idx - 1]
+    const withinFolder = Boolean(entry.folderId && previous?.folderId === entry.folderId)
+    const zone = playlistInsertionZone(`entry:${entry.id}`, entry.id, entry.folderId && (withinFolder || !previous || previous.folderId !== entry.folderId) ? entry.folderId : null)
+    zone.classList.toggle('hidden', node.classList.contains('hidden'))
+    desired.push(zone, node)
+  })
+  for (const folder of folders) addFolder(folder.id)
+  desired.push(playlistInsertionZone('end', null, null))
+  for (const [key, zone] of playlistDropZones) {
+    if (!desired.includes(zone)) { zone.remove(); playlistDropZones.delete(key) }
+  }
+  desired.forEach((node, idx) => {
     const at = playlistList.children[idx]
     if (at !== node) playlistList.insertBefore(node, at ?? null)
   })
 
   const missing = new Set(state.missingIds)
+  for (const selectedId of selectedPlaylistIds) if (!wantedIds.has(selectedId)) selectedPlaylistIds.delete(selectedId)
+  paintPlaylistSelection()
   for (const [id, node] of playlistNodes) {
     node.classList.toggle('on-air', id === state.currentPlaylistId)
     node.classList.toggle('in-preview', id === state.preview.playlistId)
@@ -1536,10 +1833,7 @@ function updateFontNotice(state: AppState): void {
       e.stopPropagation()
       showFontPopup(badge, entry.filePath)
     }
-    node.oncontextmenu = (e): void => {
-      e.preventDefault()
-      showFontPopup(badge, entry.filePath)
-    }
+
     badge.style.cursor = 'pointer'
     if (!fonts) badge.title = t('Шрифты: добавить, пересобрать')
   }
@@ -2323,7 +2617,9 @@ function setupFileDrop(): void {
     const files = Array.from(e.dataTransfer?.files ?? [])
     const paths = files.map((f) => window.api.files.pathFor(f)).filter(Boolean)
     if (paths.length === 0) return
-    window.api.playlist.addPaths(paths).then((added) => {
+    const folderId = (e.target as HTMLElement).closest<HTMLElement>('.playlist-folder')?.dataset.folderId
+    window.api.playlist.addPaths(paths).then(async (added) => {
+      if (folderId) for (const entry of added) await window.api.playlist.setFolder(entry.id, folderId)
       if (added.length > 0) {
         showBanner(t('В плейлист добавлено: {n}', { n: added.length }), 3000)
       } else {
@@ -2535,6 +2831,7 @@ function setupOperatorControls(): void {
     if (!btn) return
     addMenu.classList.add('hidden')
     if (btn.dataset.add === 'files') window.api.playlist.add()
+    else if (btn.dataset.add === 'folder') editPlaylistFolder()
     else if (btn.dataset.add === 'list') window.api.playlist.addList()
     else if (btn.dataset.add === 'window') openWindowModal()
     else if (btn.dataset.add === 'omt') openOmtInputModal()

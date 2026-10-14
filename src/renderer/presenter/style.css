@@ -625,8 +625,10 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 4px 12px;
 }
+.playlist-toggles .toggle { line-height: 18px; }
+.playlist-toggles input[type="checkbox"] { margin: 0; }
 .toggle {
   display: flex;
   align-items: center;
@@ -649,6 +651,8 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 .playlist-list.compact .playlist-item .loop-btn {
   display: none;
 }
+.playlist-list.compact .playlist-item { padding: 3px 8px; gap: 0; }
+.playlist-list.compact .playlist-item .row { min-height: 20px; }
 /* Строка «Режим / Секунд на фото / FADE» в редакторе списка. */
 .list-controls {
   display: flex;
@@ -763,7 +767,7 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
   overflow-y: auto;
   flex: 1;
   min-height: 0;
@@ -878,12 +882,10 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   gap: 6px;
 }
 /* Номер записи для кнопок Stream Deck «playlist/select/N» (remote-on — только
-   при включённом внешнем управлении). Счётчик сам пересчитывается при
-   перетаскивании — JS не нужен. */
-.playlist-list { counter-reset: pl; }
-.playlist-item { counter-increment: pl; }
+   при включённом внешнем управлении). Номер берём из общего порядка,
+   чтобы свёрнутые папки не меняли номера внешнего управления. */
 body.remote-on .playlist-item .row::before {
-  content: counter(pl);
+  content: attr(data-number);
   min-width: 18px;
   font-size: 12px;
   font-weight: 700;
@@ -2510,3 +2512,39 @@ html[lang="en"] {
 }
 #omt-input-list:empty { display: none; }
 #omt-input-list { max-height: 260px; overflow-y: auto; }
+
+.playlist-folder { direction: ltr; text-align: left; display: flex; align-items: center; gap: 4px; padding: 2px 6px; margin: 0 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
+.playlist-folder button { padding: 2px 6px; font-size: 13px; line-height: 18px; }
+.playlist-folder .folder-toggle { flex: 1; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+.playlist-folder.on-air { border-left: 4px solid var(--danger); }
+.playlist-folder.in-preview { box-shadow: inset 3px 0 #2ea043; border-color: #2ea043; background: rgba(46,160,67,.13); }
+.playlist-folder.on-air { border-left-color: var(--danger, #d64045); }
+.playlist-folder.drop-target { outline: 2px solid var(--accent); }
+.playlist-item.folder-member { margin-left: 12px; }
+#folder-name-modal { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: rgba(0,0,0,.55); }
+.folder-name-panel { background: var(--panel); color: var(--text); padding: 24px; border-radius: 8px; width: min(360px, 90vw); }
+.folder-name-panel input { display: block; width: 100%; margin: 16px 0; }
+.folder-name-panel button { margin-right: 8px; }
+
+.folder-action-modal { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: rgba(0,0,0,.55); }
+.folder-action-modal button { margin-bottom: 8px; }
+.playlist-list > .playlist-item { margin-bottom: 8px; }
+.playlist-insertion-drop { direction: ltr; position: relative; height: 0; flex: 0 0 0; margin: 0; }
+.playlist-insertion-drop::before { content: ''; position: absolute; left: 0; right: 0; top: -8px; height: 8px; border-radius: 3px; }
+.playlist-insertion-drop.drop-target::before { background: var(--accent); }
+
+.folder-name-panel { width: min(420px, 90vw); padding: 28px; border: 1px solid var(--border); box-shadow: 0 24px 80px rgba(0,0,0,.35); border-radius: 14px; }
+.folder-name-panel h3 { margin: 0 0 16px; font-size: 19px; font-weight: 650; }
+.folder-name-panel input { box-sizing: border-box; padding: 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; }
+.folder-name-panel input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.folder-modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); }
+.folder-name-panel button { margin: 0; padding: 10px 16px; white-space: nowrap; }
+.folder-primary { background: var(--accent); color: white; }
+.folder-modal-subtitle { color: var(--muted); font-size: 14px; }
+.folder-modal-choices { display: grid; gap: 10px; margin-top: 20px; }
+.folder-modal-choices .folder-choice { width: 100%; text-align: left; padding: 15px; border: 1px solid var(--border); border-radius: 8px; }
+.folder-danger { color: var(--danger); }
+.playlist-item.selected { outline: 2px solid #b48aff; outline-offset: 1px; }
+.playlist-context { position: fixed; z-index: 10001; min-width: 190px; padding: 6px; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,.3); }
+.playlist-context button { display: block; width: 100%; padding: 10px 12px; border: 0; text-align: left; background: transparent; }
+.playlist-context button:hover { background: var(--border); }

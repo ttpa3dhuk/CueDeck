@@ -15,6 +15,19 @@
  * множественного числа ни в одном языке.
  */
 export const EN: Record<string, string> = {
+  'Материалов: {n}': 'Materials: {n}',
+  'Группировать': 'Group',
+  'Пустое название → Speaker 001, Speaker 002…': 'Leave blank → Speaker 001, Speaker 002…',
+  'Файлы на диске останутся.': 'Files on disk will be kept.',
+  'Правая кнопка по названию — переименовать': 'Right-click the name to rename',
+  'Удалить папку': 'Delete folder',
+  'Оставить материалы': 'Keep materials',
+  'Удалить с материалами': 'Delete with materials',
+  'Переименовать папку': 'Rename folder',
+  'Новая папка': 'New folder',
+  'Название папки': 'Folder name',
+  'Папка': 'Folder',
+  'группа самостоятельных материалов': 'group of independent materials',
   'Частота картинки, к/с': 'Frame rate, fps',
   'Не выше герцовки экранов. Для слабого компьютера попробуй 15 или 25.': 'Limited by display refresh rates. Try 15 or 25 on a slower computer.',
 
@@ -156,7 +169,6 @@ export const EN: Record<string, string> = {
   'Список пуст. Жми «+ Добавить», чтобы загрузить PDF спикеров.': 'The list is empty. Press “+” to add the speakers’ files.',
   'ВХОД': 'INPUT',
   'Зациклить ролик: доиграв, начинается заново': 'Loop the clip: when it ends, it starts again',
-  'Переименовать в списке (имя файла не меняется)': 'Rename in the list (the file name stays the same)',
   'Удалить из плейлиста': 'Remove from playlist',
   'Содержимое списка: порядок, удаление, секунды на фото': 'List contents: order, removal, seconds per photo',
   'Настроить захват: устройство картинки и звука': 'Set up the capture: video and audio device',

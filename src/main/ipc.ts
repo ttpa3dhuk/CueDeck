@@ -1,3 +1,4 @@
+import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders } from '../shared/playlist-folders.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { sanitizeTakeFadeMs, type TakeTransition } from '../shared/take-transition.js'
 import { app, dialog, globalShortcut, ipcMain, screen, shell } from 'electron'
@@ -29,6 +30,7 @@ import {
   saveMapping,
   getLastPdfPath,
   getPlaylist,
+  getPlaylistFolders,
   getCurrentPlaylistId,
   getKeyVisualPath,
   getProjectPath,
@@ -51,6 +53,7 @@ import {
   setTakeFadeMs,
   setNotesFontSize,
   setPlaylist,
+  setPlaylistFolders,
   setCurrentPlaylistId,
   setKeyVisualPath,
   setProjectPath,
@@ -627,6 +630,7 @@ export function applyClickerShortcuts(
 
 function persistPlaylist(): void {
   setPlaylist(store.get().playlist)
+  setPlaylistFolders(store.get().playlistFolders)
 }
 
 /**
@@ -692,6 +696,7 @@ export async function saveProject(
   try {
     await saveProjectFile(target, {
       playlist: state.playlist,
+      playlistFolders: state.playlistFolders,
       keyVisualPath: state.keyVisualPath,
     })
     store.patch({ projectPath: target })
@@ -1607,33 +1612,65 @@ export function registerIpcHandlers(): void {
 
   })
 
-  ipcMain.handle('playlist:remove', (_e, id: string) => {
-    const removed = store.get().playlist.find((e) => e.id === id)
-    const next = store.get().playlist.filter((e) => e.id !== id)
-    const patch: Partial<import('./state.js').AppState> = { playlist: next }
-    if (store.get().currentPlaylistId === id) {
+  ipcMain.handle('playlist:folder-create', (_e, name: string) => {
+    if (typeof name !== 'string') throw new Error('Invalid folder name')
+    const folderName = name.trim() || nextPlaylistFolderName(store.get().playlistFolders)
+    const id = randomUUID()
+    store.patch({ playlistFolders: [...store.get().playlistFolders, { id, name: folderName }] })
+    persistPlaylist()
+    return id
+  })
+  ipcMain.handle('playlist:folder-rename', (_e, { id, name }: { id: string; name: string }) => {
+    if (typeof name !== 'string' || !name.trim()) return
+    store.patch({ playlistFolders: store.get().playlistFolders.map((f) => f.id === id ? { ...f, name: name.trim() } : f) })
+    persistPlaylist()
+  })
+  ipcMain.handle('playlist:folder-remove', (_e, payload: { id: string; removeContents?: boolean }) => {
+    const state = store.get()
+    const result = removePlaylistFolder(state.playlist, state.playlistFolders, payload.id, payload.removeContents === true)
+    removePlaylistEntries(result.playlist, result.removed, { playlistFolders: result.playlistFolders })
+  })
+  function assignFolderEntries(ids: string[], folderId: string | null): void {
+    if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) return
+    const state = store.get()
+    const playlist = assignPlaylistFolders(state.playlist, state.playlistFolders, ids, folderId)
+    if (playlist === state.playlist) return
+    store.patch({ playlist })
+    persistPlaylist()
+  }
+  ipcMain.handle('playlist:folder-assign', (_e, { id, folderId }: { id: string; folderId: string | null }) => assignFolderEntries([id], folderId))
+  ipcMain.handle('playlist:folders-assign', (_e, { ids, folderId }: { ids: string[]; folderId: string | null }) => assignFolderEntries(ids, folderId))
+  ipcMain.handle('playlist:folder-collapse', (_e, { id, collapsed }: { id: string; collapsed: boolean }) => {
+    store.patch({ playlistFolders: store.get().playlistFolders.map((f) => f.id === id ? { ...f, collapsed: Boolean(collapsed) } : f) })
+    persistPlaylist()
+  })
+
+  function removePlaylistEntries(next: PlaylistEntry[], removed: PlaylistEntry[], extra: Partial<import('./state.js').AppState> = {}): void {
+    const state = store.get()
+    const removedIds = new Set(removed.map((entry) => entry.id))
+    const patch: Partial<import('./state.js').AppState> = { ...extra, playlist: next }
+    if (state.currentPlaylistId && removedIds.has(state.currentPlaylistId)) {
+      if (removed.some((entry) => entry.id === state.currentPlaylistId && entry.kind === 'list')) stopListPlayback()
       patch.currentPlaylistId = null
       setCurrentPlaylistId(null)
     }
-    store.patch(patch)
-    // Живой вход держит железо занятым, пока на него кто-то смотрит. Убрали
-    // запись — снимаем её и с превью, иначе устройство останется захваченным
-    // невидимым деском. Эфир не трогаем: удаление строки не должно гасить зал.
-    if (removed?.kind === 'live' && store.get().preview.path === removed.filePath) {
-      store.patch({ preview: initialDeckState() })
+    // Release removed live previews; the program feed keeps playing its current material.
+    if (removed.some((entry) => entry.kind === 'live' && state.preview.path === entry.filePath)) {
+      patch.preview = initialDeckState()
     }
-    // Удалили запись, которая крутится в эфире, — останавливаем проигрыватель,
-    // иначе его таймер продолжит менять картинки от несуществующего списка.
-    if (removed?.kind === 'list' && store.get().currentPlaylistId === id) stopListPlayback()
+    store.patch(patch)
     persistPlaylist()
-    // Чистим id удалённой записи из списка ненайденных.
-    if (store.get().missingIds.includes(id)) void refreshMissingFiles()
+    if (state.missingIds.some((id) => removedIds.has(id))) void refreshMissingFiles()
+  }
+
+  ipcMain.handle('playlist:remove', (_e, id: string) => {
+    const playlist = store.get().playlist
+    removePlaylistEntries(playlist.filter((entry) => entry.id !== id), playlist.filter((entry) => entry.id === id))
   })
 
   ipcMain.handle('playlist:reorder', (_e, ids: string[]) => {
-    const map = new Map(store.get().playlist.map((e) => [e.id, e]))
-    const reordered = ids.map((id) => map.get(id)).filter((e): e is PlaylistEntry => Boolean(e))
-    store.patch({ playlist: reordered })
+    const state = store.get()
+    store.patch({ playlist: reorderFolderPlaylist(state.playlist, ids, state.playlistFolders) })
     persistPlaylist()
   })
 
@@ -1893,7 +1930,7 @@ export function registerIpcHandlers(): void {
 
   /** Returns true if there is a previous session worth restoring. */
   ipcMain.handle('session:has-last', () => {
-    return Boolean(getLastPdfPath()) || getPlaylist().length > 0
+    return Boolean(getLastPdfPath()) || getPlaylist().length > 0 || getPlaylistFolders().length > 0
   })
 
   /** Restores the last session: playlist, key visual, project path, and last open file. */
@@ -1905,7 +1942,8 @@ export function registerIpcHandlers(): void {
     const savedProjectPath = getProjectPath()
 
     store.patch({
-      playlist: savedPlaylist,
+      playlist: normalizeFolderPlaylist(savedPlaylist, getPlaylistFolders()),
+      playlistFolders: getPlaylistFolders(),
       currentPlaylistId: savedPlaylistId,
       keyVisualPath: savedKeyVisual,
       projectPath: savedProjectPath,
@@ -1914,7 +1952,7 @@ export function registerIpcHandlers(): void {
     void refreshMissingFiles()
 
     if (!lastPath) {
-      return { ok: true, hadSession: savedPlaylist.length > 0 }
+      return { ok: true, hadSession: savedPlaylist.length > 0 || getPlaylistFolders().length > 0 }
     }
 
     const entry = savedPlaylistId ? savedPlaylist.find((e) => e.id === savedPlaylistId) : undefined
@@ -1932,6 +1970,7 @@ export function registerIpcHandlers(): void {
     // so the user can restore the previous session via "Последний" after reset.
     store.patch({
       playlist: [],
+      playlistFolders: [],
       currentPlaylistId: null,
       keyVisualPath: null,
       projectPath: null,
@@ -1974,6 +2013,7 @@ export function registerIpcHandlers(): void {
         const loaded = await loadProjectFile(path)
         store.patch({
           playlist: loaded.playlist,
+          playlistFolders: loaded.playlistFolders,
           keyVisualPath: loaded.keyVisualPath,
           currentPlaylistId: null,
           projectPath: path,
@@ -2082,7 +2122,7 @@ export function registerIpcHandlers(): void {
       const name = snapshot.projectPath ? basename(snapshot.projectPath, `.${PROJECT_EXTENSION}`) : t('CueDeck-проект')
       const result = await transferProject({
         parent: res.filePaths[0], name,
-        playlist: snapshot.playlist, keyVisualPath: snapshot.keyVisualPath,
+        playlist: snapshot.playlist, playlistFolders: snapshot.playlistFolders, keyVisualPath: snapshot.keyVisualPath,
         progress,
         prepare: async (source, target, directory) => {
           if (kindOf(source) !== 'pptx') return []

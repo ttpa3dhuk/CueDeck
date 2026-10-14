@@ -143,7 +143,14 @@ export type LiveFit = 'contain' | 'cover' | 'fill'
 
 export const DEFAULT_LIVE_FIT: LiveFit = 'contain'
 
+export interface PlaylistFolder {
+  id: string
+  name: string
+  collapsed?: boolean
+}
+
 export interface PlaylistEntry {
+  folderId?: string
   id: string
   kind: FileKind
   filePath: string
@@ -249,6 +256,7 @@ export interface AppState {
   layout: Layout
   displayMap: DisplayMap
   playlist: PlaylistEntry[]
+  playlistFolders: PlaylistFolder[]
   /**
    * id записей плейлиста, чьи файлы сейчас не находятся на диске (материал
    * переехал, флешка не та, проект приехал с другой машины). Пересчитывается

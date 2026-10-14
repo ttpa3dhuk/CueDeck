@@ -16,6 +16,8 @@ Free · macOS &amp; Windows · for live events and conferences</p>
 
 Line up every speaker beforehand: PDF, PowerPoint, Keynote, video, a guest laptop. Stage the next one in Preview and press TAKE. It goes to the hall, their timer is loaded, the prompter follows.
 
+Group several materials for one speaker into a folder and collapse it. Cmd/Ctrl selects cards; right-click → Group creates a folder. Each material keeps its timer and comment, and the grouping is saved with the project.
+
 ## Three screens, one operator
 
 ![Operator laptop, speaker's prompter and the hall screen side by side](docs/screenshots/screens.png)
