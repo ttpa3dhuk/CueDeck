@@ -5,6 +5,32 @@ import type { StreamSettings } from '../shared/types'
 // Роль окна — метка строк журнала, которые шлёт этот рендерер.
 const ROLE = new URLSearchParams(location.search).get('role') ?? 'unknown'
 
+// One direct media port per renderer; replaced after a receiver-helper restart.
+let omtInputPort: MessagePort | undefined
+const omtFrameListeners = new Set<(packet: import('../shared/omt-input').OmtInputPacket) => void>()
+ipcRenderer.on('omt-input:port', event => {
+  omtInputPort?.close()
+  omtInputPort = event.ports[0]
+  if (!omtInputPort) return
+  omtInputPort.onmessage = event => {
+    const packet = event.data as import('../shared/omt-input').OmtInputPacket
+    if (!omtFrameListeners.size) { omtInputPort?.postMessage({ type: 'ack', sequence: packet.sequence }); return }
+    for (const listener of omtFrameListeners) listener(packet)
+  }
+  omtInputPort.start()
+})
+
+// GPU frames cross isolation as transferable VideoFrame objects, never as copied pixels.
+const gpuApi = (require('electron') as { sharedTexture?: {
+  setSharedTextureReceiver(callback: (value: { importedSharedTexture: { getVideoFrame(): VideoFrame; release(): void } }, metadata: unknown) => Promise<void>): void
+} }).sharedTexture
+if (gpuApi) gpuApi.setSharedTextureReceiver(async ({ importedSharedTexture }, metadata) => {
+  const frame = importedSharedTexture.getVideoFrame()
+  importedSharedTexture.release()
+  try { window.postMessage({ type: 'cuedeck-omt-gpu', frame, metadata }, '*', [frame]) }
+  catch (error) { frame.close(); throw error }
+})
+
 const api: PresenterApi = {
   state: {
     get: () => ipcRenderer.invoke('state:get'),
@@ -270,7 +296,24 @@ const api: PresenterApi = {
     pick: () => ipcRenderer.invoke('soffice:pick'),
   },
   live: {
+    listWindows: () => ipcRenderer.invoke('live:list-windows'),
+    windowFps: (requested) => ipcRenderer.invoke('live:window-fps', requested),
+    resolveWindow: (src) => ipcRenderer.invoke('live:resolve-window', src),
     requestAccess: () => ipcRenderer.invoke('live:request-access'),
+  },
+  omtInput: {
+    discover: () => ipcRenderer.invoke('omt-input:discover'),
+    retain: (addresses) => ipcRenderer.invoke('omt-input:retain', addresses),
+    onFrame: (cb) => {
+      omtFrameListeners.add(cb)
+      return () => omtFrameListeners.delete(cb)
+    },
+    ack: (sequence) => omtInputPort?.postMessage({ type: 'ack', sequence }),
+    onError: (cb) => {
+      const listener = (_e: Electron.IpcRendererEvent, error: { addresses: string[]; message: string }) => cb(error)
+      ipcRenderer.on('omt-input:error', listener)
+      return () => ipcRenderer.removeListener('omt-input:error', listener)
+    },
   },
   meter: {
     report: (level) => ipcRenderer.send('meter:report', level),

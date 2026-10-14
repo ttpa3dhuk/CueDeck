@@ -9,8 +9,10 @@ import { showAboutDialog } from './about-dialog.js'
 import { initDiag, instrumentIpc, markCleanExit, markMoment, openReportDialog, registerDiagIpc } from './diag.js'
 import { isMovingToApplications, offerMacInstall } from './mac-install.js'
 import { captureIpcHandlers, initRemote, registerRemoteIpc } from './remote/server.js'
+import { registerWindowCapture } from './window-capture.js'
 import { initStream } from './stream/streamer.js'
 import { initOmt, registerOmtIpc } from './omt/outputs.js'
+import { registerOmtInputIpc } from './omt/input-ipc.js'
 import { registerProfileIpc } from './profiles.js'
 import { askBootLayout } from './boot-dialog.js'
 import { askUiLang } from './lang-dialog.js'
@@ -259,7 +261,7 @@ function buildMenu(): void {
           click: () => openReportDialog(),
         },
         {
-          label: t('Поддержка в Telegram…'),
+          label: t('Поддержка: @CueDeckSupport_Bot…'),
           click: () => shell.openExternal(SUPPORT_URL).catch(() => undefined),
         },
         ...(DONATE_URL
@@ -359,6 +361,8 @@ app.whenReady().then(async () => {
   registerRemoteIpc()
   registerProfileIpc()
   registerOmtIpc()
+  registerOmtInputIpc()
+  registerWindowCapture()
   initStream()
 
   // Язык — раньше меню и любых окон: всё дальше рисуется уже на нём. Не

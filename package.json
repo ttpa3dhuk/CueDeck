@@ -1,6 +1,6 @@
 {
   "name": "cue-deck",
-  "version": "0.10.3",
+  "version": "0.11.0",
   "description": "Presentation operator tool for live events — speaker playlist, per-speaker timers, confidence monitor, blackout",
   "author": "Azat Khusaenov",
   "main": "out/main/index.js",
@@ -15,8 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "package:mac": "node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --mac --publish=never && node scripts/rename-mac.cjs",
-    "package:win": "node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --win --publish=never",
-    "package:all": "node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder -mw --publish=never && node scripts/rename-mac.cjs",
+    "package:win": "node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --win --config.electronVersion=44.7.2 --publish=never",
+    "package:all": "npm run package:mac && npm run package:win",
     "fetch:omt": "node scripts/fetch-omt.cjs"
   },
   "devDependencies": {
@@ -108,7 +108,10 @@
       "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
       "artifactName": "CueDeck-${version}-Setup.${ext}",
-      "installerLanguages": ["en_US", "ru_RU"],
+      "installerLanguages": [
+        "en_US",
+        "ru_RU"
+      ],
       "include": "build/installer.nsh",
       "deleteAppDataOnUninstall": false
     },

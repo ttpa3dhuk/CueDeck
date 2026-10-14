@@ -16,6 +16,8 @@ function argHint(c: RemoteCommand): string {
   switch (c.arg) {
     case 'duration':
       return t('минуты: <code>5</code>, <code>0.5</code>; мин:сек <code>1:30</code>; <code>90s</code>, <code>1h</code>')
+    case 'milliseconds':
+      return t('миллисекунды: от 100 до 2000')
     case 'index':
       return t('номер с единицы')
     case 'number':

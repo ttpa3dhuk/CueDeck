@@ -355,11 +355,22 @@ export interface PresenterApi {
     open(url: string): Promise<void>
   }
   live: {
+    listWindows(): Promise<{ sources: { id: string; name: string; thumbnail: string }[]; permission: string }>
+    windowFps(requested?: number): Promise<number>
+    resolveWindow(src: import('../shared/live').LiveSource): Promise<string>
+
     /**
      * Разовый системный запрос доступа к камере/микрофону (macOS). Без него
      * enumerateDevices отдаёт пустые метки, а getUserMedia падает.
      */
     requestAccess(): Promise<{ camera: boolean; mic: boolean }>
+  }
+  omtInput: {
+    discover(): Promise<import('../shared/omt-input').OmtInputSource[]>
+    retain(addresses: string[]): Promise<void>
+    onFrame(cb: (packet: import('../shared/omt-input').OmtInputPacket) => void): Unsubscribe
+    ack(sequence: number): void
+    onError: (cb: (error: { addresses: string[]; message: string }) => void) => () => void
   }
   meter: {
     /** Окно-озвучиватель шлёт уровень эфира (0..1) оператору на индикатор. */

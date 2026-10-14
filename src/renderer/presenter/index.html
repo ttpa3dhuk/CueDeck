@@ -99,7 +99,9 @@
               <div id="add-menu" class="add-menu hidden">
                 <button data-add="files">Файлы… <span>PDF, PPTX, видео, картинка</span></button>
                 <button data-add="list">Список… <span>пачка фото или роликов по кругу</span></button>
+                <button data-add="window">Окно… <span>картинка из другого приложения</span></button>
                 <button data-add="live">Захват… <span>карта захвата HDMI, камера</span></button>
+                <button data-add="omt">OMT… <span>картинка и звук из сети</span></button>
               </div>
             </div>
           </div>
@@ -377,6 +379,52 @@
       </div>
     </div>
 
+    <div id="omt-input-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2 id="omt-input-title">Приём OMT</h2>
+        <p class="audio-hint">Выбери источник в сети. Картинка и звук попадут в плейлист, затем в превью и эфир.</p>
+        <p id="omt-input-status" class="audio-hint" role="status"></p>
+        <div id="omt-input-list" class="audio-device-list"></div>
+        <button id="omt-input-refresh">Обновить список</button>
+        <label class="live-field">Адрес вручную <input id="omt-input-address" type="text" placeholder="omt://192.168.1.100:6400" spellcheck="false" /></label>
+        <label><input id="omt-input-audio" type="checkbox" checked /> Принимать звук</label>
+        <div class="modal-actions">
+          <button id="omt-input-cancel">Отмена</button>
+          <button id="omt-input-add" class="primary">Добавить в плейлист</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="window-modal" class="modal hidden">
+      <div class="modal-content window-modal-content">
+        <h2 id="window-modal-title">Захват окна</h2>
+        <p class="audio-hint">Пока захватывается только картинка, без звука. Держи окно открытым и не сворачивай его.</p>
+        <p id="window-capture-status" class="audio-hint" role="status"></p>
+        <div id="window-capture-list" class="window-capture-list"></div>
+        <div id="window-editor" class="hidden">
+          <div class="window-editor-heading"><strong id="window-editor-name"></strong><span id="window-editor-resolution"></span><button id="window-change">Выбрать другое окно</button></div>
+          <div class="window-editor-preview"><canvas id="window-editor-canvas"></canvas></div>
+          <label>Частота картинки, к/с <select id="window-fps"><option value="15">15</option><option value="25">25</option><option value="30" selected>30</option><option value="50">50</option><option value="60">60</option></select></label>
+          <p class="audio-hint">Не выше герцовки экранов. Для слабого компьютера попробуй 15 или 25.</p>
+          <fieldset class="window-crop-controls">
+            <legend>Обрезка краёв, пиксели</legend>
+            <p class="audio-hint">Результат виден сразу. В эфир изменения попадут после сохранения.</p>
+            <div class="window-crop-inputs">
+              <label>Сверху <input id="window-crop-top" type="number" min="0" step="1" value="0"></label>
+              <label>Справа <input id="window-crop-right" type="number" min="0" step="1" value="0"></label>
+              <label>Снизу <input id="window-crop-bottom" type="number" min="0" step="1" value="0"></label>
+              <label>Слева <input id="window-crop-left" type="number" min="0" step="1" value="0"></label>
+            </div>
+          </fieldset>
+        </div>
+        <div class="modal-actions">
+          <button id="window-refresh">Обновить список</button>
+          <button id="window-cancel">Отмена</button>
+          <button id="window-add" class="primary">Добавить в плейлист</button>
+        </div>
+      </div>
+    </div>
+
     <div id="help-modal" class="modal hidden">
       <div class="modal-content help-modal-content">
         <h2>Горячие клавиши</h2>
@@ -416,10 +464,12 @@
         </table>
         </div>
         <p class="help-note">Клавиши B и T работают на любой раскладке (рус / eng).</p>
+        <p class="help-note"><span>Нашёл баг? Напиши в Telegram:</span> <a id="help-support-link" href="#">@CueDeckSupport_Bot</a></p>
         <p id="donate-note" class="help-note hidden">
           CueDeck выручает на шоу? <a id="donate-link" href="#">☕ Поддержать проект</a>
         </p>
         <div class="modal-actions">
+          <button id="help-report">Сообщить о проблеме</button>
           <button id="help-modal-close" class="primary">Закрыть</button>
         </div>
       </div>
@@ -764,7 +814,7 @@
     <div id="report-modal" class="modal hidden">
       <div class="modal-content report-modal-content">
         <h2>Сообщить о проблеме</h2>
-        <p class="audio-hint">Отчёт собирается в zip на рабочем столе: журнал действий, состояние программы, скриншоты окон, версия и ОС. Содержимого презентаций и текста заметок в нём нет, только имена файлов. Файл пришли в бот поддержки в Telegram.</p>
+        <p class="audio-hint">Отчёт собирается в zip на рабочем столе: журнал действий, состояние программы, скриншоты окон, версия и ОС. Содержимого презентаций и текста заметок в нём нет, только имена файлов. Файл пришли в Telegram: @CueDeckSupport_Bot.</p>
         <label class="report-label" for="report-comment">Что делал, что ожидал, что получил</label>
         <textarea id="report-comment" rows="5" placeholder="Например: нажал TAKE на втором спикере, зал остался на первом слайде предыдущего."></textarea>
         <p id="report-markers" class="audio-hint compact hidden"></p>
@@ -775,7 +825,7 @@
           <button id="report-close">Закрыть</button>
           <button id="report-reveal" class="hidden">Показать файл</button>
           <button id="report-save" class="primary">Сохранить отчёт</button>
-          <button id="report-support" class="primary hidden">Открыть бота поддержки</button>
+          <button id="report-support" class="primary hidden">Открыть @CueDeckSupport_Bot</button>
         </div>
       </div>
     </div>

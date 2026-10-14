@@ -48,6 +48,10 @@ const busy: RemoteStateView = {
     slideMedia: [],
     video,
   } as unknown as RemoteStateView['preview'],
+  timerLoop: false,
+  timerTickEnabled: false,
+  timerGongEnabled: false,
+  omt: { enabled: { timer: false, program: false, prompter: false } } as unknown as RemoteStateView['omt'],
   stream: { running: false } as unknown as RemoteStateView['stream'],
 }
 

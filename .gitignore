@@ -35,3 +35,7 @@ Thumbs.db
 *.swp
 *.tmp
 vendor/
+
+# Локальные отзывы пользователей и разбор между сессиями
+/FEEDBACK.md
+/feedback/

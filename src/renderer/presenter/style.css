@@ -316,7 +316,7 @@ body[data-role="speaker"] .notes { position: relative; }
    Playlist spans both rows on the left. Right .sidebar is unused for operator. */
 body[data-role="operator"] .grid {
   grid-template-columns: 260px minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) var(--bottom-h, 270px);
+  grid-template-rows: minmax(0, 1fr) clamp(160px, var(--bottom-h, 270px), 60%);
   grid-auto-rows: unset;
   grid-template-areas:
     "playlist preview program"
@@ -344,7 +344,7 @@ body[data-role="operator"] .next-slide { display: none; }
    (превью слева остаётся во всю высоту). Живой снимок окна суфлёра — таймер,
    заметки, сообщение; если суфлёра в раскладке нет — окно зала. ── */
 body[data-role="operator"] .grid.with-monitors {
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) var(--bottom-h, 270px);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) clamp(160px, var(--bottom-h, 270px), 60%);
   grid-template-areas:
     "playlist preview program"
     "playlist preview monitor"
@@ -401,7 +401,8 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 
 /* Bottom bar: [ notes | timer | big TAKE ] */
 .op-bottombar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr) clamp(100px, 10vw, 150px);
   align-items: stretch;
   gap: 12px;
   min-height: 0;
@@ -430,27 +431,25 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   background: rgba(255, 255, 255, 0.2);
 }
 .op-bottombar-handle:hover::after { background: var(--accent); }
-.op-bottombar .notes { flex: 1 1 280px; min-width: 140px; }
+.op-bottombar .notes { min-width: 0; }
 .op-bottombar .bottom-timer {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  justify-content: center;
+  justify-content: safe center;
   background: var(--panel);
   border-radius: 8px;
   padding: 10px 14px;
-  /* Таймер — приоритетный блок бара: держит рабочую ширину и не выдавливается.
-     Первыми ужимаются заметки/сообщение, на узком окне — колонка плейлиста
-     (медиазапросы у operator .grid). */
-  flex: 1 1 460px;
-  min-width: 430px;
+  min-width: 0;
   overflow: auto;
+  container-type: inline-size;
 }
 .op-bottombar .bottom-timer-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .op-bottombar .bt-transport { display: flex; gap: 8px; flex: none; }
 /* Timer digits + mode grouped together on the left */
@@ -459,9 +458,29 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   align-items: center;
   gap: 14px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 .op-bottombar .bottom-timer-head .timer { font-size: 46px; line-height: 1; }
 .op-bottombar .bt-head-left .group { display: flex; align-items: center; gap: 6px; }
+@container (max-width: 440px) {
+  .op-bottombar .bottom-timer-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  .op-bottombar .bottom-timer-head .bt-head-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .op-bottombar .bottom-timer-head .bt-transport { align-self: start; }
+  .op-bottombar .bottom-timer-head .timer { font-size: clamp(28px, 9cqw, 40px); }
+}
+@container (max-width: 340px) {
+  .op-bottombar .topbar-row.timer-controls { gap: 8px; }
+  .op-bottombar .timer-controls .group:has(#duration-input) { width: 100%; }
+  .op-bottombar .timer-controls .group:has(#duration-input) .group-label { flex-basis: 100%; }
+}
 .op-bottombar .bt-speaker {
   display: flex;
   align-items: center;
@@ -485,6 +504,8 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   gap: 12px;
 }
 .op-bottombar .topbar-row.timer-controls .pdf-name { display: none; }
+.op-bottombar .topbar-row.timer-controls .group { flex-wrap: wrap; max-width: 100%; }
+.op-bottombar .notes-header { flex-wrap: wrap; }
 /* Two equal rows replace the original TAKE area. */
 .take-controls { display: flex; gap: 4px; }
 .fade-controls { display: flex; position: relative; min-height: 0; }
@@ -495,7 +516,7 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 .op-bottombar .take-controls {
   flex: none;
   align-self: stretch;
-  width: 150px;
+  min-width: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   gap: 4px;
@@ -602,6 +623,7 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
 }
 .playlist-toggles {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
 }
@@ -703,11 +725,13 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   font-weight: 600;
 }
 .add-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  position: fixed;
   z-index: 30;
   min-width: 250px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2098,8 +2122,7 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   background: var(--panel);
   border-radius: 8px;
   padding: 10px 12px;
-  flex: 0 1 250px;
-  min-width: 140px;
+  min-width: 0;
   overflow: hidden;
   overflow: auto;
 }
@@ -2139,6 +2162,7 @@ body[data-role="operator"] .speaker-only { display: none !important; }
   display: flex;
   gap: 6px;
   margin-top: auto;
+  flex-wrap: wrap;
 }
 .speaker-msg .sm-send-row input {
   flex: 1;
@@ -2456,3 +2480,33 @@ html[lang="en"] {
 #font-popup .fp-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 #font-popup .fp-row button { white-space: nowrap; }
 #font-popup .fp-note { color: var(--muted); font-size: 11px; }
+
+.window-modal-content { width: min(1320px, 90vw); max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+.window-modal-content h2 { margin: 0 0 8px; }
+.window-modal-content > .audio-hint { margin: 4px 0 8px; }
+.window-modal-content .modal-actions { flex-shrink: 0; margin-top: 8px; }
+#window-editor { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.window-editor-heading { display: flex; align-items: center; gap: 12px; padding: 6px 0 10px; flex-shrink: 0; }
+#window-editor-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#window-editor-resolution { color: var(--muted); white-space: nowrap; }
+.window-editor-preview { display: flex; align-items: center; justify-content: center; background: repeating-linear-gradient(135deg, #30343b 0 10px, #444a53 10px 20px); min-height: 100px; height: min(52vh, 650px); flex: 1 1 auto; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; padding: 8px; box-sizing: border-box; }
+#window-editor-canvas { display: block; max-width: 100%; max-height: 100%; object-fit: contain; outline: 1px solid #c5cbd3; box-shadow: 0 2px 12px #0008; }
+.window-crop-controls { border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin: 0 0 12px; }
+.window-crop-controls legend { padding: 0 5px; }
+.window-crop-inputs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.window-crop-inputs label { display: flex; flex-direction: column; gap: 4px; }
+.window-crop-inputs input { width: 100%; box-sizing: border-box; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 8px; font: inherit; }
+@media (max-width: 700px) { .window-editor-heading { flex-wrap: wrap; } .window-crop-inputs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.window-capture-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; max-height: 55vh; overflow-y: auto; margin-bottom: 16px; }
+.window-capture-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 8px; text-align: left; }
+.window-capture-card img { width: 100%; height: 110px; object-fit: contain; background: #111; }
+.window-capture-card span { overflow-wrap: anywhere; }
+.window-capture-card[aria-pressed="true"] { outline: 2px solid var(--accent, #4aa3ff); outline-offset: -2px; }
+
+/* Network input follows the capture dialog's controls. */
+#omt-input-address {
+  width: 100%; box-sizing: border-box; padding: 8px 10px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 5px;
+}
+#omt-input-list:empty { display: none; }
+#omt-input-list { max-height: 260px; overflow-y: auto; }

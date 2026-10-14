@@ -77,6 +77,7 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
     y: bounds.y,
     width: bounds.width,
     height: bounds.height,
+    ...(role === 'operator' ? { minWidth: 1000, minHeight: 600 } : {}),
     show: false,
     fullscreen: fullscreen && !DEV_TILE && !windowed,
     backgroundColor: role === 'audience' ? '#000000' : '#1a1a1a',

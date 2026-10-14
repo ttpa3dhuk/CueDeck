@@ -33,6 +33,8 @@
  */
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { REMOTE_COMMANDS, commandTitle } from '../src/main/remote/commands'
+import { setLang } from '../src/shared/i18n'
 import { COMPANION_VARS, COMPANION_VARS_EN } from '../src/main/remote/companion-vars'
 
 type Lang = 'ru' | 'en'
@@ -647,6 +649,50 @@ function build(lang: Lang, file: string): void {
     { id: 'cuedeckPage2', name: lang === 'ru' ? 'CueDeck: ещё кнопки 1' : 'CueDeck: more buttons 1', grid: libGrids[0] },
     { id: 'cuedeckPage3', name: lang === 'ru' ? 'CueDeck: ещё кнопки 2' : 'CueDeck: more buttons 2', grid: libGrids[1] },
   ]
+  setLang(lang)
+  const extraLabels: Record<string, [string, string]> = {
+    'take/fade': ['FADE', 'FADE'],
+    'take/fade-ms': ['FADE\nмс', 'FADE\nms'],
+    'take/video-mode': ['РОЛИК', 'VIDEO'],
+    'take/slide-mode': ['СЛАЙДЫ', 'SLIDES'],
+    'preview/video/forward': ['ПРЕВЬЮ\n+10с', 'PREVIEW\n+10s'],
+    'preview/video/back': ['ПРЕВЬЮ\n-10с', 'PREVIEW\n-10s'],
+    'timer/loop': ['ЦИКЛ', 'LOOP'],
+    'timer/tick': ['ТИКАНЬЕ', 'TICK'],
+    'timer/gong': ['ГОНГ', 'GONG'],
+    'omt/timer': ['OMT\nТАЙМЕР', 'OMT\nTIMER'],
+    'omt/program': ['OMT\nЗАЛ', 'OMT\nMAIN'],
+    'omt/prompter': ['OMT\nСУФЛЁР', 'OMT\nPROMPTER'],
+  }
+  const extraValues: Record<string, [string, string]> = {
+    toggle: ['↔', '↔'], on: ['ВКЛ', 'ON'], off: ['ВЫКЛ', 'OFF'],
+    'play-start': ['С НАЧАЛА', 'RESTART'], 'play-resume': ['ПРОДОЛЖИТЬ', 'RESUME'],
+    'hold-first': ['1 КАДР', '1 FRAME'], 'from-start': ['С НАЧАЛА', 'START'],
+    'from-current': ['ВЫБРАННЫЙ', 'SELECTED'],
+  }
+  const extraLabel = (path: string, value: string) => {
+    const key = path.replace(/\/(toggle|on|off)$/, '')
+    const action = path.slice(key.length + 1) || value
+    const at = lang === 'ru' ? 0 : 1
+    return (extraLabels[key]?.[at] ?? path) + (extraValues[action] ? `\n${extraValues[action][at]}` : '')
+  }
+  const additions = REMOTE_COMMANDS.filter((c) =>
+    c.path.startsWith('take/') || c.path.startsWith('omt/') ||
+    /^(timer\/(loop|tick|gong)|preview\/video\/(forward|back))/.test(c.path),
+  ).flatMap((c) => (c.values ?? [c.example ?? '']).map((value) => ({
+    cmd: c.path + (value ? `/${value}` : ''),
+    label: extraLabel(c.path, value),
+    size: 20,
+    notes: commandTitle(c),
+  })))
+  for (let offset = 0; offset < additions.length; offset += 32) {
+    const extraGrid: Record<number, Record<number, ReturnType<typeof button>>> = {}
+    additions.slice(offset, offset + 32).forEach((spec, i) => {
+      const r = Math.floor(i / 8)
+      ;(extraGrid[r] ??= {})[i % 8] = button(spec)
+    })
+    pageDefs.push({ id: `cuedeckExtra${offset}`, name: `CueDeck: Remote ${offset / 32 + 1}`, grid: extraGrid })
+  }
   const pages = Object.fromEntries(
     pageDefs.map((p, i) => [
       String(i + 1),

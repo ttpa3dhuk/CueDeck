@@ -34,6 +34,10 @@ const state = (over: Partial<RemoteStateView> = {}): RemoteStateView => ({
   playlist: [],
   currentPlaylistId: null,
   preview: emptyDeck,
+  timerLoop: false,
+  timerTickEnabled: false,
+  timerGongEnabled: false,
+  omt: { enabled: { timer: false, program: false, prompter: false } } as unknown as RemoteStateView['omt'],
   stream: { running: false, warn: false, destinations: [] } as unknown as RemoteStateView['stream'],
   ...over,
 })
@@ -436,5 +440,61 @@ describe('companionVars — что уходит на кнопки Companion', ()
   it('имена переменных годятся для Companion (буквы, цифры, _)', () => {
     for (const k of Object.keys(COMPANION_VARS)) expect(k).toMatch(/^[a-z0-9_]+$/)
     expect(Object.keys(companionVars(cstate(), 0, 0)).sort()).toEqual(Object.keys(COMPANION_VARS).sort())
+  })
+})
+
+describe('новые команды пульта', () => {
+  const run = (path: string, args: (string | number | boolean)[] = [], over: Partial<RemoteStateView> = {}) =>
+    resolveRemote(seg(path), args, state(over))
+
+  it('Fade использует отдельный режим TAKE, обычный TAKE остаётся мгновенным', () => {
+    const preview = { ...emptyDeck, path: '/x/live', kind: 'live' as const }
+    expect(run('take/fade', [1], { preview })).toMatchObject({ ok: true, calls: [{ channel: 'preview:take', args: ['fade'] }] })
+    expect(run('take', [], { preview })).toMatchObject({ ok: true, calls: [{ channel: 'preview:take', args: [] }] })
+    expect(run('take/fade')).toMatchObject({ ok: false })
+    expect(run('take/fade', [0], { preview })).toMatchObject({ ok: true, ignored: true, calls: [] })
+  })
+
+  it('длительность Fade одинакова для HTTP и числового OSC, ошибки не доходят до IPC', () => {
+    for (const ms of [100, 500, 2000]) {
+      expect(run(`take/fade-ms/${ms}`)).toEqual(run('take/fade-ms', [ms]))
+      expect(run('take/fade-ms', [ms])).toMatchObject({ ok: true, calls: [{ channel: 'preview:set-fade-ms', args: [ms] }] })
+    }
+    for (const ms of [0, 99, 2001, 500.5, Infinity, 'abc']) expect(run('take/fade-ms', [ms])).toMatchObject({ ok: false })
+  })
+
+  it('режимы выдачи принимают только известные значения', () => {
+    for (const mode of ['play-start', 'play-resume', 'hold-first'])
+      expect(run('take/video-mode', [mode])).toMatchObject({ ok: true, calls: [{ channel: 'preview:set-video-take-mode', args: [mode] }] })
+    for (const mode of ['from-start', 'from-current'])
+      expect(run('take/slide-mode', [mode])).toMatchObject({ ok: true, calls: [{ channel: 'preview:set-slide-take-mode', args: [mode] }] })
+    expect(run('take/video-mode', ['other'])).toMatchObject({ ok: false })
+    expect(run('take/slide-mode', ['other'])).toMatchObject({ ok: false })
+  })
+
+  it('перемотка превью не меняет эфир', () => {
+    const preview = { ...emptyDeck, path: '/x/a.mp4', kind: 'video' as const }
+    expect(run('preview/video/back', [2.5], { preview })).toMatchObject({ ok: true, calls: [{ channel: 'preview:video:seek-by', args: [-2.5] }] })
+    expect(run('preview/video/forward/1:30', [], { preview })).toMatchObject({ ok: true, calls: [{ channel: 'preview:video:seek-by', args: [90] }] })
+    expect(run('preview/video/back/10')).toMatchObject({ ok: false })
+  })
+
+  it.each([
+    ['loop', 'timerLoop', 'timer:set-loop'],
+    ['tick', 'timerTickEnabled', 'timer:set-tick-sound'],
+    ['gong', 'timerGongEnabled', 'timer:set-gong-sound'],
+  ] as const)('таймер %s: toggle, on/off и отпускание', (path, field, channel) => {
+    expect(run(`timer/${path}/toggle`)).toMatchObject({ ok: true, calls: [{ channel, args: [true] }] })
+    expect(run(`timer/${path}/on`, [], { [field]: true })).toMatchObject({ ok: true, calls: [] })
+    expect(run(`timer/${path}/off`, [], { [field]: true })).toMatchObject({ ok: true, calls: [{ channel, args: [false] }] })
+    expect(run(`timer/${path}/toggle`, [0])).toMatchObject({ ok: true, ignored: true })
+  })
+
+  it.each(['timer', 'program', 'prompter'] as const)('OMT %s меняет только выбранный выход', (id) => {
+    expect(run(`omt/${id}/on`)).toMatchObject({ ok: true, calls: [{ channel: 'omt:configure', args: [{ enabled: { [id]: true } }] }] })
+    const omt = { enabled: { timer: true, program: true, prompter: true } } as unknown as RemoteStateView['omt']
+    expect(run(`omt/${id}/on`, [], { omt })).toMatchObject({ ok: true, calls: [] })
+    expect(run(`omt/${id}/toggle`, [], { omt })).toMatchObject({ ok: true, calls: [{ channel: 'omt:configure', args: [{ enabled: { [id]: false } }] }] })
+    expect(run(`omt/${id}/off`, [false], { omt })).toMatchObject({ ok: true, ignored: true })
   })
 })

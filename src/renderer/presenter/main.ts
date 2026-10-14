@@ -17,7 +17,7 @@ import {
   videoSrc,
 } from '../shared/video'
 import { elementAudioStream, LiveMeter, LivePool, LiveView, listMediaDevices } from '../shared/live-stream'
-import { liveDisplayName, liveFitFor, parseLiveUri } from '../../shared/live'
+import { liveDisplayName, liveFitFor, parseLiveUri, normalizeWindowFps } from '../../shared/live'
 import { isMicrosoftFont } from '../../shared/ms-fonts'
 import { WINDOW_TITLES } from '../../shared/window-titles'
 import { getLang, t, type Lang } from '../../shared/i18n'
@@ -27,6 +27,7 @@ import { OMT_OUTPUTS } from '../../shared/types'
 import type { ListMode, OmtFps, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL, SUPPORT_URL } from '../../preload/api'
 import { initStreamUi } from './stream-ui'
+import { initOmtInputUi, openOmtInputModal } from './omt-input-ui'
 import type {
   AppState,
   DisplayInfo,
@@ -1157,10 +1158,13 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
     const setupBtn = document.createElement('button')
     setupBtn.className = 'rename'
     setupBtn.textContent = '⚙'
-    setupBtn.title = t('Настроить захват: устройство картинки и звука')
+    setupBtn.title = parseLiveUri(entry.filePath)?.kind === 'omt' ? t('Настройка приёма OMT')
+      : parseLiveUri(entry.filePath)?.kind === 'window' ? t('Настройка захвата окна') : t('Настроить захват: устройство картинки и звука')
     setupBtn.addEventListener('click', (e) => {
       e.stopPropagation()
-      openLiveModal(fresh()).catch(() => showBanner(t('Не удалось получить список устройств')))
+      const kind = parseLiveUri(fresh().filePath)?.kind
+      if (kind === 'omt') openOmtInputModal(fresh())
+      else void (kind === 'window' ? openWindowModal(fresh()) : openLiveModal(fresh())).catch(() => showBanner(t('Не удалось получить список устройств')))
     })
     setupBtn.addEventListener('dblclick', (e) => e.stopPropagation())
     row1.append(setupBtn)
@@ -1936,7 +1940,7 @@ async function saveReport(): Promise<void> {
   btn.disabled = false
   if (res.ok) {
     result.classList.add('ok')
-    result.textContent = t('Сохранено на рабочий стол: {name}. Пришли этот файл в бот поддержки в Telegram.', { name: baseName(res.path) })
+    result.textContent = t('Сохранено на рабочий стол: {name}. Пришли этот файл в Telegram: @CueDeckSupport_Bot.', { name: baseName(res.path) })
     const reveal = $<HTMLButtonElement>('report-reveal')
     reveal.classList.remove('hidden')
     reveal.onclick = () => window.api.diag.showInFolder(res.path)
@@ -2513,9 +2517,18 @@ function setupOperatorControls(): void {
   })
 
   // «+» с меню: разновидностей добавления больше, чем влезает кнопками в шапку.
+  // Вне playlist: её overflow обрезает меню при узкой левой колонке.
+  if (addMenu) document.body.appendChild(addMenu)
   playlistAddBtn!.addEventListener('click', (e) => {
     e.stopPropagation()
     addMenu?.classList.toggle('hidden')
+    if (addMenu && !addMenu.classList.contains('hidden')) {
+      const anchor = playlistAddBtn!.getBoundingClientRect()
+      const menu = addMenu.getBoundingClientRect()
+      const edge = 8
+      addMenu.style.left = `${Math.max(edge, Math.min(anchor.right - menu.width, window.innerWidth - menu.width - edge))}px`
+      addMenu.style.top = `${Math.max(edge, Math.min(anchor.bottom + 4, window.innerHeight - menu.height - edge))}px`
+    }
   })
   addMenu?.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest('button[data-add]') as HTMLButtonElement | null
@@ -2523,10 +2536,16 @@ function setupOperatorControls(): void {
     addMenu.classList.add('hidden')
     if (btn.dataset.add === 'files') window.api.playlist.add()
     else if (btn.dataset.add === 'list') window.api.playlist.addList()
+    else if (btn.dataset.add === 'window') openWindowModal()
+    else if (btn.dataset.add === 'omt') openOmtInputModal()
     else openLiveModal().catch(() => showBanner(t('Не удалось получить список устройств')))
   })
   // Клик мимо меню закрывает его — обычное поведение выпадашки.
   document.addEventListener('click', () => addMenu?.classList.add('hidden'))
+  window.addEventListener('resize', () => addMenu?.classList.add('hidden'))
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') addMenu?.classList.add('hidden')
+  })
 
   // Режим вписывания правится прямо на шине — просьбу «заполните весь экран»
   // отрабатываем, не уходя в настройки и не снимая источник с эфира.
@@ -2539,7 +2558,25 @@ function setupOperatorControls(): void {
     if (id) window.api.playlist.update(id, { liveFit: previewLiveFit.value as LiveFit })
   })
 
+  $('window-cancel').addEventListener('click', closeWindowModal)
+  $('window-change').addEventListener('click', () => { stopWindowEditor(); void refreshWindowSources() })
+  for (const edge of windowCropEdges) $(`window-crop-${edge}`).addEventListener('input', () => drawWindowEditor(edge))
+  window.addEventListener('beforeunload', stopWindowEditor)
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !$('window-modal').classList.contains('hidden')) {
+      event.preventDefault(); event.stopImmediatePropagation(); closeWindowModal()
+    }
+  }, true)
+  import.meta.hot?.dispose(stopWindowEditor)
+  $('window-refresh').addEventListener('click', () => { void refreshWindowSources() })
+  $('window-fps').addEventListener('change', () => {
+    const crop = Object.fromEntries(windowCropEdges.map(edge => [edge, Number($<HTMLInputElement>(`window-crop-${edge}`).value)])) as Record<typeof windowCropEdges[number], number>
+    void startWindowEditor({ ...crop, unit: 'px' })
+  })
+  $('window-add').addEventListener('click', () => { void confirmWindowModal() })
+
   $('live-cancel').addEventListener('click', () => $('live-modal').classList.add('hidden'))
+  initOmtInputUi()
   $('live-add').addEventListener('click', () => {
     confirmLiveModal().catch(() => showBanner(t('Не удалось добавить захват')))
   })
@@ -2756,6 +2793,14 @@ function setupOperatorControls(): void {
   // Help button + menu
   $<HTMLButtonElement>('help-btn').addEventListener('click', showHelpModal)
   document.getElementById('help-modal-close')?.addEventListener('click', hideHelpModal)
+  $('help-support-link').addEventListener('click', (e) => {
+    e.preventDefault()
+    void window.api.external.open(SUPPORT_URL)
+  })
+  $('help-report').addEventListener('click', () => {
+    hideHelpModal()
+    void openReportModal()
+  })
   // Клик по затемнению вокруг окна и Esc тоже закрывают справку.
   document.getElementById('help-modal')?.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) hideHelpModal()
@@ -3105,6 +3150,223 @@ function openListModal(entry: PlaylistEntry): void {
   if (fade) fade.value = String(entry.fadeMs ?? 0)
   document.getElementById('list-modal')?.classList.remove('hidden')
   renderListItems()
+}
+
+let windowEditingId: string | null = null
+let windowChosen: { id: string; name: string } | null = null
+let windowListRequest = 0
+
+const windowCropEdges = ['top', 'right', 'bottom', 'left'] as const
+let windowEditorStream: MediaStream | null = null
+let windowEditorOwnsStream = false
+let windowEditorVideo: HTMLVideoElement | null = null
+let windowEditorFrame = 0
+let windowEditorRequest = 0
+let windowEditorReady = false
+let windowEditorDimensions = ''
+
+function stopWindowEditor(): void {
+  ++windowEditorRequest
+  windowEditorReady = false
+  windowEditorDimensions = ''
+  if (windowEditorVideo && windowEditorFrame) windowEditorVideo.cancelVideoFrameCallback(windowEditorFrame)
+  windowEditorFrame = 0
+  if (windowEditorOwnsStream) windowEditorStream?.getTracks().forEach(track => track.stop())
+  windowEditorOwnsStream = false
+  windowEditorStream = null
+  if (windowEditorVideo) { windowEditorVideo.pause(); windowEditorVideo.srcObject = null; windowEditorVideo.remove() }
+  windowEditorVideo = null
+}
+
+function closeWindowModal(): void {
+  ++windowListRequest
+  stopWindowEditor()
+  $('window-modal').classList.add('hidden')
+}
+
+function drawWindowEditor(changed?: string): void {
+  const video = windowEditorVideo
+  if (!video?.videoWidth || !video.videoHeight) return
+  const read = (edge: string): number => Math.max(0, Math.round(Number($<HTMLInputElement>(`window-crop-${edge}`).value) || 0))
+  const values = Object.fromEntries(windowCropEdges.map(edge => [edge, read(edge)])) as Record<string, number>
+  for (const [first, second, size] of [['left', 'right', video.videoWidth], ['top', 'bottom', video.videoHeight]] as const) {
+    const fixed = changed === first ? second : first
+    const moving = fixed === first ? second : first
+    values[fixed] = Math.min(size - 1, values[fixed])
+    values[moving] = Math.min(size - 1 - values[fixed], values[moving])
+    for (const edge of [first, second]) $<HTMLInputElement>(`window-crop-${edge}`).max = String(size - 1 - values[edge === first ? second : first])
+  }
+  const dimensions = `${video.videoWidth}x${video.videoHeight}`
+  if (changed || dimensions !== windowEditorDimensions) {
+    for (const edge of windowCropEdges) $<HTMLInputElement>(`window-crop-${edge}`).value = String(values[edge])
+    windowEditorDimensions = dimensions
+  }
+  const width = video.videoWidth - values.left - values.right
+  const height = video.videoHeight - values.top - values.bottom
+  const canvas = $<HTMLCanvasElement>('window-editor-canvas')
+  if (canvas.width !== width) canvas.width = width
+  if (canvas.height !== height) canvas.height = height
+  canvas.getContext('2d')?.drawImage(video, values.left, values.top, width, height, 0, 0, width, height)
+  $('window-editor-resolution').textContent = `${video.videoWidth} × ${video.videoHeight} → ${width} × ${height}`
+}
+
+async function startWindowEditor(crop?: { unit?: 'px'; top: number; right: number; bottom: number; left: number }): Promise<void> {
+  stopWindowEditor()
+  ++windowListRequest
+  const request = windowEditorRequest
+  const chosen = windowChosen
+  if (!chosen) return
+  $('window-capture-list').classList.add('hidden')
+  $('window-refresh').classList.add('hidden')
+  $('window-editor').classList.remove('hidden')
+  $('window-editor-name').textContent = chosen.name
+  $('window-editor-resolution').textContent = ''
+  $('window-capture-status').textContent = t('Подключение к окну…')
+  $<HTMLButtonElement>('window-add').disabled = true
+  for (const edge of windowCropEdges) $<HTMLInputElement>(`window-crop-${edge}`).disabled = true
+  const canvas = $<HTMLCanvasElement>('window-editor-canvas')
+  canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+  const timeout = window.setTimeout(() => {
+    if (request !== windowEditorRequest) return
+    stopWindowEditor()
+    $('window-capture-status').textContent = t('Окно не ответило. Выбери окно снова.')
+  }, 8000)
+  try {
+    const id = await window.api.live.resolveWindow({ kind: 'window', windowId: chosen.id, videoLabel: chosen.name, audioLabel: null })
+    if (request !== windowEditorRequest) return
+    const fps = await window.api.live.windowFps(Number($<HTMLSelectElement>('window-fps').value))
+    if (request !== windowEditorRequest) return
+    const borrowed = livePool.borrowWindowSource(id, chosen.name)
+    const stream = borrowed ?? await navigator.mediaDevices.getUserMedia({ audio: false, video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: id, maxWidth: 1920, maxHeight: 1080, maxFrameRate: fps } } as unknown as MediaTrackConstraints })
+    if (request !== windowEditorRequest) { if (!borrowed) stream.getTracks().forEach(track => track.stop()); return }
+    windowEditorStream = stream
+    windowEditorOwnsStream = !borrowed
+    const video = document.createElement('video')
+    video.muted = true
+    video.playsInline = true
+    video.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none'
+    video.setAttribute('aria-hidden', 'true')
+    document.body.append(video)
+    windowEditorVideo = video
+    video.srcObject = stream
+    await video.play()
+    if (request !== windowEditorRequest) return
+    for (const edge of windowCropEdges) {
+      const dimension = edge === 'top' || edge === 'bottom' ? video.videoHeight : video.videoWidth
+      $<HTMLInputElement>(`window-crop-${edge}`).value = String(Math.round((crop?.[edge] ?? 0) * (crop && crop.unit !== 'px' ? dimension / 100 : 1)))
+    }
+    window.clearTimeout(timeout)
+    for (const edge of windowCropEdges) $<HTMLInputElement>(`window-crop-${edge}`).disabled = false
+    windowEditorReady = true
+    $('window-capture-status').textContent = ''
+    $<HTMLButtonElement>('window-add').disabled = false
+    let origin: number | null = null
+    let lastSlot = -1
+    const render = (now = performance.now()): void => {
+      if (request !== windowEditorRequest) return
+      origin ??= now
+      const slot = Math.floor((now - origin + 0.01) * fps / 1000)
+      if (slot > lastSlot) { drawWindowEditor(); lastSlot = slot }
+      windowEditorFrame = video.requestVideoFrameCallback(render)
+    }
+    render()
+    stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+      if (request !== windowEditorRequest) return
+      stopWindowEditor()
+      $('window-capture-status').textContent = t('Окно недоступно. Выбери окно снова.')
+      $<HTMLButtonElement>('window-add').disabled = true
+    })
+  } catch {
+    if (request !== windowEditorRequest) return
+    stopWindowEditor()
+    $('window-capture-status').textContent = t('Не удалось открыть окно. Проверь разрешение на запись экрана или выбери другое окно.')
+  } finally {
+    window.clearTimeout(timeout)
+  }
+}
+
+async function openWindowModal(entry?: PlaylistEntry): Promise<void> {
+  const current = entry ? parseLiveUri(entry.filePath) : null
+  $<HTMLSelectElement>('window-fps').value = String(normalizeWindowFps(current?.windowFps))
+  windowEditingId = entry?.id ?? null
+  windowChosen = current?.windowId ? { id: current.windowId, name: current.videoLabel } : null
+  for (const edge of ['top', 'right', 'bottom', 'left'] as const) {
+    $<HTMLInputElement>(`window-crop-${edge}`).value = String(current?.windowCrop?.[edge] ?? 0)
+  }
+  $('window-modal-title').textContent = entry ? t('Настройка захвата окна') : t('Захват окна')
+  $('window-add').textContent = entry ? t('Сохранить') : t('Добавить в плейлист')
+  $('window-modal').classList.remove('hidden')
+  if (windowChosen) await startWindowEditor(current?.windowCrop)
+  else await refreshWindowSources()
+}
+
+async function refreshWindowSources(): Promise<void> {
+  stopWindowEditor()
+  $('window-editor').classList.add('hidden')
+  $('window-capture-list').classList.remove('hidden')
+  $('window-refresh').classList.remove('hidden')
+  const request = ++windowListRequest
+  const list = $('window-capture-list')
+  const status = $('window-capture-status')
+  const add = $<HTMLButtonElement>('window-add')
+  add.disabled = true
+  list.replaceChildren()
+  status.textContent = t('Поиск окон…')
+  try {
+    const result = await window.api.live.listWindows()
+    if (request !== windowListRequest) return
+    status.textContent = result.permission === 'denied' || result.permission === 'restricted'
+      ? t('Разреши CueDeck запись экрана в настройках системы и повтори поиск. Может понадобиться перезапуск CueDeck.')
+      : result.sources.length === 0 ? t('Окон не найдено. Открой нужное приложение и обнови список.') : ''
+    if (!result.sources.some((source) => source.id === windowChosen?.id)) windowChosen = null
+    for (const source of result.sources) {
+      const button = document.createElement('button')
+      button.className = 'window-capture-card'
+      button.type = 'button'
+      button.setAttribute('aria-pressed', String(source.id === windowChosen?.id))
+      const thumbnail = document.createElement('img')
+      thumbnail.src = source.thumbnail
+      thumbnail.alt = ''
+      const name = document.createElement('span')
+      name.textContent = source.name
+      button.append(thumbnail, name)
+      button.addEventListener('click', () => {
+        windowChosen = { id: source.id, name: source.name }
+        list.querySelectorAll('button').forEach((card) => card.setAttribute('aria-pressed', String(card === button)))
+        void startWindowEditor()
+      })
+      list.append(button)
+    }
+    add.disabled = true
+  } catch {
+    if (request === windowListRequest) status.textContent = t('Не удалось получить список окон. Обнови список и проверь разрешение на запись экрана.')
+  }
+}
+
+async function confirmWindowModal(): Promise<void> {
+  if (!windowChosen || !windowEditorReady) return
+  drawWindowEditor()
+  const button = $<HTMLButtonElement>('window-add')
+  button.disabled = true
+  const cropValue = (edge: string): number => {
+    const value = $<HTMLInputElement>(`window-crop-${edge}`).valueAsNumber
+    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0
+  }
+  const windowCrop = { unit: 'px' as const, top: cropValue('top'), right: cropValue('right'), bottom: cropValue('bottom'), left: cropValue('left') }
+  const src = { kind: 'window' as const, windowId: windowChosen.id, videoLabel: windowChosen.name, audioLabel: null, windowCrop, windowFps: Number($<HTMLSelectElement>('window-fps').value) }
+  stopWindowEditor()
+  try {
+    if (windowEditingId) await window.api.playlist.updateLive(windowEditingId, src)
+    else {
+      const added = await window.api.playlist.addLive(src)
+      if (added[0]) await window.api.playlist.update(added[0].id, { liveFit: 'fill' })
+    }
+    closeWindowModal()
+  } catch {
+    showBanner(t('Не удалось добавить захват'))
+  } finally {
+    button.disabled = !windowEditorReady
+  }
 }
 
 async function openLiveModal(entry?: PlaylistEntry): Promise<void> {
@@ -4572,12 +4834,19 @@ function setupBottomBarResize(): void {
   // Минимум 160px: ниже блок таймера (цифры + пресеты + звук/цикл + суфлёр)
   // гарантированно не влезает и появляется внутренний скролл.
   const MIN_BOTTOM_H = 160
-  const setH = (px: number): void =>
-    document.documentElement.style.setProperty('--bottom-h', `${px}px`)
+  let preferredHeight = 270
+  const setH = (px: number): void => {
+    preferredHeight = px
+    const grid = bottom.parentElement!
+    const limit = Math.max(MIN_BOTTOM_H, grid.clientHeight * 0.6)
+    document.documentElement.style.setProperty('--bottom-h', `${Math.min(px, limit)}px`)
+  }
+  setH(preferredHeight)
   try {
     const saved = Number(localStorage.getItem('cuedeck.bottomH'))
     if (saved >= MIN_BOTTOM_H) setH(saved)
   } catch { /* localStorage unavailable — ignore */ }
+  window.addEventListener('resize', () => setH(preferredHeight))
 
   let startY = 0
   let startH = 0

@@ -38,6 +38,16 @@ The STREAM button sends the hall picture and sound to YouTube, VK and Telegram, 
 
 <img src="docs/screenshots/stream.png" width="720" alt="Stream window with YouTube, VK and Telegram destinations">
 
+## Window capture and OMT input
+
+Click + → Window… in the speaker list to capture PowerPoint, Zoom or another application. Add it to the playlist, stage it in Preview and press TAKE. PowerPoint keeps its animations and transitions because the presentation still runs in PowerPoint. Control it in the original application.
+
+The capture editor has a live preview, crop controls in pixels and a frame rate selector. Changes reach the hall when you save them. Window audio and notes from a running PowerPoint presentation are not connected yet.
+
+Click + → OMT… to receive a network source, for example from vMix on another computer. Choose a discovered source or enter its address. CueDeck waits for a lost source to return. Use gigabit Ethernet for video.
+
+OMT audio pitch can change after switching sound off and back on; we are still fixing it. For picture only, uncheck audio when adding the source. Other GPUs and long sessions with the new Windows frame transport still need testing. Transparent input uses the previous frame transport.
+
 ## OMT outputs for vMix and OBS
 
 The timer on a transparent background, the hall (with sound) and the prompter go out as network sources over [OMT](https://github.com/openmediatransport), the open alternative to NDI. vMix 29+ sees them natively, OBS needs the OMT plugin. The timer lands on top of your picture with no keying. When vMix takes a CueDeck source to program, the OMT button turns red.
@@ -58,7 +68,8 @@ A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live time
 |---|---|
 | Mac with Apple Silicon (M1 and later) | `CueDeck-<version>-Silicon-mac.zip` |
 | Mac with Intel | `CueDeck-<version>-Intel-mac.zip` |
-| Windows 10 / 11 | `CueDeck-<version>-win.zip` |
+| Windows 10 / 11, installer | `CueDeck-<version>-Setup.exe` |
+| Windows 10 / 11, Portable (no installation) | `CueDeck-<version>-win.zip` |
 
 <details>
 <summary>First launch: the app isn't signed</summary>

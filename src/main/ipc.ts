@@ -1564,7 +1564,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('playlist:add-live', (_e, src: LiveSource): PlaylistEntry[] => {
     if (!src || typeof src.videoLabel !== 'string' || !src.videoLabel) return []
     return appendToPlaylist([
-      makeLiveUri({ videoLabel: src.videoLabel, audioLabel: src.audioLabel || null }),
+      makeLiveUri(src),
     ])
   })
 
@@ -1584,26 +1584,27 @@ export function registerIpcHandlers(): void {
     const entry = store.get().playlist.find((e) => e.id === payload.id)
     if (!entry || entry.kind !== 'live' || !payload.src?.videoLabel) return
     const oldPath = entry.filePath
-    const uri = makeLiveUri({
-      videoLabel: payload.src.videoLabel,
-      audioLabel: payload.src.audioLabel || null,
-    })
+    const uri = makeLiveUri(payload.src)
     if (uri === oldPath) return
 
-    store.patch({
-      playlist: store.get().playlist.map((e) =>
+    const state = store.get()
+    const patch: Partial<import('./state.js').AppState> = {
+      playlist: state.playlist.map((e) =>
         e.id === payload.id ? { ...e, filePath: uri, fileName: liveDisplayName(uri) } : e,
       ),
-    })
+    }
+    if (state.pdfPath === oldPath) {
+      patch.pdfPath = uri
+      patch.pdfSha1 = uri
+    }
+    if (state.preview.path === oldPath) {
+      patch.preview = { ...state.preview, path: uri, sha1: uri }
+    }
+    // All consumers must switch together, or the operator opens both URIs.
+    store.patch(patch)
     persistPlaylist()
+    if (state.pdfPath === oldPath) setLastPdfPath(uri)
 
-    if (store.get().pdfPath === oldPath) {
-      store.patch({ pdfPath: uri, pdfSha1: uri })
-      setLastPdfPath(uri)
-    }
-    if (store.get().preview.path === oldPath) {
-      store.patchPreview({ path: uri, sha1: uri })
-    }
   })
 
   ipcMain.handle('playlist:remove', (_e, id: string) => {

@@ -40,9 +40,13 @@ export type RemoteStateView = Pick<
   | 'currentPlaylistId'
   | 'preview'
   | 'stream'
+  | 'omt'
+  | 'timerLoop'
+  | 'timerTickEnabled'
+  | 'timerGongEnabled'
 >
 
-type ArgKind = 'none' | 'duration' | 'index' | 'number' | 'seconds' | 'enum' | 'text'
+type ArgKind = 'none' | 'duration' | 'index' | 'number' | 'seconds' | 'enum' | 'text' | 'milliseconds'
 
 type Group =
   | 'Эфир'
@@ -52,6 +56,7 @@ type Group =
   | 'Таймер'
   | 'Сообщение спикеру'
   | 'Трансляция'
+  | 'Выходы OMT'
 
 export interface RemoteCommand {
   /** Путь без префикса: `timer/start`. */
@@ -272,6 +277,46 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     title: 'ЭФИР — выдать превью в зал',
     build: (_a, s) => (s.preview.path ? [call('preview:take')] : t('превью пустое — выдавать нечего')),
   },
+  {
+    path: 'take/fade',
+    aliases: ['program/take/fade', 'preview/take/fade'],
+    arg: 'none',
+    group: 'Эфир',
+    title: 'Fade: выдать превью в зал с наплывом',
+    build: (_a, s) => (s.preview.path ? [call('preview:take', 'fade')] : t('превью пустое — выдавать нечего')),
+  },
+  {
+    path: 'take/fade-ms',
+    arg: 'milliseconds',
+    group: 'Эфир',
+    title: 'Длительность Fade (100–2000 мс)',
+    example: '500',
+    build: (a) => {
+      const n = typeof a === 'number' ? a : typeof a === 'string' ? Number(a.trim()) : NaN
+      return Number.isInteger(n) && n >= 100 && n <= 2000
+        ? [call('preview:set-fade-ms', n)] : t('нужны целые миллисекунды от 100 до 2000')
+    },
+  },
+  {
+    path: 'take/video-mode',
+    arg: 'enum',
+    values: ['play-start', 'play-resume', 'hold-first'],
+    group: 'Эфир',
+    title: 'Ролик при выдаче: с начала / продолжить / первый кадр',
+    example: 'hold-first',
+    build: (a) => ['play-start', 'play-resume', 'hold-first'].includes(String(a))
+      ? [call('preview:set-video-take-mode', a)] : t('режим: {values}', { values: 'play-start / play-resume / hold-first' }),
+  },
+  {
+    path: 'take/slide-mode',
+    arg: 'enum',
+    values: ['from-start', 'from-current'],
+    group: 'Эфир',
+    title: 'Слайды при выдаче: с начала / выбранный слайд',
+    example: 'from-current',
+    build: (a) => ['from-start', 'from-current'].includes(String(a))
+      ? [call('preview:set-slide-take-mode', a)] : t('режим: {values}', { values: 'from-start / from-current' }),
+  },
   ...onOff('blackout', 'Эфир', 'Заставка / blackout', () => [call('blackout:toggle')], (s) => s.blackout),
 
   // ── Видео в эфире ──
@@ -430,6 +475,20 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     build: () => [call('preview:clear')],
   },
 
+  ...(['forward', 'back'] as const).map((direction): RemoteCommand => ({
+    path: `preview/video/${direction}`,
+    arg: 'seconds',
+    group: 'Превью',
+    title: direction === 'forward' ? 'Превью: ролик вперёд на N секунд' : 'Превью: ролик назад на N секунд', // i18n-ok: commandTitle переводит ключ
+    example: '10',
+    build: (a, s) => {
+      const sec = parseSeconds(a)
+      if (sec === null) return t('нужны секунды: 10, 2.5, 1:30')
+      return s.preview.kind === 'video'
+        ? [call('preview:video:seek-by', direction === 'forward' ? sec : -sec)] : t('в превью нет ролика')
+    },
+  })),
+
   // ── Таймер ──
   {
     path: 'timer/start',
@@ -578,6 +637,16 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     title: 'Убрать сообщение',
     build: () => [call('speaker-message:set', null)],
   },
+
+  ...onOff('timer/loop', 'Таймер', 'Цикл таймера', (want) => [call('timer:set-loop', want)], (s) => s.timerLoop),
+  ...onOff('timer/tick', 'Таймер', 'Тиканье таймера', (want) => [call('timer:set-tick-sound', want)], (s) => s.timerTickEnabled),
+  ...onOff('timer/gong', 'Таймер', 'Гонг таймера', (want) => [call('timer:set-gong-sound', want)], (s) => s.timerGongEnabled),
+  ...(['timer', 'program', 'prompter'] as const).flatMap((id) => onOff(
+    `omt/${id}`, 'Выходы OMT', // i18n-ok: helpPage переводит группу
+    id === 'timer' ? 'OMT: таймер' : id === 'program' ? 'OMT: зал' : 'OMT: суфлёр', // i18n-ok: commandTitle переводит ключ
+    (want) => [call('omt:configure', { enabled: { [id]: want } })],
+    (s) => s.omt.enabled[id],
+  )),
 
   // ── Трансляция ──
   ...onOff('stream', 'Трансляция', 'Трансляция', (want) => [call(want ? 'stream:start' : 'stream:stop')], (s) => s.stream.running),

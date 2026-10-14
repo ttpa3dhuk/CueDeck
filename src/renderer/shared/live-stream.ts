@@ -20,7 +20,9 @@
  * зал и суфлёр — только то, что сейчас в эфире.
  */
 
-import { parseLiveUri } from '../../shared/live'
+import { cropWindowStream } from './window-crop'
+import { OmtStream } from './omt-stream'
+import { parseLiveUri, normalizeWindowCrop } from '../../shared/live'
 import { t } from '../../shared/i18n'
 
 export type LiveStatus = 'off' | 'connecting' | 'live' | 'error'
@@ -172,6 +174,14 @@ export interface LiveSettings {
 
 interface PoolEntry {
   uri: string
+  windowId?: string
+  checkingWindow?: boolean
+  missingWindowChecks?: number
+  rawStream?: MediaStream
+  disposeCrop?: () => void
+  setCropFps?: (fps: number) => void
+  setOmtAudio?: (enabled: boolean) => void
+  fpsRevision?: number
   stream: MediaStream | null
   state: LiveState
   settings: LiveSettings | null
@@ -219,6 +229,49 @@ export class LivePool {
     // только когда набор реально изменился, иначе получаем вечный цикл.
     let changed = false
 
+    // The URI stores audio preference, but switching it must keep video alive.
+    for (const uri of wanted) {
+      if (this.entries.has(uri)) continue
+      const source = parseLiveUri(uri)
+      if (source?.kind !== 'omt') continue
+      for (const [oldUri, entry] of this.entries) {
+        const old = parseLiveUri(oldUri)
+        if (wanted.has(oldUri) || entry.opening || !entry.stream || old?.kind !== 'omt' ||
+            source.omtAddress !== old.omtAddress) continue
+        this.entries.delete(oldUri)
+        entry.uri = uri
+        this.entries.set(uri, entry)
+        entry.setOmtAudio?.(!!source.audioLabel)
+        changed = true
+        break
+      }
+    }
+
+    // Changing only FPS retains the native desktop session and the crop canvas.
+    for (const uri of wanted) {
+      if (this.entries.has(uri)) continue
+      const source = parseLiveUri(uri)
+      if (source?.kind !== 'window') continue
+      for (const [oldUri, entry] of this.entries) {
+        const old = parseLiveUri(oldUri)
+        if (wanted.has(oldUri) || entry.opening || !entry.stream || old?.kind !== 'window') continue
+        if (source.windowId !== old.windowId || source.videoLabel !== old.videoLabel ||
+            JSON.stringify(normalizeWindowCrop(source.windowCrop)) !== JSON.stringify(normalizeWindowCrop(old.windowCrop))) continue
+        this.entries.delete(oldUri)
+        entry.uri = uri
+        this.entries.set(uri, entry)
+        const revision = entry.fpsRevision = (entry.fpsRevision ?? 0) + 1
+        void window.api.live.windowFps(source.windowFps).then(async fps => {
+          if (this.entries.get(entry.uri) !== entry || entry.fpsRevision !== revision) return
+          entry.setCropFps?.(fps)
+          if (entry.settings) entry.settings.frameRate = fps
+          if (this.entries.get(entry.uri) === entry) this.notify()
+        }).catch(error => console.warn('Window capture FPS:', error))
+        changed = true
+        break
+      }
+    }
+
     for (const [uri, entry] of this.entries) {
       if (wanted.has(uri)) continue
       this.close(entry)
@@ -259,12 +312,30 @@ export class LivePool {
     return this.entries.get(uri)?.state ?? OFF
   }
 
+  /** A temporary editor borrows raw tracks without opening another desktop capture. */
+  borrowWindowSource(id: string, name: string): MediaStream | null {
+    for (const entry of this.entries.values()) {
+      const source = parseLiveUri(entry.uri)
+      const raw = entry.rawStream ?? entry.stream
+      if (source?.kind === 'window' && source.videoLabel === name && entry.windowId === id && raw) {
+        const tracks = raw.getVideoTracks().filter(track => track.readyState === 'live')
+        if (tracks.length) return raw
+      }
+    }
+    return null
+  }
+
   settingsOf(uri: string | null): LiveSettings | null {
     if (!uri) return null
     return this.entries.get(uri)?.settings ?? null
   }
 
   private close(entry: PoolEntry): void {
+    entry.disposeCrop?.()
+    entry.disposeCrop = undefined
+    entry.setCropFps = undefined
+    entry.setOmtAudio = undefined
+    entry.rawStream = undefined
     if (entry.stream) {
       entry.stream.getTracks().forEach((t) => t.stop())
       entry.stream = null
@@ -285,11 +356,32 @@ export class LivePool {
       if (entry.opening) continue
 
       if (entry.stream) {
-        const track = entry.stream.getVideoTracks()[0]
+        const source = parseLiveUri(entry.uri)
+        // Network liveness is measured by received video, not a canvas track's muted bit.
+        if (source?.kind === 'omt') continue
+        if (source?.kind === 'window' && !entry.checkingWindow) {
+          entry.checkingWindow = true
+          const checkedStream = entry.stream
+          void window.api.live.resolveWindow(source).then((id) => {
+            if (this.entries.get(entry.uri) !== entry || entry.stream !== checkedStream) return
+            entry.missingWindowChecks = 0
+            if (id !== entry.windowId) {
+              this.close(entry)
+              this.setState(entry, 'connecting', null)
+              void this.open(entry)
+            }
+          }).catch(() => {
+            if (this.entries.get(entry.uri) !== entry || entry.stream !== checkedStream) return
+            // An absent inventory entry is not evidence that this still-live capture ended.
+            // macOS can omit the window during Spaces/fullscreen transitions.
+            entry.missingWindowChecks = (entry.missingWindowChecks ?? 0) + 1
+          }).finally(() => { entry.checkingWindow = false })
+        }
+        const track = (entry.rawStream ?? entry.stream).getVideoTracks()[0]
         // `ended` — устройство ушло совсем; `muted` — источник временно не
         // отдаёт кадры (ровно это выглядит как «картинка замерла»).
         const dead = !track || track.readyState === 'ended'
-        const stalled = Boolean(track && track.muted)
+        const stalled = source?.kind !== 'window' && Boolean(track && track.muted)
         entry.stallTicks = stalled ? entry.stallTicks + 1 : 0
         if (dead || entry.stallTicks >= STALL_TICKS) {
           this.close(entry)
@@ -313,36 +405,81 @@ export class LivePool {
     }
     entry.opening = true
     try {
-      // Здесь именно enumerateDevices, без пробы разблокировки меток: проба
-      // берёт постороннюю камеру и на подвисшем железе виснет вместе с ней.
-      const devices = await navigator.mediaDevices.enumerateDevices()
-      // Пока ждали, запись могли убрать из плейлиста.
-      if (!this.entries.has(entry.uri)) return
-
-      const cam = findDevice(devices, 'videoinput', source.videoLabel)
-      if (!cam) {
-        entry.retryAt = Date.now() + RETRY_MS
-        this.setState(entry, 'error', t('Устройство не найдено: {name}', { name: source.videoLabel }))
+      if (source.kind === 'omt') {
+        const network = new OmtStream(source.omtAddress!, true, state => {
+          if (this.entries.get(entry.uri) !== entry) return
+          entry.settings = { width: state.width, height: state.height, frameRate: state.frameRate }
+          this.setState(entry, state.status, state.message)
+        })
+        entry.stream = network.stream
+        entry.setOmtAudio = enabled => network.setAudioEnabled(enabled)
+        network.setAudioEnabled(!!source.audioLabel)
+        entry.disposeCrop = () => network.dispose()
+        entry.retryAt = 0
+        this.setState(entry, 'connecting', null)
         return
       }
-      const mic = source.audioLabel
-        ? findDevice(devices, 'audioinput', source.audioLabel)
-        : undefined
+      let stream: MediaStream
+      let windowFps = 30
+      let nativeFps = 30
+      if (source.kind === 'window') {
+        const id = await window.api.live.resolveWindow(source)
+        windowFps = await window.api.live.windowFps(source.windowFps)
+        nativeFps = await window.api.live.windowFps(60)
+        entry.windowId = id
+        if (!this.entries.has(entry.uri)) return
+        stream = await withTimeout(navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { mandatory: {
+            chromeMediaSource: 'desktop', chromeMediaSourceId: id,
+            maxWidth: 1920, maxHeight: 1080, maxFrameRate: nativeFps,
+          } } as unknown as MediaTrackConstraints,
+        }), OPEN_TIMEOUT_MS)
+      } else {
+        // Здесь именно enumerateDevices, без пробы разблокировки меток: проба
+        // берёт постороннюю камеру и на подвисшем железе виснет вместе с ней.
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        // Пока ждали, запись могли убрать из плейлиста.
+        if (!this.entries.has(entry.uri)) return
 
-      // Звук тянем всегда, когда он задан у источника: подключать его позже
-      // означало бы пересобрать поток и моргнуть картинкой в зале. Кто его
-      // реально слышит, решают muted у элементов (audioRole/shouldMute).
-      const stream = await withTimeout(
-        navigator.mediaDevices.getUserMedia({
-          video: { deviceId: { exact: cam.deviceId }, ...VIDEO_CONSTRAINTS },
-          audio: mic ? { deviceId: { exact: mic.deviceId }, ...AUDIO_PROCESSING_OFF } : false,
-        }),
-        OPEN_TIMEOUT_MS,
-      )
+        const cam = findDevice(devices, 'videoinput', source.videoLabel)
+        if (!cam) {
+          entry.retryAt = Date.now() + RETRY_MS
+          this.setState(entry, 'error', t('Устройство не найдено: {name}', { name: source.videoLabel }))
+          return
+        }
+        const mic = source.audioLabel
+          ? findDevice(devices, 'audioinput', source.audioLabel)
+          : undefined
+
+        // Звук тянем всегда, когда он задан у источника: подключать его позже
+        // означало бы пересобрать поток и моргнуть картинкой в зале. Кто его
+        // реально слышит, решают muted у элементов (audioRole/shouldMute).
+        stream = await withTimeout(
+          navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: cam.deviceId }, ...VIDEO_CONSTRAINTS },
+            audio: mic ? { deviceId: { exact: mic.deviceId }, ...AUDIO_PROCESSING_OFF } : false,
+          }),
+          OPEN_TIMEOUT_MS,
+        )
+      }
 
       if (!this.entries.has(entry.uri)) {
         stream.getTracks().forEach((t) => t.stop())
         return
+      }
+      if (source.kind === 'window') {
+        const raw = stream
+        const cropped = await cropWindowStream(raw, normalizeWindowCrop(source.windowCrop), windowFps, nativeFps)
+        if (this.entries.get(entry.uri) !== entry) {
+          cropped.dispose()
+          cropped.stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        entry.rawStream = raw
+        entry.disposeCrop = cropped.dispose
+        entry.setCropFps = cropped.setFps
+        stream = cropped.stream
       }
       const track = stream.getVideoTracks()[0]
       const st = track?.getSettings() ?? {}
@@ -350,14 +487,17 @@ export class LivePool {
       entry.settings = {
         width: st.width ?? 0,
         height: st.height ?? 0,
-        frameRate: Math.round(st.frameRate ?? 0),
+        frameRate: source.kind === 'window' ? windowFps : Math.round(st.frameRate ?? 0),
       }
       entry.stallTicks = 0
+      entry.missingWindowChecks = 0
       entry.retryAt = 0
       this.setState(entry, 'live', null)
     } catch (err) {
       entry.retryAt = Date.now() + RETRY_MS
-      this.setState(entry, 'error', humanError(err, source.videoLabel))
+      this.setState(entry, 'error', source.kind === 'window'
+        ? t('Не удалось захватить окно: {name}. Проверьте доступ к записи экрана и выберите окно заново.', { name: source.videoLabel })
+        : humanError(err, source.videoLabel))
     } finally {
       entry.opening = false
     }
@@ -490,13 +630,13 @@ export class LiveMeter {
 }
 
 export class LiveView {
-  private shownUri: string | null = null
   private shownStream: MediaStream | null = null
 
   /** Измеренная частота кадров (не заявленная) — считаем по факту доставки. */
   private frames = 0
   private windowStartedAt = 0
   private measuredFps = 0
+  private frameCallback: number | null = null
 
   constructor(
     private el: HTMLVideoElement,
@@ -518,10 +658,11 @@ export class LiveView {
     const el = this.el as HTMLVideoElement & {
       requestVideoFrameCallback?: (cb: (now: number) => void) => number
     }
-    if (typeof el.requestVideoFrameCallback !== 'function') return
-    el.requestVideoFrameCallback((now) => {
+    if (typeof el.requestVideoFrameCallback !== 'function' || this.frameCallback !== null) return
+    this.frameCallback = el.requestVideoFrameCallback((now) => {
+      this.frameCallback = null
       if (this.windowStartedAt === 0) this.windowStartedAt = now
-      this.frames += 1
+      else this.frames += 1
       const elapsed = now - this.windowStartedAt
       if (elapsed >= 1000) {
         this.measuredFps = Math.round((this.frames * 1000) / elapsed)
@@ -537,10 +678,11 @@ export class LiveView {
     const state = this.pool.stateOf(uri)
     const stream = this.pool.get(uri)
 
-    if (uri !== this.shownUri || stream !== this.shownStream) {
-      this.shownUri = uri
+    if (stream !== this.shownStream) {
       this.shownStream = stream
-      this.el.srcObject = stream
+      if (stream !== this.el.srcObject) this.el.srcObject = stream
+      if (this.frameCallback !== null) this.el.cancelVideoFrameCallback(this.frameCallback)
+      this.frameCallback = null
       this.frames = 0
       this.windowStartedAt = 0
       this.measuredFps = 0
