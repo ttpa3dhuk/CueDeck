@@ -355,6 +355,8 @@ export interface AppState {
   stream: StreamStatus
   /** Выходы OMT (Open Media Transport) в сеть: настройки + живой статус. */
   omt: OmtStatus
+  /** Выходы NDI в сеть: настройки + живой статус. */
+  ndi: NdiStatus
 }
 
 /**
@@ -424,6 +426,79 @@ export const OMT_OUTPUT_OFF: OmtOutputStatus = {
 }
 
 export const DEFAULT_OMT_SETTINGS: OmtSettings = {
+  enabled: { timer: false, program: false, prompter: false },
+  names: { timer: 'CueDeck Timer', program: 'CueDeck Program', prompter: 'CueDeck Prompter' },
+  sizes: { timer: 1080, program: 1080, prompter: 1080 },
+  fps: { timer: 30, program: 30, prompter: 30 },
+  programAudio: true,
+  timerMessage: true,
+}
+
+/**
+ * Выходы NDI (main/ndi/) — источники в локальной сети, которые видят OBS,
+ * vMix, Wirecast и другие NDI-совместимые программы: таймер на прозрачном
+ * фоне, зал (то, что на проекторе) и суфлёр. В отличие от OMT, NDI сам кодирует
+ * кадр, поэтому мы отдаём сырой BGRA без своего кодека.
+ */
+export type NdiOutputId = 'timer' | 'program' | 'prompter'
+
+export const NDI_OUTPUTS: readonly NdiOutputId[] = ['timer', 'program', 'prompter']
+
+/** Разрешение выхода — высота кадра 16:9: 720p, 1080p, 4K. */
+export type NdiResolution = 720 | 1080 | 2160
+
+export const NDI_RESOLUTIONS: readonly NdiResolution[] = [720, 1080, 2160]
+
+/** Частота кадров выхода — с ней повторяем кадры в NDI. */
+export type NdiFps = 15 | 25 | 30 | 50 | 60
+
+export const NDI_FPS: readonly NdiFps[] = [15, 25, 30, 50, 60]
+
+export interface NdiSettings {
+  /** Какие выходы отдавать в сеть. */
+  enabled: Record<NdiOutputId, boolean>
+  /** Имена источников; у получателя — «КОМПЬЮТЕР (имя)». */
+  names: Record<NdiOutputId, string>
+  /**
+   * Разрешение. Таймер рисуется ровно в нём; зал и суфлёр больше него
+   * ужимаются, а меньше — уходят как есть (получатель растянет сам).
+   */
+  sizes: Record<NdiOutputId, NdiResolution>
+  /** Частота кадров. */
+  fps: Record<NdiOutputId, NdiFps>
+  /** Отдавать в выход «Зал» звук эфира. */
+  programAudio: boolean
+  /** Показывать на таймере сообщение спикеру. */
+  timerMessage: boolean
+}
+
+export type NdiOutputState = 'off' | 'on' | 'error'
+
+export interface NdiOutputStatus {
+  state: NdiOutputState
+  /** Полное имя в сети: «КОМПЬЮТЕР (CueDeck Timer)». */
+  address: string | null
+  /** Сколько программ смотрят источник. */
+  receivers: number
+  /** Tally от получателя: источник в эфире / в превью. */
+  program: boolean
+  preview: boolean
+  error: string | null
+}
+
+export interface NdiStatus extends NdiSettings {
+  /** Библиотека NDI загрузилась (null — ещё не пробовали: ни один выход не включали). */
+  available: boolean | null
+  /** Почему NDI недоступна. */
+  error: string | null
+  outputs: Record<NdiOutputId, NdiOutputStatus>
+}
+
+export const NDI_OUTPUT_OFF: NdiOutputStatus = {
+  state: 'off', address: null, receivers: 0, program: false, preview: false, error: null,
+}
+
+export const DEFAULT_NDI_SETTINGS: NdiSettings = {
   enabled: { timer: false, program: false, prompter: false },
   names: { timer: 'CueDeck Timer', program: 'CueDeck Program', prompter: 'CueDeck Prompter' },
   sizes: { timer: 1080, program: 1080, prompter: 1080 },

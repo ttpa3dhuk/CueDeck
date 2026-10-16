@@ -7,7 +7,11 @@ import { sanitizePlaylistFolders } from '../shared/playlist-folders.js'
 import type { PlaylistFolder, PlaylistEntry, RemoteSettings, VenueProfile, SlideTakeMode, TimerMode, TimerPosition, UiTheme, VideoTakeMode } from './state.js'
 import { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from './state.js'
 import {
+  DEFAULT_NDI_SETTINGS,
   DEFAULT_OMT_SETTINGS,
+  NDI_FPS,
+  NDI_OUTPUTS,
+  NDI_RESOLUTIONS,
   OMT_FPS,
   OMT_OUTPUTS,
   OMT_RESOLUTIONS,
@@ -18,6 +22,9 @@ import {
   STREAM_HEIGHTS,
   STREAM_KEYFRAME_SEC,
   STREAM_MAX_DESTINATIONS,
+  type NdiFps,
+  type NdiResolution,
+  type NdiSettings,
   type OmtFps,
   type OmtResolution,
   type OmtSettings,
@@ -83,6 +90,8 @@ interface PersistedShape {
   stream: StreamSettings
   /** Выходы OMT (omt/outputs.ts). */
   omt: OmtSettings
+  /** Выходы NDI (ndi/outputs.ts). */
+  ndi: NdiSettings
   /** MIDI-входы, которые слушает CueDeck — имена устройств («Настройки → MIDI»). */
   midiInputs: string[]
   /** Профили площадки (profiles.ts) — список, новые в конце. */
@@ -139,6 +148,7 @@ const STORE_DEFAULTS: PersistedShape = {
   remote: { ...DEFAULT_REMOTE_SETTINGS },
   stream: { ...DEFAULT_STREAM_SETTINGS },
   omt: { ...DEFAULT_OMT_SETTINGS },
+  ndi: { ...DEFAULT_NDI_SETTINGS },
   midiInputs: [],
   venueProfiles: [],
   lastLaunchAt: 0,
@@ -658,6 +668,47 @@ export function getOmtSettings(): OmtSettings {
 
 export function setOmtSettings(value: OmtSettings): void {
   store().set('omt', value)
+}
+
+/** Имя источника NDI: печатные символы, без скобок (их добавляет сама NDI: «КОМПЬЮТЕР (имя)»), ≤ 64. */
+export function cleanNdiName(v: unknown, def: string): string {
+  if (typeof v !== 'string') return def
+  const s = v.replace(/[\u0000-\u001f()]/g, '').trim().slice(0, 64)
+  return s || def
+}
+
+/** Разрешение выхода NDI: только 720 / 1080 / 2160, иначе дефолт. */
+export function cleanNdiResolution(v: unknown, def: NdiResolution): NdiResolution {
+  return NDI_RESOLUTIONS.includes(v as NdiResolution) ? (v as NdiResolution) : def
+}
+
+/** Частота кадров выхода NDI: только из списка NDI_FPS, иначе дефолт. */
+export function cleanNdiFps(v: unknown, def: NdiFps): NdiFps {
+  return NDI_FPS.includes(v as NdiFps) ? (v as NdiFps) : def
+}
+
+export function getNdiSettings(): NdiSettings {
+  const raw = (store().get('ndi') ?? {}) as Partial<NdiSettings>
+  const d = DEFAULT_NDI_SETTINGS
+  const out: NdiSettings = {
+    enabled: { ...d.enabled },
+    names: { ...d.names },
+    sizes: { ...d.sizes },
+    fps: { ...d.fps },
+    programAudio: raw.programAudio !== false,
+    timerMessage: raw.timerMessage !== false,
+  }
+  for (const id of NDI_OUTPUTS) {
+    out.enabled[id] = raw.enabled?.[id] === true
+    out.names[id] = cleanNdiName(raw.names?.[id], d.names[id])
+    out.sizes[id] = cleanNdiResolution(raw.sizes?.[id], d.sizes[id])
+    out.fps[id] = cleanNdiFps(raw.fps?.[id], d.fps[id])
+  }
+  return out
+}
+
+export function setNdiSettings(value: NdiSettings): void {
+  store().set('ndi', value)
 }
 
 export function setRemoteSettings(value: RemoteSettings): void {

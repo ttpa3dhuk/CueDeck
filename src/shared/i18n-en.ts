@@ -935,6 +935,14 @@ export const EN: Record<string, string> = {
   'никто не смотрит': 'no receivers',
   'в эфире': 'on air',
   'в превью': 'in preview',
+  // ── Настройки → Выходы NDI ──
+  'Выходы NDI': 'NDI outputs',
+  'Источники в сети для OBS, vMix, Wirecast и любых NDI-программ.': 'Network sources for OBS, vMix, Wirecast and any NDI program.',
+  'NDI в CueDeck есть только на macOS и Windows': 'NDI in CueDeck is available on macOS and Windows only',
+  'NDIlib_initialize не сработала': 'NDIlib_initialize failed',
+  'не удалось создать источник NDI': 'could not create the NDI source',
+  '⚠ NDI недоступен на этом компьютере: {error}': '⚠ NDI is not available on this computer: {error}',
+  'Выходы NDI выключены. Нажми, чтобы настроить.': 'NDI outputs are off. Click to configure.',
 }
 
 /**

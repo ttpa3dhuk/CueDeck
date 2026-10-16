@@ -75,6 +75,10 @@
         {
           "from": "vendor/omt/mac",
           "to": "omt"
+        },
+        {
+          "from": "vendor/ndi/mac",
+          "to": "ndi"
         }
       ],
       "hardenedRuntime": false,
@@ -99,6 +103,10 @@
         {
           "from": "vendor/omt/win",
           "to": "omt"
+        },
+        {
+          "from": "vendor/ndi/win",
+          "to": "ndi"
         }
       ]
     },
