@@ -16,6 +16,8 @@ import type {
   ProfileGroup,
   RemoteSettings,
   RemoteStatus,
+  NdiSettings,
+  NdiStatus,
   OmtSettings,
   OmtStatus,
   ReportResult,
@@ -54,6 +56,8 @@ export type {
   ProfileGroup,
   RemoteSettings,
   RemoteStatus,
+  NdiSettings,
+  NdiStatus,
   OmtSettings,
   OmtStatus,
   ReportResult,
@@ -246,6 +250,12 @@ export interface PresenterApi {
   omt: {
     configure(settings: Partial<OmtSettings>): Promise<{ ok: true; status: OmtStatus }>
     /** Окно звука OMT: кусок звука зала, 32 бит float по каналам подряд. */
+    sendAudio(chunk: { sampleRate: number; channels: number; frames: number; data: Float32Array }): void
+  }
+  /** Выходы NDI в сеть (main/ndi/): статус приходит и в state.ndi. */
+  ndi: {
+    configure(settings: Partial<NdiSettings>): Promise<{ ok: true; status: NdiStatus }>
+    /** Окно звука NDI: кусок звука зала, 32 бит float по каналам подряд. */
     sendAudio(chunk: { sampleRate: number; channels: number; frames: number; data: Float32Array }): void
   }
   files: {

@@ -303,6 +303,7 @@
         <div class="bottombar-left">
           <button id="stream-btn" class="stream-btn" title="Трансляция: площадки, ключи, качество"><span class="stream-btn-label">STREAM</span><span id="stream-btn-time" class="stream-btn-time"></span></button>
           <button id="omt-btn" class="omt-btn"><span class="omt-btn-label">OMT</span><span id="omt-btn-tally" class="omt-btn-tally"></span></button>
+          <button id="ndi-btn" class="omt-btn"><span class="omt-btn-label">NDI</span><span id="ndi-btn-tally" class="omt-btn-tally"></span></button>
         </div>
         <div id="project-transfer" class="project-transfer hidden" role="status" aria-live="polite">
           <span id="project-transfer-text"></span>
@@ -491,6 +492,7 @@
             <button data-section="lo">PPTX / LibreOffice</button>
             <button data-section="remote">Внешнее управление</button>
             <button data-section="omt">Выходы OMT</button>
+            <button data-section="ndi">Выходы NDI</button>
             <button data-section="midi">MIDI</button>
           </nav>
           <div class="settings-body">
@@ -796,6 +798,80 @@
                   <span class="omt-status remote-status"></span>
                 </div>
                 <p id="omt-error" class="remote-status error hidden"></p>
+              </div>
+            </section>
+            <section class="settings-section hidden" data-section="ndi">
+              <p class="audio-hint">Источники в сети для OBS, vMix, Wirecast и любых NDI-программ.</p>
+              <div id="ndi-section" class="omt-list">
+                <div class="omt-row ndi-row" data-ndi="timer">
+                  <label class="windowed-label">
+                    <input class="omt-on ndi-on" type="checkbox" />
+                    <span>Таймер <span class="windowed-hint">(прозрачный фон)</span></span>
+                  </label>
+                  <input class="omt-name ndi-name" type="text" spellcheck="false" maxlength="64" />
+                  <select class="omt-size ndi-size">
+                    <option value="720">720p</option>
+                    <option value="1080">1080p</option>
+                    <option value="2160">4K</option>
+                  </select>
+                  <select class="omt-fps ndi-fps">
+                    <option value="15">15 fps</option>
+                    <option value="25">25 fps</option>
+                    <option value="30">30 fps</option>
+                    <option value="50">50 fps</option>
+                    <option value="60">60 fps</option>
+                  </select>
+                  <span class="omt-status ndi-status remote-status"></span>
+                </div>
+                <label class="windowed-label omt-sub ndi-sub" data-sub="timer">
+                  <input id="ndi-timer-message" type="checkbox" />
+                  <span>Сообщение спикеру на таймере</span>
+                </label>
+                <div class="omt-row ndi-row" data-ndi="program">
+                  <label class="windowed-label">
+                    <input class="omt-on ndi-on" type="checkbox" />
+                    <span>Зал</span>
+                  </label>
+                  <input class="omt-name ndi-name" type="text" spellcheck="false" maxlength="64" />
+                  <select class="omt-size ndi-size">
+                    <option value="720">720p</option>
+                    <option value="1080">1080p</option>
+                    <option value="2160">4K</option>
+                  </select>
+                  <select class="omt-fps ndi-fps">
+                    <option value="15">15 fps</option>
+                    <option value="25">25 fps</option>
+                    <option value="30">30 fps</option>
+                    <option value="50">50 fps</option>
+                    <option value="60">60 fps</option>
+                  </select>
+                  <span class="omt-status ndi-status remote-status"></span>
+                </div>
+                <label class="windowed-label omt-sub ndi-sub" data-sub="program">
+                  <input id="ndi-program-audio" type="checkbox" />
+                  <span>Звук эфира</span>
+                </label>
+                <div class="omt-row ndi-row" data-ndi="prompter">
+                  <label class="windowed-label">
+                    <input class="omt-on ndi-on" type="checkbox" />
+                    <span>Суфлёр</span>
+                  </label>
+                  <input class="omt-name ndi-name" type="text" spellcheck="false" maxlength="64" />
+                  <select class="omt-size ndi-size">
+                    <option value="720">720p</option>
+                    <option value="1080">1080p</option>
+                    <option value="2160">4K</option>
+                  </select>
+                  <select class="omt-fps ndi-fps">
+                    <option value="15">15 fps</option>
+                    <option value="25">25 fps</option>
+                    <option value="30">30 fps</option>
+                    <option value="50">50 fps</option>
+                    <option value="60">60 fps</option>
+                  </select>
+                  <span class="omt-status ndi-status remote-status"></span>
+                </div>
+                <p id="ndi-error" class="remote-status error hidden"></p>
               </div>
             </section>
             <section class="settings-section hidden" data-section="midi">
