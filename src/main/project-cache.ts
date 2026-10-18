@@ -5,7 +5,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { t } from '../shared/i18n.js'
 import type { TransferFile } from './project-transfer.js'
 
-export const PPTX_MANIFEST_VERSION = 5
+export const PPTX_MANIFEST_VERSION = 7
 export const PROJECT_CACHE_FOLDER = 'pptx-cache'
 const projectRoots = new Map<string, string>()
 
@@ -51,6 +51,11 @@ async function cacheMedia(root: string, sha1: string, needsManifest: boolean): P
           /[/\\\0]/.test(media.file) || media.file === '.' || media.file === '..' ||
           !Number.isInteger(media.slide) || media.slide < 1 ||
           !media.rect || !['x', 'y', 'w', 'h'].every((key) => Number.isFinite(media.rect[key]))) return null
+      if ((media.autoPlay !== undefined && typeof media.autoPlay !== 'boolean') ||
+          (media.loop !== undefined && typeof media.loop !== 'boolean')) return null
+      if (media.crop !== undefined && (!media.crop || typeof media.crop !== 'object' ||
+          !['left', 'top', 'right', 'bottom'].every((key) => Number.isFinite(media.crop[key])) ||
+          media.crop.left + media.crop.right >= 1 || media.crop.top + media.crop.bottom >= 1)) return null
       if (!(await regularFile(join(root, `${sha1}.media`, media.file)))) return null
       files.add(media.file)
     }

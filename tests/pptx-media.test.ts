@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
@@ -11,7 +11,7 @@ vi.mock('electron', () => ({
   app: { getPath: () => TEST_USER_DATA },
 }))
 
-import { mediaDirFor, preparePptxMedia } from '../src/main/pptx-media'
+import { mediaDirFor, parseVideoPlayback, preparePptxMedia } from '../src/main/pptx-media'
 import { cachedPdfPathFor } from '../src/main/pptx-converter'
 
 // Реальная преза: слайд 1 — титул; слайд 2 — билд из 3 кликов по абзацам;
@@ -249,5 +249,87 @@ describe('preparePptxMedia: заметки докладчика (2.23)', () => {
     expect(prepared.temporary).toBe(false)
     expect(prepared.pageNotes[2]).toBe('Про билд')
     expect(existsSync(cachedPdfPathFor(sha))).toBe(true)
+  })
+})
+
+
+describe('preparePptxMedia: video geometry and source crop', () => {
+  const DIR = join(tmpdir(), 'cuedeck-video-crop-deck')
+  afterAll(async () => { await rm(DIR, { recursive: true, force: true }) })
+
+  async function cropDeck(crop: string) {
+    const pic = VIDEO_PIC.replace('</p:pic>',
+      `<p:blipFill><a:srcRect ${crop}/></p:blipFill>` +
+      '<p:spPr><a:xfrm><a:off x="-121920" y="-137160"/>' +
+      '<a:ext cx="12435840" cy="7132320"/></a:xfrm></p:spPr></p:pic>')
+    return buildDeck(DIR, { ...NOTES_DECK,
+      'ppt/slides/slide1.xml': slideXml(pic),
+      'ppt/slides/_rels/slide1.xml.rels': slideRels(1, true),
+    })
+  }
+
+  it('preserves off-slide geometry and the 6.476% bottom crop across cache reads', async () => {
+    const deck = await cropDeck('b="6476"')
+    const sha = 'sha-video-crop'
+    const prepared = await preparePptxMedia(deck, sha)
+    const media = prepared.slideMedia[0]
+    expect(media.rect).toEqual({ x: -0.01, y: -0.02, w: 1.02, h: 1.04 })
+    expect(media.crop).toEqual({ left: 0, top: 0, right: 0, bottom: 0.06476 })
+    await writeFile(cachedPdfPathFor(sha), 'cached PDF')
+    expect((await preparePptxMedia(deck, sha)).slideMedia).toEqual(prepared.slideMedia)
+  })
+
+  it('upgrades a v5 manifest without invalidating its unchanged PDF', async () => {
+    const deck = await cropDeck('l="1000" t="2000" r="3000" b="6476"')
+    const sha = 'sha-video-crop-v5'
+    const manifestPath = join(TEST_USER_DATA, 'pptx-cache', `${sha}.media.json`)
+    await mkdir(dirname(manifestPath), { recursive: true })
+    await writeFile(manifestPath, JSON.stringify({ version: 5, rebuilt: true, slideMedia: [], fonts: [], pageNotes: {} }))
+    await writeFile(cachedPdfPathFor(sha), 'unchanged PDF')
+    const prepared = await preparePptxMedia(deck, sha)
+    expect(prepared.temporary).toBe(false)
+    expect(prepared.slideMedia[0].crop).toEqual({ left: 0.01, top: 0.02, right: 0.03, bottom: 0.06476 })
+    expect(await readFile(cachedPdfPathFor(sha), 'utf8')).toBe('unchanged PDF')
+    expect(JSON.parse(await readFile(manifestPath, 'utf8')).version).toBe(7)
+  })
+
+  it('ignores a malformed or empty source rectangle instead of emitting invalid crop', async () => {
+    const deck = await cropDeck('l="NaN" b="100000"')
+    expect((await preparePptxMedia(deck, 'sha-video-crop-invalid')).slideMedia[0].crop).toBeUndefined()
+  })
+})
+
+
+describe('PPTX video playback timing', () => {
+  const command = '<p:cmd cmd="playFrom(0.0)"><p:cBhvr><p:tgtEl><p:spTgt spid="6"/></p:tgtEl></p:cBhvr></p:cmd>'
+  const effect = (nodeType = 'withEffect', delay = '0') => `<p:par><p:cTn nodeType="${nodeType}"><p:stCondLst><p:cond delay="${delay}"/></p:stCondLst><p:childTnLst>${command}</p:childTnLst></p:cTn></p:par>`
+  const group = (effects: string, entry = true) => '<p:par><p:cTn><p:stCondLst>' +
+    (entry ? '<p:cond delay="indefinite"/><p:cond evt="onBegin" delay="0"><p:tn val="2"/></p:cond>' : '<p:cond delay="indefinite"/>') +
+    `</p:stCondLst><p:childTnLst>${effects}</p:childTnLst></p:cTn></p:par>`
+  const seq = (groups: string, type = 'mainSeq') => `<p:seq><p:cTn id="2" nodeType="${type}"><p:childTnLst>${groups}</p:childTnLst></p:cTn></p:seq>`
+  const timing = (content: string) => `<p:timing><p:tnLst>${content}</p:tnLst></p:timing>`
+
+  it('recognizes an immediate withEffect entry command and matching indefinite loop', () => {
+    const media = '<p:video><p:cMediaNode><p:cTn repeatCount="indefinite"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst></p:cTn><p:tgtEl><p:spTgt spid="6"/></p:tgtEl></p:cMediaNode></p:video>'
+    expect(parseVideoPlayback(timing(seq(group(effect())) + media), '6')).toEqual({ autoPlay: true, loop: true })
+    expect(parseVideoPlayback(timing(media), '7')).toEqual({ autoPlay: false, loop: false })
+  })
+
+  it.each([
+    seq(group(effect('clickEffect'))),
+    seq(group(effect(), false)),
+    seq(group(effect(), false) + group(effect())),
+    seq(group(effect()), 'interactiveSeq'),
+    seq(group(effect('withEffect', '500'))),
+    seq(group(effect('clickEffect') + effect('afterEffect'))),
+  ])('keeps manual, later-click, interactive and delayed commands manual', (xml) => {
+    expect(parseVideoPlayback(timing(xml), '6').autoPlay).toBe(false)
+  })
+
+  it('accepts immediate direct media start but not interactive or delayed starts', () => {
+    const media = (delay: string) => `<p:video><p:cMediaNode><p:cTn><p:stCondLst><p:cond delay="${delay}"/></p:stCondLst></p:cTn><p:tgtEl><p:spTgt spid="6"/></p:tgtEl></p:cMediaNode></p:video>`
+    expect(parseVideoPlayback(timing(media('0')), '6').autoPlay).toBe(true)
+    expect(parseVideoPlayback(timing(media('100')), '6').autoPlay).toBe(false)
+    expect(parseVideoPlayback(timing(seq(media('0'), 'interactiveSeq')), '6').autoPlay).toBe(false)
   })
 })

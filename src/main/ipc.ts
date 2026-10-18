@@ -1,3 +1,4 @@
+import { initialSlideVideo } from '../shared/slide-video.js'
 import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders } from '../shared/playlist-folders.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { sanitizeTakeFadeMs, type TakeTransition } from '../shared/take-transition.js'
@@ -439,6 +440,7 @@ async function openFile(
         durationSec: 0,
         muted: store.get().video.muted,
       },
+      ...(info.kind === 'pptx' ? initialSlideVideo(info.kind, info.slideMedia, 1, store.get().video.muted) : {}),
     })
     store.patchTimer(timerPatch)
 
@@ -490,16 +492,11 @@ async function loadPreview(
   }
 }
 
-/**
- * Слайд-видео (2.10): уход со слайда/приход на слайд всегда начинает с
- * остановленного ролика на нулевой позиции. durationSec обнуляем — авторитет
- * по длительности нового ролика — loadedmetadata у оператора.
- */
-function resetProgramVideoOnSlideChange(): void {
+/** Entering a PPTX slide restarts its clip using the source playback policy. */
+function changeProgramSlide(slide: number): void {
   const s = store.get()
-  if (s.fileKind === 'pptx' && s.slideMedia.length > 0) {
-    store.patchVideo({ playing: false, anchorSec: 0, anchorAt: null, durationSec: 0 })
-  }
+  store.patch({ currentSlide: slide, ...(s.fileKind === 'pptx'
+    ? initialSlideVideo(s.fileKind, s.slideMedia, slide, s.video.muted) : {}) })
 }
 
 function resetPreviewVideoOnSlideChange(): void {
@@ -547,8 +544,7 @@ async function programNext(): Promise<void> {
   if (state.fileKind === 'live') return
 
   if (currentSlide < totalSlides) {
-    store.patch({ currentSlide: currentSlide + 1 })
-    resetProgramVideoOnSlideChange()
+    changeProgramSlide(currentSlide + 1)
     return
   }
   if (!autoAdvance || !currentPlaylistId || playlist.length === 0) return
@@ -570,8 +566,7 @@ function programPrev(): void {
     return
   }
   if (state.currentSlide > 1) {
-    store.patch({ currentSlide: state.currentSlide - 1 })
-    resetProgramVideoOnSlideChange()
+    changeProgramSlide(state.currentSlide - 1)
   }
 }
 
@@ -752,8 +747,7 @@ export function registerIpcHandlers(): void {
     if (totalSlides === 0) return
     const clamped = Math.max(1, Math.min(totalSlides, slide))
     if (clamped === currentSlide) return
-    store.patch({ currentSlide: clamped })
-    resetProgramVideoOnSlideChange()
+    changeProgramSlide(clamped)
   })
 
   ipcMain.handle('nav:next', () => programNext())
@@ -905,8 +899,12 @@ export function registerIpcHandlers(): void {
       return
     }
 
+    const takeSlide =
+      (p.kind === 'pdf' || p.kind === 'pptx') && state.slideTakeMode === 'from-start'
+        ? 1 : p.currentSlide
+    const sourceVideo = initialSlideVideo(p.kind, p.slideMedia, takeSlide, state.video.muted)
     // New program video: always autoplayed on take; mode only picks start point.
-    // Слайд-видео в PPTX на эфир не автоплеится — оператор запускает вручную.
+    // PPTX uses the playback mode authored in its media timing.
     let video: import('./state.js').VideoState
     if (p.kind === 'video') {
       const mode = state.videoTakeMode
@@ -923,7 +921,7 @@ export function registerIpcHandlers(): void {
         muted: state.video.muted,
       }
     } else {
-      video = { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: state.video.muted }
+      video = sourceVideo.video
     }
 
     // В эфире играл список — его проигрыватель останавливаем, иначе таймер фото
@@ -951,10 +949,6 @@ export function registerIpcHandlers(): void {
 
     // Слайдовые деки (Б-3): по режиму — с первого слайда (дефолт, оператор мог
     // полистать превью и забыть вернуть) или с текущего слайда превью.
-    const takeSlide =
-      (p.kind === 'pdf' || p.kind === 'pptx') && state.slideTakeMode === 'from-start'
-        ? 1
-        : p.currentSlide
 
     store.patch({
       takeTransition: transition,
@@ -969,7 +963,7 @@ export function registerIpcHandlers(): void {
       video,
       // Цикл берём у выдаваемой записи: ролик-заставка должен уйти в эфир
       // зациклённым сразу, без второго действия оператора.
-      videoLoop: Boolean(
+      videoLoop: p.kind === 'pptx' ? sourceVideo.videoLoop : Boolean(
         p.playlistId ? state.playlist.find((e) => e.id === p.playlistId)?.loop : false,
       ),
       preview: newPreview,

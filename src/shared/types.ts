@@ -110,7 +110,7 @@ export interface VideoState {
   muted: boolean
 }
 
-/** Прямоугольник видео-плейсхолдера на слайде, в долях слайда (0..1). */
+/** Прямоугольник видео-плейсхолдера в долях слайда; может выходить за его границы. */
 export interface SlideMediaRect {
   x: number
   y: number
@@ -128,6 +128,11 @@ export interface SlideMedia {
   /** Номер страницы (1-based, совпадает с currentSlide). */
   slide: number
   rect: SlideMediaRect
+  /** Обрезка исходного видеокадра, в долях его ширины/высоты (OOXML srcRect). */
+  crop?: { left: number; top: number; right: number; bottom: number }
+  /** Immediate slide-entry playback recognized from PPTX timing. */
+  autoPlay?: boolean
+  loop?: boolean
   /** Имя файла в pptx-cache/<sha1>.media/ (раздаётся через cuedeck-media://). */
   file: string
 }

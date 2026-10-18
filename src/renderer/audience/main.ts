@@ -177,7 +177,7 @@ function updateMediaOverlay(state: AppState): void {
     overlaySinkId = state.audioOutputId
     applySinkId(mediaOverlay, state.audioOutputId)
   }
-  placeSlideOverlay(mediaOverlay, canvas, m.rect)
+  placeSlideOverlay(mediaOverlay, canvas, m.rect, m.crop)
   mediaOverlay.classList.remove('hidden')
   syncVideoElement(mediaOverlay, state.video)
 }

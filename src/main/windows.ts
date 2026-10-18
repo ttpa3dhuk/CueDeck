@@ -13,6 +13,15 @@ const PRELOAD = resolve(__dirname, '../preload/index.cjs')
 
 const DEV_TILE = process.env.PRESENTER_DEV_TILE === '1'
 
+// Output surfaces on macOS stay on the desktop. Native fullscreen creates a
+// Space and can blank the operator's display when displays share Spaces.
+// simpleFullscreen also changes app-wide Dock/menu presentation options.
+const macDisplayWindows = new WeakSet<BrowserWindow>()
+
+function isOutputFullscreen(win: BrowserWindow): boolean {
+  return macDisplayWindows.has(win) || win.isFullScreen()
+}
+
 interface RendererTarget {
   entry: 'presenter' | 'audience' | 'stream' | 'overlay' | 'omt-audio'
   role: Role | 'stream' | 'omt-timer' | 'omt-audio'
@@ -66,6 +75,8 @@ function tilePosition(role: Role): Electron.Rectangle {
 }
 
 function createWindow(role: Role, displayId: number | undefined, fullscreen: boolean, windowed = false): BrowserWindow {
+  const fillDisplay = fullscreen && !DEV_TILE && !windowed
+  const macDisplayWindow = process.platform === 'darwin' && fillDisplay
   const bounds = DEV_TILE
     ? tilePosition(role)
     : windowed
@@ -79,7 +90,18 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
     height: bounds.height,
     ...(role === 'operator' ? { minWidth: 1000, minHeight: 600 } : {}),
     show: false,
-    fullscreen: fullscreen && !DEV_TILE && !windowed,
+    fullscreen: fillDisplay && !macDisplayWindow,
+    ...(macDisplayWindow ? {
+      frame: false,
+      roundedCorners: false,
+      fullscreenable: false,
+      resizable: false,
+      movable: false,
+      hasShadow: false,
+      // Otherwise AppKit constrains even a frameless window below the menu
+      // bar, shifting the output down and cropping its bottom edge.
+      enableLargerThanScreen: true,
+    } : {}),
     backgroundColor: role === 'audience' ? '#000000' : '#1a1a1a',
     title: WINDOW_TITLES[role],
     webPreferences: {
@@ -87,8 +109,25 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // The operator owns video:ended/loop advancement. Chromium must keep
+      // its video and clock running when minimized or covered by a DJ app;
+      // otherwise the audience repeatedly seeks around an expired clock.
+      backgroundThrottling: false,
     },
   })
+  if (macDisplayWindow) {
+    macDisplayWindows.add(win)
+    const targetDisplayId = screen.getDisplayMatching(bounds).id
+    // Native fullscreen used to follow display resolution/rotation changes.
+    // A desktop output surface must update its own bounds instead.
+    const onMetricsChanged = (_event: Electron.Event, display: Electron.Display, metrics: string[]) => {
+      if (!win.isDestroyed() && display.id === targetDisplayId && metrics.includes('bounds')) {
+        win.setBounds(display.bounds)
+      }
+    }
+    screen.on('display-metrics-changed', onMetricsChanged)
+    win.once('closed', () => screen.removeListener('display-metrics-changed', onMetricsChanged))
+  }
 
   // Меню приложения на Windows садится в каждое окно строкой File / View / Help.
   // Зал и суфлёр — выходные поверхности, там её быть не должно (на маке меню
@@ -98,11 +137,19 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
   loadRenderer(win, rendererForRole(role))
 
   win.once('ready-to-show', () => {
-    if (!DEV_TILE && fullscreen && !windowed) {
+    if (win.isDestroyed()) return
+    if (fillDisplay) {
       win.setBounds(bounds)
-      win.setFullScreen(true)
+      if (macDisplayWindow) {
+        // Cover the menu bar and Dock only on this output display. Do not
+        // change NSApp presentation options or create a fullscreen Space.
+        win.setAlwaysOnTop(true, 'screen-saver')
+      } else {
+        win.setFullScreen(true)
+      }
     }
-    win.show()
+    if (macDisplayWindow) win.showInactive()
+    else win.show()
     if (role === 'operator') win.focus()
   })
 
@@ -151,7 +198,7 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
         const displayChanged =
           screen.getDisplayMatching(existing.getBounds()).id !==
           screen.getDisplayMatching(target).id
-        const modeChanged = existing.isFullScreen() !== fullscreen
+        const modeChanged = isOutputFullscreen(existing) !== fullscreen
         if (displayChanged || modeChanged) {
           // Переезд fullscreen-окна между экранами через setBounds ненадёжен:
           // macOS Spaces возвращает окно на прежний дисплей даже после
@@ -160,7 +207,7 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
           store.unregisterWindow(role)
           existing.destroy()
           activeWindows.set(role, createWindow(role, displayMap[role], fullscreen, windowed))
-        } else if (!existing.isFullScreen()) {
+        } else if (!isOutputFullscreen(existing)) {
           existing.setBounds(target)
         }
       }

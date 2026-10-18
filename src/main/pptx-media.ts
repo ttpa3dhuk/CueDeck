@@ -39,8 +39,8 @@ const PLAYABLE_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm'])
 const STRIP_EXTS = new Set([...PLAYABLE_EXTS, 'avi', 'wmv', 'mpg', 'mpeg', 'mkv', '3gp', 'asf'])
 
 const MANIFEST_VERSION = PPTX_MANIFEST_VERSION
-/** Манифесты с этими версиями писались от той же пересборки — PDF в кэше годен. */
-const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5])
+/** Geometry/crop updates only change overlays; the stripped PDF stays compatible. */
+const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5, 6, 7])
 
 const SLIDE_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'
@@ -424,11 +424,83 @@ function parsePresentation(text: (name: string) => string | null): Presentation 
 
 // ── 2.10: видео на слайдах ───────────────────────────────────────────────────
 
+/** Recognize only immediate slide-entry playback; unknown/delayed timings stay manual. */
+export function parseVideoPlayback(slideXml: string, shapeId: string): { autoPlay: boolean; loop: boolean } {
+  const timing = slideXml.match(/<p:timing\b[^>]*>[\s\S]*?<\/p:timing>/)?.[0] ?? ''
+  const targetsShape = (xml: string): boolean => [...xml.matchAll(/<p:spTgt\b[^>]*>/g)]
+    .some((m) => attrsOf(m[0]).spid === shapeId)
+  let loop = false
+  let autoPlay = false
+  // Direct media nodes are siblings of sequences, never interactive click handlers.
+  let direct = timing
+  for (const seq of topLevelBlocks(timing, 'p:seq')) direct = direct.replace(seq, '')
+  for (const video of topLevelBlocks(direct, 'p:video')) {
+    if (!targetsShape(video)) continue
+    const node = video.match(/<p:cTn\b[^>]*>/)?.[0]
+    if (node && attrsOf(node).repeatCount === 'indefinite') loop = true
+    const conditions = video.match(/<p:stCondLst>[\s\S]*?<\/p:stCondLst>/)?.[0]
+    if (conditions) {
+      const conds = [...conditions.matchAll(/<p:cond\b[^>]*>/g)].map((m) => attrsOf(m[0]))
+      if (conds.length === 1 && conds[0].delay === '0' && !conds[0].evt) autoPlay = true
+    }
+  }
+  for (const seq of topLevelBlocks(timing, 'p:seq')) {
+    const seqNode = seq.match(/<p:cTn\b[^>]*>/)?.[0]
+    if (!seqNode || attrsOf(seqNode).nodeType !== 'mainSeq') continue
+    const mainId = attrsOf(seqNode).id
+    const lst = findBalanced(seq, 'p:childTnLst')
+    if (!lst || !mainId) continue
+    const inner = seq.slice(lst.start + '<p:childTnLst>'.length, lst.end - '</p:childTnLst>'.length)
+    const firstGroup = topLevelBlocks(inner, 'p:par')[0]
+    if (!firstGroup) continue
+    const firstChild = firstGroup.indexOf('<p:childTnLst>')
+    const trigger = firstGroup.slice(0, firstChild < 0 ? firstGroup.length : firstChild)
+    const startsAtEntry = topLevelBlocks(trigger, 'p:cond').some((cond) => {
+      const attrs = attrsOf(cond.match(/<p:cond\b[^>]*>/)![0])
+      const tn = cond.match(/<p:tn\b[^>]*>/)?.[0]
+      return attrs.evt === 'onBegin' && attrs.delay === '0' && tn && attrsOf(tn).val === mainId
+    })
+    if (!startsAtEntry) continue
+    for (const cmd of topLevelBlocks(firstGroup, 'p:cmd')) {
+      const attrs = attrsOf(cmd.match(/<p:cmd\b[^>]*>/)![0])
+      if (!/^playFrom\(0(?:\.0+)?\)$/.test(attrs.cmd ?? '') || !targetsShape(cmd)) continue
+      const cmdAt = firstGroup.indexOf(cmd)
+      let safe = true
+      let effect = false
+      // Every timing ancestor of the command must start immediately.
+      for (const mark of firstGroup.matchAll(/<p:cTn\b[^>]*>/g)) {
+        const block = findBalanced(firstGroup, 'p:cTn', mark.index)
+        if (!block || block.start !== mark.index || block.end <= cmdAt || block.start >= cmdAt) continue
+        const attrs = attrsOf(mark[0])
+        if (attrs.nodeType) {
+          if (!['withEffect', 'afterEffect'].includes(attrs.nodeType)) safe = false
+          else effect = true
+        }
+        if (block.start === firstGroup.indexOf('<p:cTn')) continue // checked entry trigger above
+        const body = firstGroup.slice(block.start, block.end)
+        const head = body.split('<p:childTnLst>')[0]
+        for (const cond of head.matchAll(/<p:cond\b[^>]*>/g)) {
+          const c = attrsOf(cond[0])
+          if (c.delay !== '0' || c.evt) safe = false
+        }
+      }
+      // An afterEffect following another effect may wait for its duration.
+      const effectMarks = [...firstGroup.slice(0, cmdAt).matchAll(/nodeType="(withEffect|afterEffect|clickEffect)"/g)]
+      if (effectMarks.some((m) => m[1] === 'afterEffect') && effectMarks.length > 1) safe = false
+      if (safe && effect) autoPlay = true
+    }
+  }
+  return { autoPlay, loop }
+}
+
 interface FoundVideo {
   /** Индекс слайда в порядке показа (0-based). */
   slideIdx: number
   mediaEntry: string // имя записи в zip: ppt/media/media1.mp4
   rect: { x: number; y: number; w: number; h: number }
+  crop?: SlideMedia['crop']
+  autoPlay: boolean
+  loop: boolean
 }
 
 function findSlideVideos(
@@ -466,14 +538,27 @@ function findSlideVideos(
         const cy = Number(ext.cy)
         if ([x, y, cx, cy].every(Number.isFinite) && cx > 0 && cy > 0) {
           rect = {
-            x: Math.max(0, Math.min(1, x / pres.slideW)),
-            y: Math.max(0, Math.min(1, y / pres.slideH)),
-            w: Math.max(0, Math.min(1, cx / pres.slideW)),
-            h: Math.max(0, Math.min(1, cy / pres.slideH)),
+            x: x / pres.slideW,
+            y: y / pres.slideH,
+            w: cx / pres.slideW,
+            h: cy / pres.slideH,
           }
         }
       }
-      found.push({ slideIdx: idx, mediaEntry, rect })
+      // Crop the source frame before fitting it into the shape.
+      // Signed percentages can add margins in DrawingML.
+      const srcRect = pic.match(/<a:srcRect\b[^>]*>/)
+      let crop: SlideMedia['crop']
+      if (srcRect) {
+        const attrs = attrsOf(srcRect[0])
+        const [left, top, right, bottom] = ['l', 't', 'r', 'b'].map((key) => Number(attrs[key] ?? 0) / 100_000)
+        if ([left, top, right, bottom].every(Number.isFinite) && left + right < 1 && top + bottom < 1) {
+          crop = { left, top, right, bottom }
+        }
+      }
+      const shape = pic.match(/<p:cNvPr\b[^>]*>/)?.[0]
+      const playback = shape ? parseVideoPlayback(slideXml, attrsOf(shape).id ?? '') : { autoPlay: false, loop: false }
+      found.push({ slideIdx: idx, mediaEntry, rect, ...(crop ? { crop } : {}), ...playback })
       break
     }
   })
@@ -733,6 +818,9 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   const slideMedia: SlideMedia[] = videos.map((v) => ({
     slide: firstPage[v.slideIdx],
     rect: v.rect,
+    autoPlay: v.autoPlay,
+    loop: v.loop,
+    ...(v.crop ? { crop: v.crop } : {}),
     file: v.mediaEntry.split('/').pop()!,
   }))
 

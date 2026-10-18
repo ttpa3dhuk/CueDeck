@@ -95,18 +95,46 @@ export function slideMediaAt(
  * слайда, канвас — референс его экранного положения. Оверлей должен быть
  * absolutely positioned в том же offset-контейнере, что и канвас.
  */
+export function slideOverlayGeometry(
+  rect: SlideMediaRect,
+  crop: SlideMedia['crop'],
+  width: number,
+  height: number,
+): { x: number; y: number; width: number; height: number; clip: number[] } {
+  const left = crop?.left ?? 0, right = crop?.right ?? 0
+  const top = crop?.top ?? 0, bottom = crop?.bottom ?? 0
+  const visibleW = 1 - left - right, visibleH = 1 - top - bottom
+  const w = rect.w * width / visibleW, h = rect.h * height / visibleH
+  const x = rect.x * width - left * w, y = rect.y * height - top * h
+  // Clip both to the PowerPoint picture frame and to the slide boundaries.
+  const x1 = Math.max(0, rect.x * width), y1 = Math.max(0, rect.y * height)
+  const x2 = Math.min(width, (rect.x + rect.w) * width)
+  const y2 = Math.min(height, (rect.y + rect.h) * height)
+  return { x, y, width: w, height: h,
+    clip: [Math.max(0, y1 - y), Math.max(0, x + w - x2),
+      Math.max(0, y + h - y2), Math.max(0, x1 - x)] }
+}
+
 export function placeSlideOverlay(
   el: HTMLElement,
   canvas: HTMLElement,
   rect: SlideMediaRect,
+  crop?: SlideMedia['crop'],
 ): void {
-  const w = canvas.clientWidth
-  const h = canvas.clientHeight
+  const w = canvas.clientWidth, h = canvas.clientHeight
   if (w <= 0 || h <= 0) return
-  el.style.left = `${canvas.offsetLeft + rect.x * w}px`
-  el.style.top = `${canvas.offsetTop + rect.y * h}px`
-  el.style.width = `${rect.w * w}px`
-  el.style.height = `${rect.h * h}px`
+  // A constrained canvas box can be wider than its object-fit:contain image.
+  // Position video over the actual PDF pixels, excluding the letterbox.
+  const backing = canvas as HTMLCanvasElement
+  const aspect = backing.width > 0 && backing.height > 0 ? backing.width / backing.height : w / h
+  const visibleW = Math.min(w, h * aspect), visibleH = visibleW / aspect
+  const g = slideOverlayGeometry(rect, crop, visibleW, visibleH)
+  el.style.left = `${canvas.offsetLeft + (w - visibleW) / 2 + g.x}px`
+  el.style.top = `${canvas.offsetTop + (h - visibleH) / 2 + g.y}px`
+  el.style.width = `${g.width}px`
+  el.style.height = `${g.height}px`
+  el.style.clipPath = `inset(${g.clip.map((n) => `${n}px`).join(' ')})`
+  el.style.objectFit = crop ? 'fill' : 'contain'
 }
 
 /** Position (seconds) the shared logical clock currently points at. */

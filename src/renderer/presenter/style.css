@@ -2548,3 +2548,83 @@ html[lang="en"] {
 .playlist-context { position: fixed; z-index: 10001; min-width: 190px; padding: 6px; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,.3); }
 .playlist-context button { display: block; width: 100%; padding: 10px 12px; border: 0; text-align: left; background: transparent; }
 .playlist-context button:hover { background: var(--border); }
+
+/* Deck controls adapt to their pane, not the whole window: PROGRAM is much
+   smaller than PREVIEW when output monitors share its column. */
+body[data-role="operator"] .current-slide,
+body[data-role="operator"] .preview-slide {
+  container-type: inline-size;
+}
+@container (max-width: 520px) {
+  .video-controls {
+    width: calc(100% - 12px);
+    max-width: calc(100% - 12px);
+    box-sizing: border-box;
+    bottom: 4px;
+    gap: 4px;
+    padding: 3px 5px;
+    border-radius: 6px;
+  }
+  .video-controls button {
+    min-width: 24px;
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    font-size: 11px;
+  }
+  .video-controls .video-scrub { min-width: 20px; width: 0; margin: 0; }
+  .video-controls .video-time { font-size: 10px; }
+  .video-controls .loop-btn svg { width: 12px; height: 12px; }
+  .deck-label { font-size: 10px; padding: 3px 6px; top: 4px; }
+  .deck-label.preview { right: 4px; }
+  .video-take-mode { font-size: 10px; padding: 2px 3px; max-width: 135px; }
+  .preview-nav { bottom: 4px; gap: 5px; padding: 3px 5px; border-radius: 6px; }
+  .preview-nav button { min-width: 24px; height: 22px; font-size: 11px; padding: 0 4px; }
+  .preview-counter { font-size: 10px; min-width: 42px; }
+  .preview-slide .video-controls.preview-controls { bottom: 36px; }
+}
+
+@media (max-width: 1200px) and (max-height: 700px) {
+  body[data-role="operator"] .grid {
+    grid-template-rows: minmax(0, 1fr) clamp(180px, var(--bottom-h, 190px), 190px);
+  }
+  body[data-role="operator"] .grid.with-monitors {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) clamp(180px, var(--bottom-h, 190px), 190px);
+  }
+  .op-bottombar { gap: 8px; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr) 84px; }
+  .op-bottombar .bottom-timer { padding: 6px 8px; gap: 4px; }
+  .op-bottombar button,
+  .op-bottombar input,
+  .op-bottombar select { font-size: 11px; padding: 2px 5px; min-height: 22px; }
+  .op-bottombar .bottom-timer-head { display: flex; flex-wrap: nowrap; gap: 5px; }
+  .op-bottombar .bottom-timer-head .bt-head-left { flex-direction: row; gap: 6px; }
+  .op-bottombar .bottom-timer-head .timer { font-size: 28px; }
+  .op-bottombar .bt-transport { gap: 3px; }
+  .op-bottombar .bt-transport button { min-width: 24px; }
+  .op-bottombar .topbar-row.timer-controls { gap: 4px 6px; }
+  .op-bottombar .timer-controls .group { gap: 3px; }
+  .op-bottombar .timer-controls .group-label,
+  .op-bottombar .timer-controls .suffix,
+  .op-bottombar label { font-size: 10px; }
+  .op-bottombar .timer-controls .group:has(#duration-input) { width: auto; }
+  .op-bottombar .timer-controls .group:has(#duration-input) .group-label { flex-basis: auto; }
+  .op-bottombar .timer-controls input[type="number"] { width: 40px; padding: 2px 3px; }
+  .op-bottombar .timer-controls .preset,
+  .op-bottombar .timer-controls .adjust { min-width: 25px; padding: 2px 4px; }
+  .op-bottombar .timer-controls input[type="checkbox"] { width: 12px; height: 12px; min-height: 0; }
+  .op-bottombar .notes,
+  .op-bottombar .speaker-msg { padding: 6px 8px; gap: 4px; }
+  .op-bottombar .notes-header { gap: 3px; font-size: 10px; }
+  .op-bottombar .notes textarea { font-size: 12px !important; padding: 5px; }
+  .op-bottombar .take-controls .take-btn { font-size: 14px; }
+  .op-bottombar .fade-duration { font-size: 9px; bottom: 3px; }
+  .op-bottombar .fade-duration input { width: 40px; }
+}
+
+@media (max-width: 1200px) and (max-height: 700px) {
+  .op-bottombar .speaker-msg .label { font-size: 10px; }
+  .op-bottombar .speaker-msg .sm-presets { gap: 2px; }
+  .op-bottombar .speaker-msg .sm-preset { min-height: 18px; height: 18px; padding: 1px 4px; font-size: 10px; line-height: 14px; }
+  .op-bottombar .speaker-msg .sm-send-row { gap: 3px; }
+  .op-bottombar .speaker-msg .sm-send-row input { min-width: 0; }
+}

@@ -11,7 +11,7 @@ vi.mock('node:child_process', () => ({ spawn: runtime.spawn }))
 vi.mock('../src/main/diag', () => ({ log: { info: vi.fn(), error: vi.fn() } }))
 vi.mock('../src/main/display-mapping', () => ({ getSofficePath: () => null, setSofficePath: vi.fn() }))
 
-import { exportProjectCache, forgetProjectCache, localPptxCacheDir, pptxReadCacheDir, useProjectCache } from '../src/main/project-cache'
+import { PPTX_MANIFEST_VERSION, exportProjectCache, forgetProjectCache, localPptxCacheDir, pptxReadCacheDir, useProjectCache } from '../src/main/project-cache'
 import { cachedPdfPathFor, convertPptxToPdf } from '../src/main/pptx-converter'
 import { mediaDirFor, preparePptxMedia } from '../src/main/pptx-media'
 import { loadProjectFile, saveProjectFile } from '../src/main/project'
@@ -19,7 +19,7 @@ import { loadProjectFile, saveProjectFile } from '../src/main/project'
 const sourceBytes = Buffer.from('original presentation bytes')
 const sha = createHash('sha1').update(sourceBytes).digest('hex')
 const manifest = {
-  version: 5, rebuilt: true, fonts: ['Example Sans'], pageNotes: { 2: 'Notes for animation step', 3: 'More notes' },
+  version: PPTX_MANIFEST_VERSION, rebuilt: true, fonts: ['Example Sans'], pageNotes: { 2: 'Notes for animation step', 3: 'More notes' },
   slideMedia: [{ slide: 4, file: 'media1.mp4', rect: { x: 0.1, y: 0.2, w: 0.6, h: 0.5 } }],
 }
 let dir: string
@@ -108,6 +108,42 @@ describe('project on a flash drive', () => {
     runtime.userData = join(dir, 'backup-user')
     expect(await useProjectCache(sha, source, join(projectDir, 'show.pdpres'))).toBe(false)
     expect(cachedPdfPathFor(sha)).toBe(join(localPptxCacheDir(), `${sha}.pdf`))
+  })
+
+  it.each([
+    null,
+    { left: 0, top: 0, right: 0 },
+    { left: '0', top: 0, right: 0, bottom: 0 },
+    { left: 0.5, top: 0, right: 0.5, bottom: 0 },
+    { left: 0, top: 0.6, right: 0, bottom: 0.5 },
+  ])('rejects invalid imported source crop: %j', async (crop) => {
+    await exportProjectCache(sha, source, projectDir)
+    await writeFile(join(projectDir, 'pptx-cache', `${sha}.media.json`), JSON.stringify({
+      ...manifest, slideMedia: [{ ...manifest.slideMedia[0], crop }],
+    }))
+    runtime.userData = join(dir, 'backup-user')
+    expect(await useProjectCache(sha, source, join(projectDir, 'show.pdpres'))).toBe(false)
+  })
+
+  it.each([{ autoPlay: 'true' }, { loop: 1 }, { autoPlay: null }])('rejects invalid playback metadata: %j', async (playback) => {
+    await exportProjectCache(sha, source, projectDir)
+    await writeFile(join(projectDir, 'pptx-cache', `${sha}.media.json`), JSON.stringify({
+      ...manifest, slideMedia: [{ ...manifest.slideMedia[0], ...playback }],
+    }))
+    runtime.userData = join(dir, 'backup-user')
+    expect(await useProjectCache(sha, source, join(projectDir, 'show.pdpres'))).toBe(false)
+  })
+
+  it('adopts valid signed geometry and source crop', async () => {
+    await exportProjectCache(sha, source, projectDir)
+    await writeFile(join(projectDir, 'pptx-cache', `${sha}.media.json`), JSON.stringify({
+      ...manifest, slideMedia: [{ ...manifest.slideMedia[0],
+        rect: { x: -0.01, y: -0.02, w: 1.02, h: 1.04 },
+        crop: { left: -0.01, top: 0, right: 0, bottom: 0.06476 },
+      }],
+    }))
+    runtime.userData = join(dir, 'backup-user')
+    expect(await useProjectCache(sha, source, join(projectDir, 'show.pdpres'))).toBe(true)
   })
 
   it('rejects a video folder symlink instead of following it outside the cache', async () => {

@@ -41,6 +41,7 @@ export class TakeFade {
         clip.muted = true
         clip.playsInline = true
         clip.loop = source.loop
+        clip.style.clipPath = getComputedStyle(source).clipPath
         if (source.srcObject) clip.srcObject = source.srcObject
         else {
           clip.src = source.src.replace('://stream/program?', '://stream/preview?')
@@ -65,7 +66,7 @@ export class TakeFade {
     this.clips = moving.map((m) => m.clip)
     this.host.append(frame)
     for (const clip of this.clips) {
-      clip.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none'
+      clip.style.cssText += ';position:absolute;width:1px;height:1px;opacity:0;pointer-events:none'
       this.host.append(clip)
     }
     if (moving.length) {
@@ -134,6 +135,19 @@ export class TakeFade {
     ctx.beginPath()
     ctx.rect(x, y, r.width, r.height)
     ctx.clip()
+    // The PPTX video can extend beyond its cropped picture frame. Preserve
+    // its CSS clipping in the outgoing snapshot as well as the live overlay.
+    const inset = getComputedStyle(source).clipPath.match(/^inset\(([^)]+)\)$/)
+    if (inset) {
+      const values = inset[1].split(/\s+/).map((v) => Number.parseFloat(v))
+      if (values.length >= 1 && values.length <= 4 && values.every(Number.isFinite)) {
+        const top = values[0], right = values[1] ?? top
+        const bottom = values[2] ?? top, left = values[3] ?? right
+        ctx.beginPath()
+        ctx.rect(x + left, y + top, Math.max(0, r.width - left - right), Math.max(0, r.height - top - bottom))
+        ctx.clip()
+      }
+    }
     try { ctx.drawImage(source, x + (r.width - dw) / 2, y + (r.height - dh) / 2, dw, dh) } catch { /* No decoded frame yet. */ }
     ctx.restore()
   }
