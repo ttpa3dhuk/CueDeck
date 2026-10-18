@@ -32,6 +32,8 @@ export default defineConfig({
           stream: resolve(__dirname, 'src/renderer/stream/index.html'),
           overlay: resolve(__dirname, 'src/renderer/overlay/index.html'),
           'omt-audio': resolve(__dirname, 'src/renderer/omt-audio/index.html'),
+          'ndi-overlay': resolve(__dirname, 'src/renderer/ndi-overlay/index.html'),
+          'ndi-audio': resolve(__dirname, 'src/renderer/ndi-audio/index.html'),
         },
       },
     },

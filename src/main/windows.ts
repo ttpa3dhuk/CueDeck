@@ -23,8 +23,8 @@ function isOutputFullscreen(win: BrowserWindow): boolean {
 }
 
 interface RendererTarget {
-  entry: 'presenter' | 'audience' | 'stream' | 'overlay' | 'omt-audio'
-  role: Role | 'stream' | 'omt-timer' | 'omt-audio'
+  entry: 'presenter' | 'audience' | 'stream' | 'overlay' | 'omt-audio' | 'ndi-overlay' | 'ndi-audio'
+  role: Role | 'stream' | 'omt-timer' | 'omt-audio' | 'ndi-timer' | 'ndi-audio'
 }
 
 function rendererForRole(role: Role): RendererTarget {
@@ -378,6 +378,52 @@ export function createOmtAudioWindow(): BrowserWindow {
     },
   })
   loadRenderer(win, { entry: 'omt-audio', role: 'omt-audio' })
+  return win
+}
+
+/**
+ * Оверлей для выхода NDI (ndi/outputs.ts): offscreen, прозрачный фон — кадры
+ * берутся событием `paint` вместе с альфой. Никогда не показывается. Получает
+ * состояние, как обычное окно (store.registerWindow).
+ */
+export function createNdiOverlayWindow(width: number, height: number): BrowserWindow {
+  const win = new BrowserWindow({
+    width,
+    height,
+    show: false,
+    frame: false,
+    transparent: true,
+    title: 'CueDeck (NDI timer)',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+      offscreen: true,
+    },
+  })
+  loadRenderer(win, { entry: 'ndi-overlay', role: 'ndi-timer' })
+  store.registerWindow('ndi-timer', win)
+  return win
+}
+
+/** Окно звука выхода NDI «Зал» (ndi/outputs.ts): снимает звук вкладки зала. Никогда не показывается. */
+export function createNdiAudioWindow(): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 320,
+    height: 180,
+    show: false,
+    title: 'CueDeck (NDI audio)',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  })
+  loadRenderer(win, { entry: 'ndi-audio', role: 'ndi-audio' })
   return win
 }
 
