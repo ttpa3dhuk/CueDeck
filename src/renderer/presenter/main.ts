@@ -1,4 +1,5 @@
 import { TakeFade } from '../shared/take-fade'
+import { safeDisplayLayout } from '../../shared/display-safety'
 import { sanitizeTakeFadeMs } from '../../shared/take-transition'
 import { nextPlaylistFolderName } from '../../shared/playlist-folders'
 import { initBus, getState, subscribe } from '../shared/bus'
@@ -3283,13 +3284,35 @@ function setupOperatorControls(): void {
   window.api.menu.onOpenSettings(() => openSettings('screens'))
   window.api.menu.onTopologyChanged(() => {
     showBanner(t('Раскладка экранов изменилась. ⚙️ Настройки → Экраны (Cmd+,) — переназначить.'))
+    if (!settingsModal.classList.contains('hidden') && !setupModal.classList.contains('hidden')) {
+      void renderScreensSection(true)
+    }
   })
 }
 
-/** Раздел «Экраны»: список дисплеев свежий на каждое открытие. */
-async function renderScreensSection(): Promise<void> {
+type ScreenSetupDraft = Pick<AppState, 'layout' | 'displayMap' | 'audienceWindowed' | 'outputMonitorsEnabled'> & { askOnStartup: boolean }
+let screenSetupRequest = 0
+
+/** Refresh device choices without losing uncommitted settings on hotplug. */
+async function renderScreensSection(preserveDraft = false): Promise<void> {
+  const request = ++screenSetupRequest
   const displays = await window.api.displays.list()
-  buildSetupModal(displays)
+  if (request !== screenSetupRequest || settingsModal.classList.contains('hidden')) return
+  let draft: ScreenSetupDraft | undefined
+  if (preserveDraft) {
+    const displayMap: DisplayMap = {}
+    setupModal.querySelectorAll<HTMLSelectElement>('select[data-role]').forEach(sel => {
+      if (sel.value !== '') displayMap[sel.dataset.role as Role] = Number(sel.value)
+    })
+    draft = {
+      layout: setupModal.querySelector<HTMLInputElement>('input[name="layout"]:checked')!.value as Layout,
+      displayMap,
+      audienceWindowed: $<HTMLInputElement>('audience-windowed-toggle').checked,
+      outputMonitorsEnabled: $<HTMLInputElement>('output-monitors-toggle').checked,
+      askOnStartup: $<HTMLInputElement>('ask-layout-toggle').checked,
+    }
+  }
+  buildSetupModal(displays, draft)
 }
 
 async function listAudioOutputs(): Promise<MediaDeviceInfo[]> {
@@ -3794,17 +3817,21 @@ async function renderAudioSection(): Promise<void> {
   }
 }
 
-function buildSetupModal(displays: DisplayInfo[]): void {
-  const state = getState()
+function buildSetupModal(displays: DisplayInfo[], draft?: ScreenSetupDraft): void {
+  const state = draft ?? getState()
   const layoutInputs = setupModal.querySelectorAll<HTMLInputElement>('input[name="layout"]')
   const windowedToggle = $<HTMLInputElement>('audience-windowed-toggle')
   windowedToggle.checked = state.audienceWindowed
   const monitorsToggle = $<HTMLInputElement>('output-monitors-toggle')
   monitorsToggle.checked = state.outputMonitorsEnabled
   const askLayoutToggle = $<HTMLInputElement>('ask-layout-toggle')
-  window.api.layout.getAskOnStartup().then((v) => {
-    askLayoutToggle.checked = v
-  })
+  if (draft) askLayoutToggle.checked = draft.askOnStartup
+  else {
+    const request = screenSetupRequest
+    window.api.layout.getAskOnStartup().then((v) => {
+      if (request === screenSetupRequest) askLayoutToggle.checked = v
+    })
+  }
 
   layoutInputs.forEach((input) => {
     input.checked = input.value === state.layout
@@ -3814,6 +3841,14 @@ function buildSetupModal(displays: DisplayInfo[]): void {
     }
   })
   renderRoleMapping(state.layout, displays, state.displayMap)
+  windowedToggle.onchange = () => {
+    const mapping: DisplayMap = {}
+    setupModal.querySelectorAll<HTMLSelectElement>('select[data-role]').forEach(sel => {
+      mapping[sel.dataset.role as Role] = Number(sel.value)
+    })
+    const selected = Array.from(layoutInputs).find(i => i.checked)?.value as Layout
+    renderRoleMapping(selected, displays, mapping)
+  }
   updateWindowedSection(state.layout)
   // «Отмена» и «Применить» касаются только раздела «Экраны»: раскладка
   // пересобирает окна, поэтому она не применяется на лету, как остальное.
@@ -3825,10 +3860,21 @@ function buildSetupModal(displays: DisplayInfo[]): void {
       const r = sel.dataset.role as Role
       mapping[r] = Number(sel.value)
     })
-    closeSettings()
-    await window.api.layout.setAskOnStartup(askLayoutToggle.checked)
-    await window.api.monitor.setEnabled(monitorsToggle.checked)
-    await window.api.layout.set(selectedLayout, mapping, windowedToggle.checked)
+    const askOnStartup = askLayoutToggle.checked
+    const monitorsEnabled = monitorsToggle.checked
+    const audienceWindowed = windowedToggle.checked
+    const applyButton = $<HTMLButtonElement>('setup-apply')
+    applyButton.disabled = true
+    try {
+      await window.api.layout.setAskOnStartup(askOnStartup)
+      await window.api.monitor.setEnabled(monitorsEnabled)
+      await window.api.layout.set(selectedLayout, mapping, audienceWindowed)
+      await renderScreensSection()
+    } catch (error) {
+      showBanner(t('Ошибка: {error}', { error: String(error) }), 6000)
+    } finally {
+      applyButton.disabled = false
+    }
   }
 }
 
@@ -4958,6 +5004,7 @@ function updateWindowedSection(layout: Layout): void {
 }
 
 function renderRoleMapping(layout: Layout, displays: DisplayInfo[], current: DisplayMap): void {
+  current = safeDisplayLayout(layout, current, displays, $<HTMLInputElement>('audience-windowed-toggle').checked).displayMap
   const roles: Role[] =
     layout === 'solo'
       ? ['operator']
@@ -4980,9 +5027,18 @@ function renderRoleMapping(layout: Layout, displays: DisplayInfo[], current: Dis
     lbl.textContent = labels[r]
     const sel = document.createElement('select')
     sel.dataset.role = r
+    if (r === 'operator') sel.onchange = () => {
+      const mapping: DisplayMap = {}
+      container.querySelectorAll<HTMLSelectElement>('select[data-role]').forEach(s => {
+        mapping[s.dataset.role as Role] = Number(s.value)
+      })
+      renderRoleMapping(layout, displays, mapping)
+    }
     for (const d of displays) {
       const opt = document.createElement('option')
       opt.value = String(d.id)
+      if (r !== 'operator' && d.id === current.operator &&
+          !(r === 'audience' && $<HTMLInputElement>('audience-windowed-toggle').checked)) opt.disabled = true
       opt.textContent = `${d.label} — ${d.bounds.width}×${d.bounds.height}`
       if (current[r] === d.id) opt.selected = true
       sel.appendChild(opt)

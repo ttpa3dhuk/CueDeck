@@ -373,6 +373,7 @@ export const EN: Record<string, string> = {
   'Сохранить как…': 'Save as…',
   'Открыть проект…': 'Open project…',
   'Прочее': 'Other',
+  'Вернуться к оператору (закрыть окна зала и суфлёра)': 'Return to operator (close audience and prompter windows)',
   'Эта справка': 'This help',
   '⚑ Отметить момент в журнале («здесь что-то не то») — после шоу Help → Сообщить о проблеме': '⚑ Mark the moment in the log (“something’s off here”) — after the show, Help → Report a problem',
   'Клавиши B и T работают на любой раскладке (рус / eng).': 'B and T work in any keyboard layout.',

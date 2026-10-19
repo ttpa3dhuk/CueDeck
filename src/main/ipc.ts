@@ -1334,7 +1334,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('layout:set', (_e, payload: { layout: Layout; displayMap: DisplayMap; audienceWindowed?: boolean }) => {
     const windowed = Boolean(payload.audienceWindowed)
     applyLayout(payload.layout, payload.displayMap, windowed)
-    saveMapping(payload.layout, payload.displayMap)
+    saveMapping(store.get().layout, store.get().displayMap)
     setAudienceWindowed(windowed)
   })
 

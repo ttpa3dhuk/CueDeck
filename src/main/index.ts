@@ -328,7 +328,7 @@ async function bootLayout(): Promise<void> {
   const displayMap =
     saved && saved.layout === layout ? saved.displayMap : autoAssignDisplays(layout, displayInfo)
   applyLayout(layout, displayMap, audienceWindowed)
-  saveMapping(layout, displayMap)
+  saveMapping(store.get().layout, store.get().displayMap)
 }
 
 function watchDisplayChanges(): void {
@@ -337,6 +337,25 @@ function watchDisplayChanges(): void {
   screen.on('display-removed', onChange)
   screen.on('display-metrics-changed', onChange)
 }
+
+// Keep the escape route in main, on every window, including fullscreen outputs.
+// Use the physical key so the shortcut also works with a Cyrillic keyboard layout.
+app.on('browser-window-created', (_event, window) => {
+  window.webContents.on('before-input-event', (event, input) => {
+    const modifier = process.platform === 'darwin' ? input.meta : input.control
+    if (input.type !== 'keyDown' || input.code !== 'KeyD' || !modifier || !input.shift || input.alt || input.isAutoRepeat) return
+    event.preventDefault()
+    const operator = getOperatorWindow()
+    if (!operator || operator.isDestroyed()) return
+    const displayId = screen.getDisplayMatching(operator.getBounds()).id
+    applyLayout('solo', { operator: displayId })
+    saveMapping(store.get().layout, store.get().displayMap)
+    const win = getOperatorWindow()
+    win?.restore()
+    win?.show()
+    win?.focus()
+  })
+})
 
 app.whenReady().then(async () => {
   // Relocate before opening windows or starting outputs. On a fresh install,

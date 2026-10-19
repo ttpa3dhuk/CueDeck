@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import type { DisplayMap, Layout, Role } from './layout.js'
 import { rolesForLayout } from './layout.js'
+import { safeDisplayLayout } from '../shared/display-safety.js'
 import { store } from './state.js'
 import { WINDOW_TITLES } from '../shared/window-titles.js'
 import { getLang } from '../shared/i18n.js'
@@ -174,6 +175,11 @@ let activeWindows = new Map<Role, BrowserWindow>()
 
 
 export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWindowed = false): Map<Role, BrowserWindow> {
+  if (!DEV_TILE) {
+    const safe = safeDisplayLayout(layout, displayMap, screen.getAllDisplays(), audienceWindowed)
+    layout = safe.layout
+    displayMap = safe.displayMap
+  }
   const desiredRoles = new Set<Role>(rolesForLayout(layout))
 
   // Close windows whose role is no longer active
