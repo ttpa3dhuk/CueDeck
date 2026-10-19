@@ -1920,6 +1920,18 @@ function applyProjectTransfer(state: AppState): void {
 }
 
 function applyState(state: AppState): void {
+  if (isOperator) {
+    const list = state.listIndex >= 0 ? state.playlist.find(e => e.id === state.currentPlaylistId) : undefined
+    const total = list?.items?.length ?? state.totalSlides
+    const current = list ? state.listPos + 1 : state.currentSlide
+    const canNavigate = Boolean(state.pdfPath) && (Boolean(list) || state.fileKind === 'pdf' || state.fileKind === 'pptx')
+    $('program-nav-current').textContent = canNavigate && total > 0 ? `${current} / ${total}` : '— / —'
+    $('program-nav-remaining').textContent = canNavigate && total > 0 ? t('(осталось {n})', { n: Math.max(0, total - current) }) : ''
+    $<HTMLButtonElement>('program-prev').disabled = !canNavigate || (!list && current <= 1)
+    // Keep Next available on a last slide: it may start an embedded clip or
+    // advance the playlist when the operator has enabled auto-advance.
+    $<HTMLButtonElement>('program-next').disabled = !canNavigate
+  }
   if (isOperator) applyProjectTransfer(state)
   // Номера на карточках плейлиста — только при внешнем управлении: по ним
   // настраивают кнопки «запись N» на Stream Deck (CSS-счётчик, style.css).
@@ -2449,9 +2461,9 @@ function dispatchHotkey(action: string): void {
   switch (action) {
     case 'take':
     case 'takeAlt': window.api.preview.take(); break
-    // Видео-логика (свежий ролик → play, играющий → ±5с) — в main (programNext/Prev)
-    case 'programNext': window.api.nav.next(); break
-    case 'programPrev': window.api.nav.prev(); break
+    // Keyboard/clicker navigation cannot start or seek standalone videos.
+    case 'programNext': window.api.clicker.next(); break
+    case 'programPrev': window.api.clicker.prev(); break
     case 'previewNext': window.api.preview.next(); break
     case 'previewPrev': window.api.preview.prev(); break
     case 'videoPlay': hasVideo ? window.api.video.toggle() : window.api.nav.next(); break
@@ -2554,11 +2566,11 @@ function setupKeyboard(): void {
     switch (e.code) {
       case 'PageDown':
         e.preventDefault()
-        window.api.nav.next()
+        window.api.clicker.next()
         break
       case 'PageUp':
         e.preventDefault()
-        window.api.nav.prev()
+        window.api.clicker.prev()
         break
       case 'Period':
         e.preventDefault()
@@ -2662,6 +2674,8 @@ function setupOperatorControls(): void {
   timerReset.addEventListener('click', () => window.api.timer.reset())
   blackoutToggle.addEventListener('click', () => window.api.blackout.toggle())
   $('settings-btn').addEventListener('click', () => openSettings())
+  $('program-prev').addEventListener('click', () => window.api.nav.prev())
+  $('program-next').addEventListener('click', () => window.api.nav.next())
 
   // Duration inputs (мин + сек) — debounced, коммитим сумму обоих полей
   let durDebounce: number | null = null

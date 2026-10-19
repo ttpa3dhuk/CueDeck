@@ -1,4 +1,5 @@
 import { initialSlideVideo } from '../shared/slide-video.js'
+import { createClickerNavigation } from './clicker-navigation.js'
 import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders } from '../shared/playlist-folders.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { sanitizeTakeFadeMs, type TakeTransition } from '../shared/take-transition.js'
@@ -582,7 +583,7 @@ function programSeekBy(deltaSec: number): void {
  * Global clicker via globalShortcut: the speaker keeps flipping the program
  * deck while the operator works in another app (browser, Finder — e.g.
  * downloading the next presentation mid-show). Mirrors the renderer's clicker
- * behaviour: video seeks ±5s, everything else changes slides. Blank (.) and
+ * behaviour: standalone videos ignore navigation, presentations advance. Blank (.) and
  * Take stay window-local on purpose — grabbing "." system-wide would eat the
  * dot everywhere the operator types.
  *
@@ -593,6 +594,8 @@ function programSeekBy(deltaSec: number): void {
  * Returns what actually got enabled: registration fails if another app holds
  * a key; a failed pair is fully released so we never end up half-on.
  */
+const clickerNavigation = createClickerNavigation(() => store.get().fileKind, programNext, programPrev)
+
 export function applyClickerShortcuts(
   global: boolean,
   arrows: boolean,
@@ -600,10 +603,8 @@ export function applyClickerShortcuts(
   for (const key of ['PageDown', 'PageUp', 'Right', 'Left']) globalShortcut.unregister(key)
   if (!global) return { global: false, arrows: false }
 
-  // Видео-логику (свежий ролик → play, играющий → ±5с) решает сам
-  // programNext/programPrev — единая точка для кликера, клавиш и кнопок.
-  const forward = (): void => void programNext()
-  const back = (): void => programPrev()
+  const forward = (): void => void clickerNavigation.next()
+  const back = (): void => void clickerNavigation.prev()
 
   const okPages = globalShortcut.register('PageDown', forward) && globalShortcut.register('PageUp', back)
   if (!okPages) {
@@ -753,6 +754,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('nav:next', () => programNext())
 
   ipcMain.handle('nav:prev', () => programPrev())
+  ipcMain.handle('clicker:next', () => clickerNavigation.next())
+  ipcMain.handle('clicker:prev', () => clickerNavigation.prev())
 
   ipcMain.handle('clicker:set-global', (_e, value: boolean) => {
     const wantArrows = getClickerGlobalArrows()

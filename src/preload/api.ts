@@ -94,6 +94,8 @@ export interface PresenterApi {
     prev(): Promise<void>
   }
   clicker: {
+    next(): Promise<void>
+    prev(): Promise<void>
     /** Global PgUp/PgDn clicker. Resolves to what actually got enabled (registration can fail). */
     setGlobal(value: boolean): Promise<boolean>
     /** Also grab ←/→ globally (Spotlight-style clickers). Resolves to the applied value. */

@@ -304,6 +304,11 @@
           <button id="stream-btn" class="stream-btn" title="Трансляция: площадки, ключи, качество"><span class="stream-btn-label">STREAM</span><span id="stream-btn-time" class="stream-btn-time"></span></button>
           <button id="omt-btn" class="omt-btn"><span class="omt-btn-label">OMT</span><span id="omt-btn-tally" class="omt-btn-tally"></span></button>
         </div>
+        <div id="program-nav" class="program-nav" role="group" aria-label="Листание эфира">
+          <button id="program-prev" title="Эфир: предыдущий слайд" disabled>◀</button>
+          <div class="program-nav-count"><span id="program-nav-current">— / —</span><small id="program-nav-remaining"></small></div>
+          <button id="program-next" title="Эфир: следующий слайд" disabled>▶</button>
+        </div>
         <div id="project-transfer" class="project-transfer hidden" role="status" aria-live="polite">
           <span id="project-transfer-text"></span>
           <progress id="project-transfer-progress" max="1"></progress>
@@ -578,6 +583,8 @@
                 <div id="prompter-msg" class="prompter-msg">Сообщение<span class="pt-handle" title="Потяни — размер"></span></div>
                 <div id="prompter-timer" class="prompter-timer">00:00<span class="pt-handle" title="Потяни — размер"></span></div>
               </div>
+              <fieldset class="prompter-settings-group">
+                <legend>Таймер суфлёра</legend>
               <div class="remote-row">
                 <span class="live-field-label">Положение</span>
                 <div class="group position-group">
@@ -609,12 +616,6 @@
                 <label class="windowed-label"><input id="timer-warn-colors" type="checkbox" /> <span>Жёлтый и красный в конце отсчёта <span class="windowed-hint">(поверх своего цвета)</span></span></label>
               </div>
               <div class="remote-row">
-                <span class="live-field-label">Сообщение спикеру</span>
-                <button id="prompter-msg-reset" title="Вернуть сверху по центру, обычный размер">Сверху по центру</button>
-                <span class="live-field-label">Колонки</span>
-                <button id="prompter-layout-reset" title="Слайд / «Дальше» / «Заметки» — как по умолчанию">По умолчанию</button>
-              </div>
-              <div class="remote-row">
                 <span class="live-field-label">Размер</span>
                 <div class="group">
                   <button id="timer-scale-down" title="Меньше">A−</button>
@@ -622,8 +623,24 @@
                   <button id="timer-scale-up" title="Больше">A+</button>
                 </div>
               </div>
+              </fieldset>
+              <div class="prompter-settings-footer">
+              <fieldset class="prompter-settings-group">
+                <legend>Сообщение спикеру</legend>
+                <div class="remote-row">
+                  <button id="prompter-msg-reset" title="Вернуть сверху по центру, обычный размер">Сверху по центру</button>
+                </div>
+              </fieldset>
+              <fieldset class="prompter-settings-group">
+                <legend>Колонки</legend>
+                <div class="remote-row">
+                  <button id="prompter-layout-reset" title="Слайд / «Дальше» / «Заметки» — как по умолчанию">По умолчанию</button>
+                </div>
+              </fieldset>
+              </div>
             </section>
             <section class="settings-section hidden" data-section="clicker">
+              <p class="audio-hint">Кнопки листания не запускают и не перематывают отдельные ролики. Видео внутри презентации запускается по настройке слайда; следующее нажатие позволяет идти дальше.</p>
               <p class="audio-hint">Кликер спикера (Logitech R400, Spotlight, DSan MicroCue…) шлёт PgUp/PgDn или стрелки. Пока CueDeck в фокусе, он работает всегда. Галки ниже — чтобы кликер листал эфир, даже когда оператор сидит в браузере или Finder.</p>
               <div class="live-field">
                 <label class="windowed-label" title="PgUp/PgDn листают эфир, даже когда CueDeck не в фокусе (оператор качает файлы в браузере — спикер продолжает кликать). Пока включено, PgUp/PgDn забраны у других приложений. Blank (точка) и Take остаются локальными.">

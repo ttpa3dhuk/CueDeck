@@ -1572,8 +1572,7 @@ body[data-role="operator"] #current-slide {
 
 .bottombar {
   display: grid;
-  /* Статус сборки занимает центр; кнопки остаются по краям. */
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   padding: 0 16px;
   background: var(--panel);
@@ -1586,13 +1585,17 @@ body[data-role="operator"] #current-slide {
   gap: 6px;
 }
 .bottombar-right {
-  grid-column: 3;
+  grid-column: 4;
   justify-self: end;
   display: flex;
   gap: 6px;
 }
 .bottombar button { white-space: nowrap; }
-.project-transfer { grid-column: 2; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; }
+.program-nav { grid-column: 2; justify-self: center; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.program-nav button { width: 48px; height: 38px; padding: 0; font-size: 23px; }
+.program-nav-count { min-width: 105px; display: flex; flex-direction: column; text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.program-nav-count small { font-size: 11px; color: var(--muted); }
+.project-transfer { grid-column: 3; max-width: 260px; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; }
 .project-transfer span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-transfer progress { width: 90px; flex: 0 0 90px; height: 6px; accent-color: var(--accent); }
 .project-transfer[data-phase="error"] { color: var(--danger); }
@@ -1832,7 +1835,15 @@ body[data-role="operator"] #current-slide {
 .settings-modal-content { width: 760px; gap: 12px; }
 /* Высота постоянная: окно не прыгает при смене раздела, длинные разделы скроллятся. */
 .settings-layout { display: flex; gap: 16px; height: min(520px, 70vh); }
-.settings-body { overflow-y: auto; }
+.settings-body {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  padding-right: 6px;
+}
+.settings-body::-webkit-scrollbar { width: 6px; }
+.settings-body::-webkit-scrollbar-track { background: transparent; }
+.settings-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .settings-nav { display: flex; flex-direction: column; gap: 4px; width: 180px; flex-shrink: 0; }
 .settings-nav button { text-align: left; }
 .settings-nav button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -1840,9 +1851,26 @@ body[data-role="operator"] #current-slide {
 .settings-section { display: flex; flex-direction: column; gap: 8px; }
 .midi-list { display: flex; flex-direction: column; gap: 4px; }
 /* «Настройки → Суфлёр»: макет экрана суфлёра с перетаскиваемым таймером. */
+.prompter-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.prompter-settings-group legend { padding: 0 6px; font-weight: 600; }
+.prompter-settings-group .remote-row { margin: 0; }
+.settings-section[data-section="prompter"] > .audio-hint { margin: 0; }
+.prompter-settings-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .prompter-stage {
   position: relative;
-  height: 260px;
+  height: clamp(140px, 24vh, 220px);
+  width: auto;
+  align-self: center;
+  flex-shrink: 0;
   max-width: 100%;
   aspect-ratio: var(--ps-ratio, 16 / 9);
   background: #000;
