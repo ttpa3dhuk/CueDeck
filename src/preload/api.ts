@@ -19,6 +19,7 @@ import type {
   OmtSettings,
   OmtStatus,
   ReportResult,
+  ReportMaterials,
   SlideTakeMode,
   StreamEncoderConfig,
   StreamEncoderStatus,
@@ -188,7 +189,7 @@ export interface PresenterApi {
     list(): Promise<DisplayInfo[]>
   }
   layout: {
-    set(layout: Layout, displayMap: DisplayMap, audienceWindowed?: boolean): Promise<void>
+    set(layout: Layout, displayMap: DisplayMap, audienceWindowed?: boolean, audienceAlwaysOnTop?: boolean): Promise<void>
     getAskOnStartup(): Promise<boolean>
     setAskOnStartup(value: boolean): Promise<void>
   }
@@ -410,6 +411,10 @@ export interface PresenterApi {
     level(l: [number, number]): void
   }
   /** Журнал и отчёт о проблеме (main/diag.ts). */
+  materials: {
+    configure(settings: import('../shared/material-settings.js').MaterialSettings): Promise<void>
+    setDurations(ids: string[], durationMs: number): Promise<void>
+  }
   diag: {
     /** Строка в общий журнал от имени этого окна. Для мест, где ошибка иначе глотается. */
     log(level: 'info' | 'warn' | 'error', message: string, data?: unknown): void
@@ -417,7 +422,8 @@ export interface PresenterApi {
     mark(): Promise<number | null>
     info(): Promise<DiagInfo>
     /** Собрать zip на рабочий стол. Комментарий оператора уходит в report.txt. */
-    buildReport(comment: string): Promise<ReportResult>
+    chooseMaterials(): Promise<{ selection: ReportMaterials | null; error?: string }>
+    buildReport(comment: string, materialToken?: string): Promise<ReportResult>
     showInFolder(path: string): Promise<void>
     openLogFolder(): Promise<void>
     /** Только у оператора: маркер поставлен (хоткеем или из меню). */

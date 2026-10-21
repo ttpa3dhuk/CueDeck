@@ -1684,7 +1684,10 @@ body[data-role="operator"] #current-slide {
 .modal-actions-spacer { flex: 1; }
 
 /* Отчёт о проблеме (Help → Сообщить о проблеме…) */
-.report-modal-content { width: 560px; gap: 12px; }
+.report-modal-content { width: 560px; gap: 12px; max-height: 90vh; overflow-y: auto; box-sizing: border-box; }
+.report-modal-content > * { flex-shrink: 0; }
+.report-modal-content .modal-actions { flex-wrap: wrap; }
+#report-materials-list:empty, #report-materials-size:empty { display: none; }
 .report-label { color: var(--muted); font-size: 13px; }
 #report-comment {
   background: var(--panel-2);
@@ -1865,6 +1868,7 @@ body[data-role="operator"] #current-slide {
 .prompter-settings-group .remote-row { margin: 0; }
 .settings-section[data-section="prompter"] > .audio-hint { margin: 0; }
 .prompter-settings-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.prompter-settings-footer button { max-width: 100%; white-space: normal; }
 .prompter-stage {
   position: relative;
   height: clamp(140px, 24vh, 220px);

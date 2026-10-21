@@ -3,7 +3,7 @@ import { LivePool, LiveView } from '../src/renderer/shared/live-stream'
 import { makeLiveUri } from '../src/shared/live'
 const mocks = vi.hoisted(() => ({ instances: [] as any[] }))
 vi.mock('../src/renderer/shared/omt-stream', () => ({ OmtStream: class {
-  stream = { getTracks: () => [{ stop: vi.fn() }] }
+  stream = { getAudioTracks: () => [], getTracks: () => [{ stop: vi.fn() }] }
   dispose = vi.fn()
   setAudioEnabled = vi.fn()
   constructor(_address: string, _audio: boolean, public notify: (s: any) => void) { mocks.instances.push(this) }

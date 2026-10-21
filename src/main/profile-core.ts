@@ -59,7 +59,7 @@ export const PROFILE_GROUPS: readonly ProfileGroup[] = [
 
 /** Какие поля настроек входят в группу. Каждое поле — ровно в одной группе (тест это держит). */
 export const GROUP_KEYS: Record<ProfileGroup, readonly (keyof VenueProfileSettings)[]> = {
-  screens: ['layout', 'audienceWindowed', 'outputMonitorsEnabled'],
+  screens: ['layout', 'audienceWindowed', 'audienceAlwaysOnTop', 'outputMonitorsEnabled'],
   audio: ['audioMain', 'audioPreview'],
   prompter: ['timerPosition', 'timerScale', 'timerFree', 'timerColor', 'timerWarnColors', 'speakerToolbarScale', 'speakerLayout', 'speakerMsgLayout'],
   timer: ['timerMode', 'timerTickEnabled', 'timerGongEnabled', 'timerLoop'],
@@ -141,6 +141,7 @@ export function sanitizeSettings(raw: unknown): VenueProfileSettings {
   return {
     layout: oneOf(s.layout, LAYOUTS, 'operator-speaker-audience'),
     audienceWindowed: bool(s.audienceWindowed, false),
+    audienceAlwaysOnTop: bool(s.audienceAlwaysOnTop, true),
     outputMonitorsEnabled: bool(s.outputMonitorsEnabled, true),
     audioMain: audio(s.audioMain),
     audioPreview: audio(s.audioPreview),

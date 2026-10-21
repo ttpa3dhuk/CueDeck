@@ -21,7 +21,7 @@ import { showNagDialog } from './nag-dialog.js'
 import { attachOperatorCloseGuard, requestQuit } from './quit-guard.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
 import { applyLayout, getOperatorWindow, reloadAllWindowsForLang, setOperatorWindowHook } from './windows.js'
-import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf, applyClickerShortcuts } from './ipc.js'
+import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf, applyClickerShortcuts, suspendClickerShortcuts } from './ipc.js'
 import { mediaDirFor } from './pptx-media.js'
 import {
   getSavedMapping,
@@ -29,6 +29,7 @@ import {
   getAskLayoutOnStartup,
   setAskLayoutOnStartup,
   getLastDurationMs,
+  getMaterialSettings,
   getTimerMode,
   getTimerPosition,
   getTimerScale,
@@ -45,6 +46,7 @@ import {
   getPlaylistCompact,
   getAutoAdvance,
   getAudienceWindowed,
+  getAudienceAlwaysOnTop,
   getAudioOutputId,
   getPreviewAudioOutputId,
   getTimerTickEnabled,
@@ -307,6 +309,7 @@ async function bootLayout(): Promise<void> {
   const primaryId = screen.getPrimaryDisplay().id
   const displayInfo = displays.map((d) => ({ id: d.id, internal: d.id === primaryId }))
   const audienceWindowed = getAudienceWindowed()
+  const audienceAlwaysOnTop = getAudienceAlwaysOnTop()
 
   const saved = getSavedMapping()
   let layout = saved?.layout ?? defaultLayoutForDisplayCount(displays.length)
@@ -327,7 +330,7 @@ async function bootLayout(): Promise<void> {
   // one saved for this display topology; otherwise auto-assign.
   const displayMap =
     saved && saved.layout === layout ? saved.displayMap : autoAssignDisplays(layout, displayInfo)
-  applyLayout(layout, displayMap, audienceWindowed)
+  applyLayout(layout, displayMap, audienceWindowed, audienceAlwaysOnTop)
   saveMapping(store.get().layout, store.get().displayMap)
 }
 
@@ -348,13 +351,23 @@ app.on('browser-window-created', (_event, window) => {
     const operator = getOperatorWindow()
     if (!operator || operator.isDestroyed()) return
     const displayId = screen.getDisplayMatching(operator.getBounds()).id
-    applyLayout('solo', { operator: displayId })
+    applyLayout('solo', { operator: displayId }, false, store.get().audienceAlwaysOnTop)
     saveMapping(store.get().layout, store.get().displayMap)
     const win = getOperatorWindow()
     win?.restore()
     win?.show()
     win?.focus()
   })
+})
+
+app.on('browser-window-focus', (_event, window) => {
+  if (window === getOperatorWindow()) suspendClickerShortcuts()
+})
+
+app.on('browser-window-blur', (_event, window) => {
+  if (window !== getOperatorWindow() || window.isDestroyed() || window.isFocused()) return
+  const { clickerGlobal, clickerGlobalArrows } = store.get()
+  if (clickerGlobal) applyClickerShortcuts(clickerGlobal, clickerGlobalArrows)
 })
 
 app.whenReady().then(async () => {
@@ -444,6 +457,7 @@ app.whenReady().then(async () => {
   // Restore preferences (timer settings, UI prefs) — session content loaded on demand via "Последний"
   store.patch({
     timer: { ...store.get().timer, durationMs: getLastDurationMs() },
+    materialSettings: getMaterialSettings(),
     timerMode: getTimerMode(),
     timerPosition: getTimerPosition(),
     timerScale: getTimerScale(),
@@ -460,6 +474,7 @@ app.whenReady().then(async () => {
     playlistCompact: getPlaylistCompact(),
     autoAdvance: getAutoAdvance(),
     audienceWindowed: getAudienceWindowed(),
+    audienceAlwaysOnTop: getAudienceAlwaysOnTop(),
     audioOutputId: getAudioOutputId(),
     previewAudioOutputId: getPreviewAudioOutputId(),
     timerTickEnabled: getTimerTickEnabled(),

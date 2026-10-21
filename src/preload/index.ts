@@ -132,7 +132,7 @@ const api: PresenterApi = {
     list: () => ipcRenderer.invoke('displays:list'),
   },
   layout: {
-    set: (layout, displayMap, audienceWindowed) => ipcRenderer.invoke('layout:set', { layout, displayMap, audienceWindowed: Boolean(audienceWindowed) }),
+    set: (layout, displayMap, audienceWindowed, audienceAlwaysOnTop) => ipcRenderer.invoke('layout:set', { layout, displayMap, audienceWindowed: Boolean(audienceWindowed), audienceAlwaysOnTop }),
     getAskOnStartup: () => ipcRenderer.invoke('layout:get-ask-on-startup'),
     setAskOnStartup: (value) => ipcRenderer.invoke('layout:set-ask-on-startup', Boolean(value)),
   },
@@ -364,11 +364,16 @@ const api: PresenterApi = {
   external: {
     open: (url) => ipcRenderer.invoke('external:open', url),
   },
+  materials: {
+    configure: (settings) => ipcRenderer.invoke('materials:configure', settings),
+    setDurations: (ids, durationMs) => ipcRenderer.invoke('materials:set-durations', ids, durationMs),
+  },
   diag: {
     log: (level, message, data) => ipcRenderer.send('diag:log', ROLE, level, message, data),
     mark: () => ipcRenderer.invoke('diag:mark'),
     info: () => ipcRenderer.invoke('diag:info'),
-    buildReport: (comment) => ipcRenderer.invoke('diag:build-report', comment),
+    chooseMaterials: () => ipcRenderer.invoke('diag:choose-materials'),
+    buildReport: (comment, token) => ipcRenderer.invoke('diag:build-report', comment, token),
     showInFolder: (path) => ipcRenderer.invoke('diag:show-in-folder', path),
     openLogFolder: () => ipcRenderer.invoke('diag:open-log-folder'),
     onMarked: (cb) => {

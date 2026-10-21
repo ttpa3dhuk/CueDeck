@@ -1,6 +1,7 @@
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { DEFAULT_TAKE_FADE_MS, sanitizeTakeFadeMs } from '../shared/take-transition.js'
 import Store from 'electron-store'
+import { DEFAULT_MATERIAL_SETTINGS, sanitizeMaterialSettings, type MaterialSettings } from '../shared/material-settings.js'
 import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
 import { sanitizePlaylistFolders } from '../shared/playlist-folders.js'
@@ -33,6 +34,7 @@ interface SavedMapping {
 }
 
 interface PersistedShape {
+  materialSettings: MaterialSettings
   mappings: Record<string, SavedMapping>
   lastPdfPath: string | null
   lastDurationMs: number
@@ -57,6 +59,7 @@ interface PersistedShape {
   keyVisualPath: string | null
   projectPath: string | null
   audienceWindowed: boolean
+  audienceAlwaysOnTop: boolean
   audioOutputId: string | null
   previewAudioOutputId: string | null
   /** Путь к LibreOffice, указанный оператором вручную (установка вне стандартных папок). */
@@ -97,6 +100,7 @@ interface PersistedShape {
 }
 
 const STORE_DEFAULTS: PersistedShape = {
+  materialSettings: { ...DEFAULT_MATERIAL_SETTINGS },
   mappings: {},
   lastPdfPath: null,
   lastDurationMs: 30 * 60 * 1000,
@@ -121,6 +125,7 @@ const STORE_DEFAULTS: PersistedShape = {
   keyVisualPath: null,
   projectPath: null,
   audienceWindowed: false,
+  audienceAlwaysOnTop: true,
   audioOutputId: null,
   previewAudioOutputId: null,
   sofficePath: null,
@@ -425,6 +430,14 @@ export function setAudienceWindowed(value: boolean): void {
   store().set('audienceWindowed', value)
 }
 
+export function getAudienceAlwaysOnTop(): boolean {
+  return store().get('audienceAlwaysOnTop') !== false
+}
+
+export function setAudienceAlwaysOnTop(value: boolean): void {
+  store().set('audienceAlwaysOnTop', value)
+}
+
 export function getAudioOutputId(): string | null {
   return store().get('audioOutputId')
 }
@@ -696,3 +709,6 @@ export function getTakeFadeMs(): number {
 export function setTakeFadeMs(value: number): void {
   store().set('takeFadeMs', sanitizeTakeFadeMs(value))
 }
+
+export function getMaterialSettings(): MaterialSettings { return sanitizeMaterialSettings(store().get('materialSettings')) }
+export function setMaterialSettings(value: MaterialSettings): void { store().set('materialSettings', sanitizeMaterialSettings(value)) }

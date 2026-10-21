@@ -1,4 +1,6 @@
-import { app, BrowserWindow, ipcMain, screen, shell, type WebContents } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, screen, shell, type WebContents } from 'electron'
+import { ReportMaterialSelection } from './report-materials.js'
+import { t } from '../shared/i18n.js'
 import log from 'electron-log/main'
 import { existsSync } from 'node:fs'
 import { readdir, readFile, writeFile } from 'node:fs/promises'
@@ -47,6 +49,8 @@ const CAPTURE_TIMEOUT_MS = 3000
 const SCREENSHOT_MAX_WIDTH = 1280
 
 const markers: DiagMarker[] = []
+const reportMaterials = new ReportMaterialSelection()
+let reportBuilding = false
 let lastMarkAt = 0
 let abnormalPrevious = false
 
@@ -295,7 +299,12 @@ export function markMoment(source: 'hotkey' | 'menu'): number | null {
   const now = Date.now()
   if (now - lastMarkAt < MARK_DEBOUNCE_MS) return null
   lastMarkAt = now
-  const marker: DiagMarker = { n: markers.length + 1, at: new Date(now).toLocaleTimeString('ru-RU') }
+  const state = store.get()
+  const marker: DiagMarker = { n: markers.length + 1, at: new Date(now).toLocaleTimeString('ru-RU'), context: {
+    atUnixMs: now, programPath: state.pdfPath, slide: state.currentSlide,
+    previewPath: state.preview.path, previewSlide: state.preview.currentSlide,
+    video: structuredClone(state.video), keyVisualPath: state.keyVisualPath,
+  } }
   markers.push(marker)
   log.warn(`⚑ МАРКЕР #${marker.n} (${source}) — оператор отметил момент`)
   getOperatorWindow()?.webContents.send('diag:marked', marker.n)
@@ -328,8 +337,18 @@ export function registerDiagIpc(): void {
   })
   ipcMain.handle('diag:mark', () => markMoment('hotkey'))
   ipcMain.handle('diag:info', () => diagInfo())
-  ipcMain.handle('diag:build-report', (_e, comment: unknown) =>
-    buildReport(typeof comment === 'string' ? comment : ''),
+  ipcMain.handle('diag:choose-materials', async (event) => {
+    if (event.sender !== getOperatorWindow()?.webContents || reportBuilding) return { selection: null }
+    reportMaterials.clear()
+    try {
+      const result = await dialog.showOpenDialog(getOperatorWindow()!, { title: t('Выбрать материалы для отчёта'), properties: ['openFile', 'multiSelections'] })
+      return { selection: result.canceled ? null : await reportMaterials.select(result.filePaths) }
+    } catch (error) { return { selection: null, error: String(error instanceof Error ? error.message : error) } }
+  })
+  ipcMain.handle('diag:build-report', (event, comment: unknown, token: unknown) =>
+    event.sender === getOperatorWindow()?.webContents
+      ? buildReport(typeof comment === 'string' ? comment : '', typeof token === 'string' ? token : undefined)
+      : { ok: false, error: 'Operator only' },
   )
   ipcMain.handle('diag:show-in-folder', (_e, path: unknown) => {
     if (typeof path === 'string' && path) shell.showItemInFolder(path)
@@ -340,9 +359,12 @@ export function registerDiagIpc(): void {
 /**
  * Собирает zip на рабочий стол: report.txt (окружение + комментарий +
  * маркеры), state.json (заметки заменены длиной), prefs.json, журналы,
- * скриншоты всех окон. Содержимого презентаций в отчёте нет — только пути.
+ * скриншоты всех окон. Исходные материалы добавляются только по токену
+ * подтверждённого выбора; скриншоты могут содержать слайды и заметки.
  */
-export async function buildReport(comment: string): Promise<ReportResult> {
+export async function buildReport(comment: string, materialToken?: string): Promise<ReportResult> {
+  if (reportBuilding) return { ok: false, error: t('Отчёт уже собирается.') }
+  reportBuilding = true
   const stamp = new Date()
   log.info(`report: сборка отчёта${comment ? ` (комментарий ${comment.length} симв.)` : ''}`)
   const files: { name: string; data: Buffer }[] = []
@@ -351,6 +373,13 @@ export async function buildReport(comment: string): Promise<ReportResult> {
   }
 
   try {
+    // Validate and read the explicitly approved selection before producing any ZIP.
+    if (materialToken) {
+      const attached = await reportMaterials.read(materialToken)
+      files.push(...attached)
+      push('materials.json', JSON.stringify(attached.map(({ name, data }) => ({ name, bytes: data.length })), null, 2))
+    }
+    push('markers.json', JSON.stringify(markers, null, 2))
     push('report.txt', reportText(comment, stamp))
     push('state.json', JSON.stringify(redactState(store.get()), null, 2))
     push('prefs.json', JSON.stringify({ ...dumpPrefs(), stream: hideStreamKeys(dumpPrefs().stream) }, null, 2))
@@ -397,10 +426,13 @@ export async function buildReport(comment: string): Promise<ReportResult> {
     const outPath = join(app.getPath('desktop'), `CueDeck-report-${fileStamp(stamp)}.zip`)
     await writeFile(outPath, buildZip(files, stamp))
     log.info(`report: сохранён ${outPath} (${files.length} файлов)`)
+    reportMaterials.clear()
     return { ok: true, path: outPath }
   } catch (err) {
     log.error('report: не собрался:', err)
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  } finally {
+    reportBuilding = false
   }
 }
 

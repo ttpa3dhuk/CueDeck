@@ -17,6 +17,7 @@ import { DEFAULT_REMOTE_SETTINGS, type VenueProfile } from '../src/shared/types'
 const full = sanitizeSettings({
   layout: 'presenter-audience',
   audienceWindowed: true,
+  audienceAlwaysOnTop: false,
   audioMain: { id: 'abc', label: 'Focusrite 2i2' },
   audioPreview: null,
   timerMode: 'stopwatch',
@@ -37,6 +38,7 @@ const full = sanitizeSettings({
 describe('sanitizeSettings', () => {
   it('сохраняет корректные значения', () => {
     expect(full.layout).toBe('presenter-audience')
+    expect(full.audienceAlwaysOnTop).toBe(false)
     expect(full.audioMain).toEqual({ id: 'abc', label: 'Focusrite 2i2' })
     expect(full.timerPosition).toBe('free')
     expect(full.speakerToolbarScale).toBe(2.5)
@@ -58,6 +60,7 @@ describe('sanitizeSettings', () => {
       timerPosition: null,
     })
     expect(s.layout).toBe('operator-speaker-audience')
+    expect(s.audienceAlwaysOnTop).toBe(true)
     expect(s.timerScale).toBe(1)
     expect(s.speakerToolbarScale).toBe(1)
     expect(s.timerColor).toBeNull()

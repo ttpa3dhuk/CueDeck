@@ -22,6 +22,7 @@
 
 import { cropWindowStream } from './window-crop'
 import { OmtStream } from './omt-stream'
+import { LiveAudio } from './live-audio'
 import { parseLiveUri, normalizeWindowCrop } from '../../shared/live'
 import { t } from '../../shared/i18n'
 
@@ -631,6 +632,8 @@ export class LiveMeter {
 
 export class LiveView {
   private shownStream: MediaStream | null = null
+  private audio = new LiveAudio()
+  private directAudio = false
 
   /** Измеренная частота кадров (не заявленная) — считаем по факту доставки. */
   private frames = 0
@@ -652,6 +655,10 @@ export class LiveView {
    */
   fps(): number {
     return this.measuredFps
+  }
+
+  configureAudio(muted: boolean, sink: string | null): void {
+    this.audio.configure(muted, sink, this.el.volume)
   }
 
   private scheduleFrameCount(): void {
@@ -680,7 +687,11 @@ export class LiveView {
 
     if (stream !== this.shownStream) {
       this.shownStream = stream
-      if (stream !== this.el.srcObject) this.el.srcObject = stream
+      this.directAudio = this.audio.attach(parseLiveUri(uri ?? '')?.kind === 'omt' ? stream : null)
+      // Generated audio already has a playout clock. Feeding it through video
+      // adds Chromium's adaptive clock and can shift pitch after an underrun.
+      const displayStream = this.directAudio && stream ? new MediaStream(stream.getVideoTracks()) : stream
+      if (displayStream !== this.el.srcObject) this.el.srcObject = displayStream
       if (this.frameCallback !== null) this.el.cancelVideoFrameCallback(this.frameCallback)
       this.frameCallback = null
       this.frames = 0

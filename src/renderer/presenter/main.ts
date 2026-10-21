@@ -472,6 +472,7 @@ function applyProgramLive(state: AppState): void {
   currentLiveStatus.textContent = statusText(s)
   if (isOperator) updateLiveInfo(currentLiveInfo, uri, programLiveView)
   currentLive.muted = shouldMute(state, role)
+  programLiveView.configureAudio(currentLive.muted, state.audioOutputId)
   // Счётчик выхода свой, не общий с файлом-видео: иначе при переключении
   // файл ⇄ живой вход setSinkId не переприменился бы и звук ушёл бы не туда.
   if (uri && state.audioOutputId !== liveSinkId) {
@@ -487,6 +488,7 @@ function applyPreviewLive(state: AppState): void {
   const uri = p.kind === 'live' ? p.path : null
   applyPreviewMonitoring(previewLive, state)
   const s = previewLiveView.show(uri)
+  previewLiveView.configureAudio(state.previewAudioOutputId === null, state.previewAudioOutputId)
   if (previewLive) applyLiveFit(previewLive, previewLiveFit, state, uri, p.playlistId)
   previewLiveStatus?.classList.toggle('hidden', s.status === 'off' || s.status === 'live')
   if (previewLiveStatus) previewLiveStatus.textContent = statusText(s)
@@ -1110,6 +1112,7 @@ function playlistContext(event: MouseEvent, entry: PlaylistEntry, node: HTMLLIEl
     button.onclick = () => { close(); run() }; menu.append(button)
   }
   if (withRename) action(t('Переименовать'), () => startRename(node, getState().playlist.find((item) => item.id === entry.id) ?? entry))
+  action(t('Задать время…'), () => editSelectedDuration(selectedEntries()))
   action(t('Группировать'), () => editPlaylistFolder(undefined, selectedEntries()))
   if (entry.kind === 'pptx') action(t('Шрифты: добавить, пересобрать'), () => {
     const badge = node.querySelector<HTMLElement>('.kind-badge')
@@ -2209,9 +2212,43 @@ function hideHelpModal(): void {
 
 // ── Отчёт о проблеме (Help → Сообщить о проблеме…, main/diag.ts) ────────────
 
+let reportMaterialToken: string | undefined
+
+async function chooseReportMaterials(): Promise<void> {
+  const choose = $<HTMLButtonElement>('report-materials-choose')
+  const save = $<HTMLButtonElement>('report-save')
+  const include = $<HTMLInputElement>('report-materials-include')
+  choose.disabled = true
+  save.disabled = true
+  include.checked = false
+  include.disabled = true
+  reportMaterialToken = undefined
+  $('report-materials-list').replaceChildren()
+  $('report-materials-size').textContent = ''
+  try {
+    const result = await window.api.diag.chooseMaterials()
+    if (result.error) { $('report-materials-size').textContent = result.error; return }
+    if (!result.selection?.files.length) return
+    reportMaterialToken = result.selection.token
+    for (const file of result.selection.files) {
+      const item = document.createElement('li')
+      item.textContent = `${file.name} (${(file.bytes / 1048576).toFixed(2)} MiB)`
+      $('report-materials-list').append(item)
+    }
+    $('report-materials-size').textContent = t('Размер материалов: {size} МиБ', { size: (result.selection.bytes / 1048576).toFixed(2) })
+    include.disabled = false
+  } catch (error) { $('report-materials-size').textContent = String(error) }
+  finally { choose.disabled = false; save.disabled = false }
+}
+
 async function openReportModal(): Promise<void> {
   const modal = document.getElementById('report-modal')
   if (!modal) return
+  reportMaterialToken = undefined
+  $<HTMLInputElement>('report-materials-include').checked = false
+  $<HTMLInputElement>('report-materials-include').disabled = true
+  $('report-materials-list').replaceChildren()
+  $('report-materials-size').textContent = ''
   const result = $('report-result')
   result.classList.add('hidden')
   result.textContent = ''
@@ -2243,7 +2280,15 @@ async function saveReport(): Promise<void> {
   result.className = 'report-result'
   result.textContent = t('Собираю отчёт…')
   result.classList.remove('hidden')
-  const res = await window.api.diag.buildReport($<HTMLTextAreaElement>('report-comment').value)
+  const choose = $<HTMLButtonElement>('report-materials-choose')
+  const include = $<HTMLInputElement>('report-materials-include')
+  choose.disabled = true
+  include.disabled = true
+  const token = include.checked ? reportMaterialToken : undefined
+  const res = await window.api.diag.buildReport($<HTMLTextAreaElement>('report-comment').value, token)
+    .catch((error) => ({ ok: false as const, error: String(error) }))
+  choose.disabled = false
+  include.disabled = !reportMaterialToken
   btn.disabled = false
   if (res.ok) {
     result.classList.add('ok')
@@ -2547,6 +2592,18 @@ function setupKeyboard(): void {
       return
     }
     if (isTypingTarget(e.target)) return
+    // Пока окно оператора в фокусе, main освобождает глобальные стрелки для
+    // полей ввода. Вне полей кликер по-прежнему листает эфир даже при своей
+    // переназначенной карте локальных горячих клавиш.
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey &&
+        getState().clickerGlobal && getState().clickerGlobalArrows) {
+      if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
+        e.preventDefault()
+        if (e.code === 'ArrowRight') window.api.clicker.next()
+        else window.api.clicker.prev()
+        return
+      }
+    }
     // Remappable actions fire on a bare keypress (no modifiers); modifier combos
     // below (Shift+T, Shift/Ctrl+digits) and clicker keys fall through to the switch.
     if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
@@ -3135,6 +3192,7 @@ function setupOperatorControls(): void {
   $('omt-btn').addEventListener('click', () => openSettings('omt'))
   $('report-close').addEventListener('click', hideReportModal)
   $('report-save').addEventListener('click', () => void saveReport())
+  $('report-materials-choose').addEventListener('click', () => void chooseReportMaterials())
   // Из текстового поля: Cmd/Ctrl+Enter — сохранить, Esc — закрыть.
   $('report-comment').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -3304,7 +3362,7 @@ function setupOperatorControls(): void {
   })
 }
 
-type ScreenSetupDraft = Pick<AppState, 'layout' | 'displayMap' | 'audienceWindowed' | 'outputMonitorsEnabled'> & { askOnStartup: boolean }
+type ScreenSetupDraft = Pick<AppState, 'layout' | 'displayMap' | 'audienceWindowed' | 'audienceAlwaysOnTop' | 'outputMonitorsEnabled'> & { askOnStartup: boolean }
 let screenSetupRequest = 0
 
 /** Refresh device choices without losing uncommitted settings on hotplug. */
@@ -3322,6 +3380,7 @@ async function renderScreensSection(preserveDraft = false): Promise<void> {
       layout: setupModal.querySelector<HTMLInputElement>('input[name="layout"]:checked')!.value as Layout,
       displayMap,
       audienceWindowed: $<HTMLInputElement>('audience-windowed-toggle').checked,
+      audienceAlwaysOnTop: $<HTMLInputElement>('audience-always-on-top-toggle').checked,
       outputMonitorsEnabled: $<HTMLInputElement>('output-monitors-toggle').checked,
       askOnStartup: $<HTMLInputElement>('ask-layout-toggle').checked,
     }
@@ -3836,6 +3895,7 @@ function buildSetupModal(displays: DisplayInfo[], draft?: ScreenSetupDraft): voi
   const layoutInputs = setupModal.querySelectorAll<HTMLInputElement>('input[name="layout"]')
   const windowedToggle = $<HTMLInputElement>('audience-windowed-toggle')
   windowedToggle.checked = state.audienceWindowed
+  $<HTMLInputElement>('audience-always-on-top-toggle').checked = state.audienceAlwaysOnTop
   const monitorsToggle = $<HTMLInputElement>('output-monitors-toggle')
   monitorsToggle.checked = state.outputMonitorsEnabled
   const askLayoutToggle = $<HTMLInputElement>('ask-layout-toggle')
@@ -3862,6 +3922,7 @@ function buildSetupModal(displays: DisplayInfo[], draft?: ScreenSetupDraft): voi
     })
     const selected = Array.from(layoutInputs).find(i => i.checked)?.value as Layout
     renderRoleMapping(selected, displays, mapping)
+    updateWindowedSection(selected)
   }
   updateWindowedSection(state.layout)
   // «Отмена» и «Применить» касаются только раздела «Экраны»: раскладка
@@ -3877,12 +3938,13 @@ function buildSetupModal(displays: DisplayInfo[], draft?: ScreenSetupDraft): voi
     const askOnStartup = askLayoutToggle.checked
     const monitorsEnabled = monitorsToggle.checked
     const audienceWindowed = windowedToggle.checked
+    const audienceAlwaysOnTop = $<HTMLInputElement>('audience-always-on-top-toggle').checked
     const applyButton = $<HTMLButtonElement>('setup-apply')
     applyButton.disabled = true
     try {
       await window.api.layout.setAskOnStartup(askOnStartup)
       await window.api.monitor.setEnabled(monitorsEnabled)
-      await window.api.layout.set(selectedLayout, mapping, audienceWindowed)
+      await window.api.layout.set(selectedLayout, mapping, audienceWindowed, audienceAlwaysOnTop)
       await renderScreensSection()
     } catch (error) {
       showBanner(t('Ошибка: {error}', { error: String(error) }), 6000)
@@ -3896,7 +3958,50 @@ function buildSetupModal(displays: DisplayInfo[], draft?: ScreenSetupDraft): voi
 // Разделы слева, содержимое справа. Всё применяется сразу, кроме раздела
 // «Экраны»: смена раскладки пересобирает окна — там своя кнопка «Применить».
 
-type SettingsSection = 'profiles' | 'screens' | 'prompter' | 'clicker' | 'audio' | 'hotkeys' | 'ui' | 'lo' | 'remote' | 'omt' | 'midi'
+function renderMaterialSettings(): void {
+  const settings = getState().materialSettings
+  const minutes = $<HTMLInputElement>('material-default-minutes')
+  const auto = $<HTMLInputElement>('material-auto-timer')
+  minutes.value = String(settings.defaultDurationMs / 60_000)
+  auto.checked = settings.autoStartTimer
+  $('material-settings-status').textContent = ''
+  $<HTMLButtonElement>('material-settings-save').onclick = async () => {
+    if (!minutes.reportValidity() || minutes.value === '') return
+    try {
+      await window.api.materials.configure({ defaultDurationMs: Number(minutes.value) * 60_000, autoStartTimer: auto.checked })
+      $('material-settings-status').textContent = t('Настройки материалов сохранены.')
+    } catch (error) { $('material-settings-status').textContent = String(error) }
+  }
+}
+
+function editSelectedDuration(ids: string[]): void {
+  if (!ids.length) return
+  const overlay = document.createElement('div'); overlay.className = 'modal'; overlay.id = 'material-duration-modal'
+  const form = document.createElement('form'); form.className = 'modal-content'
+  const heading = document.createElement('h2'); heading.textContent = t('Время для выбранных записей: {n}', { n: ids.length })
+  const label = document.createElement('label'); label.textContent = t('Длительность, мин')
+  const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.max = '999'; input.step = '1'; input.required = true
+  const entries = getState().playlist.filter(entry => ids.includes(entry.id))
+  const same = entries.every(entry => entry.durationMs === entries[0]?.durationMs)
+  input.value = same ? String((entries[0]?.durationMs ?? 0) / 60_000) : ''
+  label.append(input)
+  const hint = document.createElement('p'); hint.className = 'audio-hint'; hint.textContent = t('Изменятся только выбранные карточки. Текущий отсчёт в эфире продолжится без изменений.')
+  const actions = document.createElement('div'); actions.className = 'modal-actions'
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = t('Отмена'); cancel.onclick = () => overlay.remove()
+  const save = document.createElement('button'); save.type = 'submit'; save.className = 'primary'; save.textContent = t('Применить')
+  actions.append(cancel, save); form.append(heading, label, hint, actions); overlay.append(form); document.body.append(overlay)
+  overlay.addEventListener('keydown', event => { event.stopPropagation(); if (event.key === 'Escape') overlay.remove() })
+  form.onsubmit = async event => {
+    event.preventDefault()
+    if (!input.reportValidity()) return
+    save.disabled = true
+    try { await window.api.materials.setDurations(ids, Number(input.value) * 60_000); overlay.remove() }
+    catch (error) { hint.textContent = String(error); save.disabled = false }
+  }
+  input.focus(); input.select()
+}
+
+type SettingsSection = 'materials' | 'profiles' | 'screens' | 'prompter' | 'clicker' | 'audio' | 'hotkeys' | 'ui' | 'lo' | 'remote' | 'omt' | 'midi'
 let settingsWired = false
 
 function showSettingsSection(name: SettingsSection): void {
@@ -3915,6 +4020,7 @@ function showSettingsSection(name: SettingsSection): void {
   if (name === 'lo') void renderLoSection()
   if (name === 'midi') void renderMidiSection()
   if (name === 'profiles') void renderProfilesSection()
+  if (name === 'materials') renderMaterialSettings()
 }
 
 // ── Профили площадки (раздел «Настройки → Профили площадки») ────────────────
@@ -5015,6 +5121,8 @@ function renderRemoteStatus(r: RemoteStatus, error?: string): void {
 function updateWindowedSection(layout: Layout): void {
   const section = document.getElementById('audience-windowed-section')
   if (section) section.classList.toggle('hidden', layout === 'solo')
+  const topSection = document.getElementById('audience-always-on-top-section')
+  if (topSection) topSection.classList.toggle('hidden', layout === 'solo' || $<HTMLInputElement>('audience-windowed-toggle').checked)
 }
 
 function renderRoleMapping(layout: Layout, displays: DisplayInfo[], current: DisplayMap): void {

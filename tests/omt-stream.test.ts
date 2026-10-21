@@ -12,6 +12,7 @@ let trackStop: ReturnType<typeof vi.fn>, audioClose: ReturnType<typeof vi.fn>
 let OmtStream: typeof import('../src/renderer/shared/omt-stream')['OmtStream']
 let streams: InstanceType<typeof OmtStream>[]
 let audioTime: number
+let gain: { gain: { value: number }; connect: ReturnType<typeof vi.fn> }
 
 function video(timestamp = 10000000): OmtInputFrame {
   return { type: 'video', data: new Uint8Array(16), width: 2, height: 2, stride: 8,
@@ -22,6 +23,7 @@ beforeEach(async () => {
   vi.useFakeTimers()
   vi.setSystemTime(10000)
   receiver = null
+  gain = { gain: { value: 1 }, connect: vi.fn() }
   nodes = []; copied = []; frames = []; streams = []; audioTime = 0
   retain = vi.fn(async () => undefined); ack = vi.fn(); unsubscribe = vi.fn()
   draw = vi.fn(); requestFrame = vi.fn(); trackStop = vi.fn(); audioClose = vi.fn(async () => undefined)
@@ -38,6 +40,7 @@ beforeEach(async () => {
     state = 'running'
     resume = vi.fn(async () => undefined)
     close = audioClose
+    createGain() { return gain }
     createMediaStreamDestination() { return { stream: { getAudioTracks: () => [{ stop: trackStop }] } } }
     createBuffer(channels: number, samples: number, rate: number) {
       return { channels, samples, rate, copyToChannel: (data: Float32Array, channel: number) => copied.push({ channel, values: [...data] }) }
@@ -80,14 +83,32 @@ describe('OMT renderer playout', () => {
     const tracks = stream.stream.getTracks()
     stream.receive(video())
     stream.setAudioEnabled(false)
-    expect(stream.stream.getAudioTracks()[0].enabled).toBe(false)
+    expect(gain.gain.value).toBe(0)
     vi.advanceTimersByTime(80)
     expect(draw).toHaveBeenCalledOnce()
     expect(trackStop).not.toHaveBeenCalled()
     stream.setAudioEnabled(true)
     expect(stream.stream.getTracks()).toEqual(tracks)
-    expect(stream.stream.getAudioTracks()[0].enabled).toBe(true)
+    expect(gain.gain.value).toBe(1)
   })
+  it('keeps audio scheduling contiguous through mute without disabling its track', () => {
+    const stream = open(true)
+    const track = stream.stream.getAudioTracks()[0]
+    const chunk = { type: 'audio' as const, data: new Float32Array(1920), sampleRate: 48000,
+      channels: 2, samplesPerChannel: 960, timestamp: 10000000 }
+    stream.receive(chunk)
+    stream.setAudioEnabled(false)
+    stream.receive({ ...chunk, timestamp: 10200000 })
+    expect(gain.gain.value).toBe(0)
+    stream.setAudioEnabled(true)
+    stream.receive({ ...chunk, timestamp: 10400000 })
+    expect(nodes).toHaveLength(3)
+    nodes.forEach((node, index) => expect(node.start.mock.calls[0][0]).toBeCloseTo(0.08 + index * 0.02))
+    expect(nodes.every(node => node.stop.mock.calls.length === 0)).toBe(true)
+    expect(stream.stream.getAudioTracks()[0]).toBe(track)
+    expect(track.enabled).not.toBe(false)
+  })
+
   it('rebuffers a clock skew after a dialog instead of cancelling all video forever', () => {
     const stream = open()
     stream.receive(video())
@@ -153,6 +174,59 @@ describe('OMT renderer playout', () => {
     stream.receive({ ...chunk, timestamp: 10200000 })
     expect(nodes[1].start.mock.calls[0][0]).toBeCloseTo(0.1)
     expect(nodes[0].stop).not.toHaveBeenCalled()
+  })
+
+  it('does not cancel contiguous PCM while draining a 400ms delivery backlog', () => {
+    const stream = open(true)
+    const chunk = { type: 'audio' as const, data: new Float32Array(1920), sampleRate: 48000,
+      channels: 2, samplesPerChannel: 960, timestamp: 10000000 }
+    stream.receive(chunk)
+    vi.advanceTimersByTime(400)
+    audioTime = 0.4
+    // IPC callbacks drain together after the renderer was busy. Source PTS
+    // and samples are contiguous; the queued audio must not reset mid-burst.
+    for (let i = 1; i <= 20; i++) stream.receive({ ...chunk, timestamp: chunk.timestamp + i * 200000 })
+    expect(nodes).toHaveLength(21)
+    expect(nodes.slice(1).every(node => node.stop.mock.calls.length === 0)).toBe(true)
+    nodes.slice(1).forEach((node, index) => expect(node.start.mock.calls[0][0]).toBeCloseTo(0.48 + index * 0.02))
+  })
+
+  it('video origin changes cannot reset the next contiguous audio packet', () => {
+    const stream = open(true)
+    const chunk = { type: 'audio' as const, data: new Float32Array(1920), sampleRate: 48000,
+      channels: 2, samplesPerChannel: 960, timestamp: 10000000 }
+    stream.receive(chunk)
+    // Video origin shifts by 400ms, but audio has its own sample clock.
+    stream.receive(video(6000000))
+    stream.receive({ ...chunk, timestamp: 10200000 })
+    expect(nodes[0].stop).not.toHaveBeenCalled()
+    expect(nodes[1].start.mock.calls[0][0]).toBeCloseTo(0.1)
+  })
+
+  it('appends a just-in-time packet while the previous chunk still has samples', () => {
+    const stream = open(true)
+    const chunk = { type: 'audio' as const, data: new Float32Array(1920), sampleRate: 48000,
+      channels: 2, samplesPerChannel: 960, timestamp: 10000000 }
+    stream.receive(chunk)
+    vi.advanceTimersByTime(98)
+    audioTime = 0.098
+    stream.receive({ ...chunk, timestamp: 10200000 })
+    expect(nodes[0].stop).not.toHaveBeenCalled()
+    expect(nodes[1].start.mock.calls[0][0]).toBeCloseTo(0.1)
+  })
+
+  it('bounds latency on excessive delivery bursts and resumes after a real gap', () => {
+    const stream = open(true)
+    const chunk = { type: 'audio' as const, data: new Float32Array(1920), sampleRate: 48000,
+      channels: 2, samplesPerChannel: 960, timestamp: 10000000 }
+    for (let i = 0; i < 100; i++) stream.receive({ ...chunk, timestamp: chunk.timestamp + i * 200000 })
+    expect(nodes.length).toBeLessThanOrEqual(26)
+    expect(nodes.every(node => node.start.mock.calls[0][0] <= 0.5)).toBe(true)
+    expect(nodes.every(node => node.stop.mock.calls.length === 0)).toBe(true)
+    vi.advanceTimersByTime(2000)
+    audioTime = 2
+    stream.receive({ ...chunk, timestamp: 30000000 })
+    expect(nodes.at(-1)!.start.mock.calls[0][0]).toBeCloseTo(2.08)
   })
 
   it('plays video after its jitter buffer and acknowledges receipt immediately', () => {

@@ -49,6 +49,7 @@ function captureSettings(labels: { main: string | null; preview: string | null }
   return {
     layout: s.layout,
     audienceWindowed: s.audienceWindowed,
+    audienceAlwaysOnTop: s.audienceAlwaysOnTop,
     outputMonitorsEnabled: s.outputMonitorsEnabled,
     audioMain: out(s.audioOutputId, labels.main),
     audioPreview: out(s.previewAudioOutputId, labels.preview),
@@ -127,14 +128,14 @@ async function applySettings(p: VenueProfileSettings, groups: readonly ProfileGr
   await call('monitor:set-enabled', p.outputMonitorsEnabled)
 
   const s = store.get()
-  if (s.layout === p.layout && s.audienceWindowed === p.audienceWindowed) return false
+  if (s.layout === p.layout && s.audienceWindowed === p.audienceWindowed && s.audienceAlwaysOnTop === p.audienceAlwaysOnTop) return false
   // Карта экранов — не из профиля: id дисплеев у каждого компьютера свои.
   // Ручная расстановка для этих экранов сохраняется, если режим совпадает.
   const saved = getSavedMapping()
   const primaryId = screen.getPrimaryDisplay().id
   const displays = screen.getAllDisplays().map((d) => ({ id: d.id, internal: d.id === primaryId }))
   const displayMap = saved && saved.layout === p.layout ? saved.displayMap : autoAssignDisplays(p.layout, displays)
-  await call('layout:set', { layout: p.layout, displayMap, audienceWindowed: p.audienceWindowed })
+  await call('layout:set', { layout: p.layout, displayMap, audienceWindowed: p.audienceWindowed, audienceAlwaysOnTop: p.audienceAlwaysOnTop })
   return true
 }
 

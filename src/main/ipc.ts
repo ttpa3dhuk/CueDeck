@@ -1,5 +1,8 @@
+import { materialTakeTimer, sanitizeMaterialSettings, validMaterialDuration } from '../shared/material-settings.js'
+import { setMaterialSettings } from './display-mapping.js'
 import { initialSlideVideo } from '../shared/slide-video.js'
 import { createClickerNavigation } from './clicker-navigation.js'
+import { createClickerShortcutManager } from './clicker-shortcuts.js'
 import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders } from '../shared/playlist-folders.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { sanitizeTakeFadeMs, type TakeTransition } from '../shared/take-transition.js'
@@ -62,6 +65,7 @@ import {
   setPlaylistCompact,
   setAutoAdvance,
   setAudienceWindowed,
+  setAudienceAlwaysOnTop,
   setAudioOutputId,
   setPreviewAudioOutputId,
   setTimerTickEnabled,
@@ -400,7 +404,7 @@ function openErrorMessage(err: unknown, filePath: string): string {
 
 async function openFile(
   filePath: string,
-  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; transition?: TakeTransition } = {},
+  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; startOnTake?: boolean; transition?: TakeTransition } = {},
 ): Promise<OpenPdfResult> {
   // Любая загрузка в эфир мимо проигрывателя снимает список с эфира — иначе
   // его таймер продолжил бы подменять картинку под уже другим материалом.
@@ -443,7 +447,9 @@ async function openFile(
       },
       ...(info.kind === 'pptx' ? initialSlideVideo(info.kind, info.slideMedia, 1, store.get().video.muted) : {}),
     })
-    store.patchTimer(timerPatch)
+    store.patchTimer(typeof opts.durationMs === 'number'
+      ? materialTakeTimer(opts.durationMs, info.kind, store.get().timerMode, opts.startOnTake === true && store.get().materialSettings.autoStartTimer, Date.now())
+      : timerPatch)
 
     setLastPdfPath(filePath)
     setCurrentPlaylistId(playlistId)
@@ -552,7 +558,7 @@ async function programNext(): Promise<void> {
   const idx = playlist.findIndex((e) => e.id === currentPlaylistId)
   if (idx < 0 || idx >= playlist.length - 1) return
   const next = playlist[idx + 1]
-  await openFile(next.filePath, { playlistId: next.id, durationMs: next.durationMs })
+  await openFile(next.filePath, { playlistId: next.id, durationMs: next.durationMs, startOnTake: true })
 }
 
 function programPrev(): void {
@@ -595,38 +601,28 @@ function programSeekBy(deltaSec: number): void {
  * a key; a failed pair is fully released so we never end up half-on.
  */
 const clickerNavigation = createClickerNavigation(() => store.get().fileKind, programNext, programPrev)
-
-export function applyClickerShortcuts(
-  global: boolean,
-  arrows: boolean,
-): { global: boolean; arrows: boolean } {
-  for (const key of ['PageDown', 'PageUp', 'Right', 'Left']) globalShortcut.unregister(key)
-  if (!global) return { global: false, arrows: false }
-
-  const forward = (): void => void clickerNavigation.next()
-  const back = (): void => void clickerNavigation.prev()
-
-  const okPages = globalShortcut.register('PageDown', forward) && globalShortcut.register('PageUp', back)
-  if (!okPages) {
-    globalShortcut.unregister('PageDown')
-    globalShortcut.unregister('PageUp')
-    return { global: false, arrows: false }
-  }
-
-  let okArrows = false
-  if (arrows) {
-    okArrows = globalShortcut.register('Right', forward) && globalShortcut.register('Left', back)
-    if (!okArrows) {
-      globalShortcut.unregister('Right')
-      globalShortcut.unregister('Left')
-    }
-  }
-  return { global: true, arrows: okArrows }
-}
+const clickerShortcuts = createClickerShortcutManager(
+  globalShortcut,
+  () => Boolean(getOperatorWindow()?.isFocused()),
+  () => { log.info('clicker:global-next'); void clickerNavigation.next() },
+  () => { log.info('clicker:global-prev'); void clickerNavigation.prev() },
+)
+export const applyClickerShortcuts = clickerShortcuts.apply
+export const suspendClickerShortcuts = clickerShortcuts.suspend
 
 function persistPlaylist(): void {
   setPlaylist(store.get().playlist)
   setPlaylistFolders(store.get().playlistFolders)
+}
+
+/** Правка таймера в эфире становится длительностью именно этой записи. */
+function persistProgramDuration(durationMs: number): void {
+  const { currentPlaylistId, playlist } = store.get()
+  if (!currentPlaylistId) return
+  const entry = playlist.find((e) => e.id === currentPlaylistId)
+  if (!entry || entry.durationMs === durationMs) return
+  store.patch({ playlist: playlist.map((e) => e.id === currentPlaylistId ? { ...e, durationMs } : e) })
+  persistPlaylist()
 }
 
 /**
@@ -871,8 +867,8 @@ export function registerIpcHandlers(): void {
   })
 
   // Promote the staged preview deck onto the audience feed. Taking a playlist
-  // entry applies its per-speaker timer (duration + reset, NOT started — the
-  // operator starts it manually); taking a loose file leaves the timer alone.
+  // entry applies its per-speaker timer; optional auto-start is limited to
+  // presentation countdowns. Taking a loose file leaves the timer alone.
   // Video behaviour on take follows AppState.videoTakeMode.
   ipcMain.handle('preview:take', (_e, mode?: string) => {
     const state = store.get()
@@ -976,13 +972,7 @@ export function registerIpcHandlers(): void {
 
     const entry = p.playlistId ? state.playlist.find((e) => e.id === p.playlistId) : undefined
     if (entry) {
-      store.patchTimer({
-        durationMs: entry.durationMs,
-        startedAt: null,
-        elapsedMs: 0,
-        running: false,
-        cycles: 0,
-      })
+      store.patchTimer(materialTakeTimer(entry.durationMs, p.kind, state.timerMode, state.materialSettings.autoStartTimer, Date.now()))
       setLastDurationMs(entry.durationMs)
     }
   })
@@ -1064,6 +1054,21 @@ export function registerIpcHandlers(): void {
     store.patchTimer({ startedAt: Date.now(), running: true })
   })
 
+  ipcMain.handle('materials:configure', (_e, value: unknown) => {
+    const candidate = value as { defaultDurationMs?: unknown; autoStartTimer?: unknown } | null
+    if (!validMaterialDuration(candidate?.defaultDurationMs) || typeof candidate?.autoStartTimer !== 'boolean') throw new Error('Invalid material settings')
+    const materialSettings = sanitizeMaterialSettings(candidate)
+    setMaterialSettings(materialSettings)
+    store.patch({ materialSettings })
+  })
+  ipcMain.handle('materials:set-durations', (_e, ids: unknown, durationMs: unknown) => {
+    if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string') || !validMaterialDuration(durationMs)) throw new Error('Invalid duration selection')
+    const selected = new Set(ids)
+    // Preparation affects cards only; never alter the running program timer.
+    store.patch({ playlist: store.get().playlist.map(entry => selected.has(entry.id) ? { ...entry, durationMs } : entry) })
+    persistPlaylist()
+  })
+
   ipcMain.handle('timer:pause', () => {
     const t = store.get().timer
     if (!t.running || t.startedAt === null) return
@@ -1079,6 +1084,7 @@ export function registerIpcHandlers(): void {
     const clamped = Math.max(0, Math.floor(ms))
     store.patchTimer({ durationMs: clamped })
     setLastDurationMs(clamped)
+    persistProgramDuration(clamped)
   })
 
   ipcMain.handle('timer:adjust', (_e, deltaMs: number) => {
@@ -1087,7 +1093,10 @@ export function registerIpcHandlers(): void {
     if (!patch) return
     store.patchTimer(patch)
     // В секундомере длительность не менялась — «последнюю длительность» не трогаем.
-    if (patch.durationMs !== undefined) setLastDurationMs(patch.durationMs)
+    if (patch.durationMs !== undefined) {
+      setLastDurationMs(patch.durationMs)
+      persistProgramDuration(patch.durationMs)
+    }
   })
 
   ipcMain.handle('timer:set-mode', (_e, mode: TimerMode) => {
@@ -1334,11 +1343,13 @@ export function registerIpcHandlers(): void {
     }))
   })
 
-  ipcMain.handle('layout:set', (_e, payload: { layout: Layout; displayMap: DisplayMap; audienceWindowed?: boolean }) => {
+  ipcMain.handle('layout:set', (_e, payload: { layout: Layout; displayMap: DisplayMap; audienceWindowed?: boolean; audienceAlwaysOnTop?: boolean }) => {
     const windowed = Boolean(payload.audienceWindowed)
-    applyLayout(payload.layout, payload.displayMap, windowed)
+    const alwaysOnTop = typeof payload.audienceAlwaysOnTop === 'boolean' ? payload.audienceAlwaysOnTop : store.get().audienceAlwaysOnTop
+    applyLayout(payload.layout, payload.displayMap, windowed, alwaysOnTop)
     saveMapping(store.get().layout, store.get().displayMap)
     setAudienceWindowed(windowed)
+    setAudienceAlwaysOnTop(alwaysOnTop)
   })
 
   ipcMain.handle('layout:get-ask-on-startup', () => getAskLayoutOnStartup())
@@ -1400,7 +1411,7 @@ export function registerIpcHandlers(): void {
       fileName: listDisplayName(items),
       displayName: '',
       speakerName: '',
-      durationMs: store.get().timer.durationMs,
+      durationMs: store.get().materialSettings.defaultDurationMs,
       items,
       photoSec: DEFAULT_PHOTO_SEC,
       // Списки заводят ради «крутится по кругу» — цикл по умолчанию включён.
@@ -1413,7 +1424,7 @@ export function registerIpcHandlers(): void {
 
   function appendToPlaylist(paths: string[]): PlaylistEntry[] {
     const existing = store.get().playlist
-    const defaultDur = store.get().timer.durationMs
+    const defaultDur = store.get().materialSettings.defaultDurationMs
     const newEntries: PlaylistEntry[] = []
     for (const p of paths) {
       if (typeof p !== 'string' || !p) continue
@@ -1744,7 +1755,7 @@ export function registerIpcHandlers(): void {
       await startListPlayback(id)
       return { ok: true, path: entry.items[0].path }
     }
-    return openFile(entry.filePath, { playlistId: id, durationMs: entry.durationMs })
+    return openFile(entry.filePath, { playlistId: id, durationMs: entry.durationMs, startOnTake: true })
   })
 
   ipcMain.handle('playlist:set-compact', (_e, value: boolean) => {

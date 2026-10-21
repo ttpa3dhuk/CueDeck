@@ -8,11 +8,15 @@ import { validOmtAddress } from '../../shared/omt-input.js'
 type FrameHandler = (address: string, frame: OmtInputFrame) => void
 type Tally = { preview: number; program: number }
 interface Consumer { addresses: Set<string>; onFrame: FrameHandler; tally: Map<string, Tally> }
+interface ReceiveLane {
+  type: number
+  timer: ReturnType<typeof setTimeout> | null
+  pending: boolean
+}
 interface Receiver {
   address: string
   instance: unknown
-  timer: ReturnType<typeof setTimeout> | null
-  pending: boolean
+  lanes: ReceiveLane[]
   closing: boolean
   lastErrorAt: number
 }
@@ -130,28 +134,32 @@ export class OmtInputManager {
   private start(address: string): void {
     const instance = this.getLib().receiveCreate(address, MEDIA_TYPES, 2 /* BGRA */, 0)
     if (!instance) throw new Error(`OMT receiver could not be created: ${address}`)
-    const receiver: Receiver = { address, instance, timer: null, pending: false, closing: false, lastErrorAt: 0 }
+    // libomt permits concurrent receive calls for distinct frame types; native
+    // memory is retained until the next receive of that same type. Keeping the
+    // audio lane independent prevents a slow video decode from starving PCM.
+    const lanes = [OMT_FRAME_AUDIO, OMT_FRAME_VIDEO].map(type => ({ type, timer: null, pending: false }))
+    const receiver: Receiver = { address, instance, lanes, closing: false, lastErrorAt: 0 }
     this.receivers.set(address, receiver)
-    this.schedule(receiver, 0)
+    for (const lane of lanes) this.schedule(receiver, lane, 0)
   }
 
-  private schedule(receiver: Receiver, delay: number): void {
+  private schedule(receiver: Receiver, lane: ReceiveLane, delay: number): void {
     if (receiver.closing) return
-    receiver.timer = setTimeout(() => {
-      receiver.timer = null
-      this.poll(receiver)
+    lane.timer = setTimeout(() => {
+      lane.timer = null
+      this.poll(receiver, lane)
     }, delay)
   }
 
-  private poll(receiver: Receiver): void {
-    if (receiver.closing || receiver.pending) return
-    receiver.pending = true
+  private poll(receiver: Receiver, lane: ReceiveLane): void {
+    if (receiver.closing || lane.pending) return
+    lane.pending = true
     try {
       // Even timeout=0 may decode a large compressed frame, so invoke asynchronously.
-      this.library!.receive.async(receiver.instance, MEDIA_TYPES, 0, (error: unknown, pointer: unknown) => {
-        receiver.pending = false
+      this.library!.receive.async(receiver.instance, lane.type, 0, (error: unknown, pointer: unknown) => {
+        lane.pending = false
         if (receiver.closing) {
-          this.dispose(receiver)
+          if (!receiver.lanes.some(item => item.pending)) this.dispose(receiver)
           return
         }
         try {
@@ -168,16 +176,16 @@ export class OmtInputManager {
               this.frameHandled?.(frame)
             }
           }
-          this.schedule(receiver, pointer ? 0 : 8)
+          this.schedule(receiver, lane, pointer ? 0 : 8)
         } catch (err) {
           this.reportError(receiver, err)
-          this.schedule(receiver, 100)
+          this.schedule(receiver, lane, 100)
         }
       })
     } catch (err) {
-      receiver.pending = false
+      lane.pending = false
       this.reportError(receiver, err)
-      this.schedule(receiver, 100)
+      this.schedule(receiver, lane, 100)
     }
   }
 
@@ -226,10 +234,12 @@ export class OmtInputManager {
 
   private stop(receiver: Receiver): void {
     receiver.closing = true
-    if (receiver.timer) clearTimeout(receiver.timer)
-    receiver.timer = null
+    for (const lane of receiver.lanes) {
+      if (lane.timer) clearTimeout(lane.timer)
+      lane.timer = null
+    }
     // Never free a handle while a thread-pool receive is still using it.
-    if (!receiver.pending) this.dispose(receiver)
+    if (!receiver.lanes.some(lane => lane.pending)) this.dispose(receiver)
   }
 
   private dispose(receiver: Receiver): void {

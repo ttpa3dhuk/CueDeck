@@ -116,6 +116,7 @@ function applyLive(state: AppState): void {
   liveStatus.classList.toggle('hidden', s.status === 'off' || s.status === 'live')
   liveStatus.textContent = s.status === 'error' ? (s.message ?? '') : ''
   liveVideo.muted = shouldMute(state, 'audience')
+  liveView.configureAudio(liveVideo.muted, state.audioOutputId)
   if (uri) {
     // Свой счётчик выхода, отдельный от файла-видео: общий давал бы «выход уже
     // применён» при переключении файл ⇄ живой вход, и звук уходил бы не туда.

@@ -230,6 +230,7 @@ export interface AppState {
   video: VideoState
   /** Видео, вшитые в слайды программного PPTX (см. SlideMedia). */
   slideMedia: SlideMedia[]
+  materialSettings: import('./material-settings.js').MaterialSettings
   timer: TimerState
   timerMode: TimerMode
   timerPosition: TimerPosition
@@ -288,6 +289,7 @@ export interface AppState {
   projectPath: string | null
   projectTransfer: ProjectTransferStatus | null
   audienceWindowed: boolean
+  audienceAlwaysOnTop: boolean
   /** Output device id for video sound (setSinkId). null = system default. */
   audioOutputId: string | null
   /**
@@ -663,6 +665,13 @@ export interface DiagMarker {
   n: number
   /** Локальное время «HH:MM:SS» — так же, как в журнале. */
   at: string
+  context?: { atUnixMs: number; programPath: string | null; slide: number; previewPath: string | null; previewSlide: number; video: VideoState; keyVisualPath: string | null }
+}
+
+export interface ReportMaterials {
+  token: string
+  files: { name: string; bytes: number }[]
+  bytes: number
 }
 
 export interface DiagInfo {
@@ -697,6 +706,7 @@ export interface ProfileAudioOutput {
 export interface VenueProfileSettings {
   layout: Layout
   audienceWindowed: boolean
+  audienceAlwaysOnTop: boolean
   outputMonitorsEnabled: boolean
   audioMain: ProfileAudioOutput | null
   audioPreview: ProfileAudioOutput | null

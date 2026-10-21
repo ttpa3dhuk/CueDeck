@@ -17,10 +17,12 @@ const DEV_TILE = process.env.PRESENTER_DEV_TILE === '1'
 // Output surfaces on macOS stay on the desktop. Native fullscreen creates a
 // Space and can blank the operator's display when displays share Spaces.
 // simpleFullscreen also changes app-wide Dock/menu presentation options.
-const macDisplayWindows = new WeakSet<BrowserWindow>()
+// Windows audience outputs also stay on the desktop: Chromium shrinks native
+// fullscreen by 1px when another window on that monitor becomes active.
+const desktopDisplayWindows = new WeakSet<BrowserWindow>()
 
 function isOutputFullscreen(win: BrowserWindow): boolean {
-  return macDisplayWindows.has(win) || win.isFullScreen()
+  return desktopDisplayWindows.has(win) || win.isFullScreen()
 }
 
 interface RendererTarget {
@@ -75,9 +77,11 @@ function tilePosition(role: Role): Electron.Rectangle {
   return positions[role]
 }
 
-function createWindow(role: Role, displayId: number | undefined, fullscreen: boolean, windowed = false): BrowserWindow {
+function createWindow(role: Role, displayId: number | undefined, fullscreen: boolean, windowed = false, audienceAlwaysOnTop = true): BrowserWindow {
   const fillDisplay = fullscreen && !DEV_TILE && !windowed
   const macDisplayWindow = process.platform === 'darwin' && fillDisplay
+  const winAudienceDisplay = process.platform === 'win32' && role === 'audience' && fillDisplay
+  const desktopDisplayWindow = macDisplayWindow || winAudienceDisplay
   const bounds = DEV_TILE
     ? tilePosition(role)
     : windowed
@@ -91,8 +95,8 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
     height: bounds.height,
     ...(role === 'operator' ? { minWidth: 1000, minHeight: 600 } : {}),
     show: false,
-    fullscreen: fillDisplay && !macDisplayWindow,
-    ...(macDisplayWindow ? {
+    fullscreen: fillDisplay && !desktopDisplayWindow,
+    ...(desktopDisplayWindow ? {
       frame: false,
       roundedCorners: false,
       fullscreenable: false,
@@ -101,7 +105,11 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
       hasShadow: false,
       // Otherwise AppKit constrains even a frameless window below the menu
       // bar, shifting the output down and cropping its bottom edge.
-      enableLargerThanScreen: true,
+      ...(macDisplayWindow ? { enableLargerThanScreen: true } : {
+        // frame:false alone retains Windows non-client resizing margins.
+        thickFrame: false,
+        maximizable: false,
+      }),
     } : {}),
     backgroundColor: role === 'audience' ? '#000000' : '#1a1a1a',
     title: WINDOW_TITLES[role],
@@ -110,14 +118,16 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // Restored/live program audio must start without a click on an output.
+      autoplayPolicy: 'no-user-gesture-required',
       // The operator owns video:ended/loop advancement. Chromium must keep
       // its video and clock running when minimized or covered by a DJ app;
       // otherwise the audience repeatedly seeks around an expired clock.
       backgroundThrottling: false,
     },
   })
-  if (macDisplayWindow) {
-    macDisplayWindows.add(win)
+  if (desktopDisplayWindow) {
+    desktopDisplayWindows.add(win)
     const targetDisplayId = screen.getDisplayMatching(bounds).id
     // Native fullscreen used to follow display resolution/rotation changes.
     // A desktop output surface must update its own bounds instead.
@@ -142,14 +152,17 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
     if (fillDisplay) {
       win.setBounds(bounds)
       if (macDisplayWindow) {
-        // Cover the menu bar and Dock only on this output display. Do not
-        // change NSApp presentation options or create a fullscreen Space.
-        win.setAlwaysOnTop(true, 'screen-saver')
+        // The pinned mode covers the menu bar and Dock on this display.
+        // Neither mode changes NSApp presentation options or creates a Space.
+        if (role !== 'audience' || audienceAlwaysOnTop) win.setAlwaysOnTop(true, 'screen-saver')
+      } else if (winAudienceDisplay) {
+        win.setAlwaysOnTop(audienceAlwaysOnTop)
       } else {
         win.setFullScreen(true)
+        if (role === 'audience') win.setAlwaysOnTop(audienceAlwaysOnTop)
       }
     }
-    if (macDisplayWindow) win.showInactive()
+    if (desktopDisplayWindow) win.showInactive()
     else win.show()
     if (role === 'operator') win.focus()
   })
@@ -174,7 +187,7 @@ export function setOperatorWindowHook(fn: (win: BrowserWindow) => void): void {
 let activeWindows = new Map<Role, BrowserWindow>()
 
 
-export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWindowed = false): Map<Role, BrowserWindow> {
+export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWindowed = false, audienceAlwaysOnTop = true): Map<Role, BrowserWindow> {
   if (!DEV_TILE) {
     const safe = safeDisplayLayout(layout, displayMap, screen.getAllDisplays(), audienceWindowed)
     layout = safe.layout
@@ -212,18 +225,22 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
           // путь, что при старте, работает детерминированно.
           store.unregisterWindow(role)
           existing.destroy()
-          activeWindows.set(role, createWindow(role, displayMap[role], fullscreen, windowed))
+          activeWindows.set(role, createWindow(role, displayMap[role], fullscreen, windowed, audienceAlwaysOnTop))
         } else if (!isOutputFullscreen(existing)) {
           existing.setBounds(target)
         }
+        if (!displayChanged && !modeChanged && role === 'audience' && fullscreen) {
+          if (process.platform === 'darwin' && desktopDisplayWindows.has(existing)) existing.setAlwaysOnTop(audienceAlwaysOnTop, 'screen-saver')
+          else existing.setAlwaysOnTop(audienceAlwaysOnTop)
+        }
       }
     } else {
-      const win = createWindow(role, displayMap[role], fullscreen, windowed)
+      const win = createWindow(role, displayMap[role], fullscreen, windowed, audienceAlwaysOnTop)
       activeWindows.set(role, win)
     }
   }
 
-  store.patch({ layout, displayMap, audienceWindowed })
+  store.patch({ layout, displayMap, audienceWindowed, audienceAlwaysOnTop })
   return activeWindows
 }
 
@@ -275,6 +292,7 @@ export function createHiddenSpeakerWindow(): BrowserWindow {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      autoplayPolicy: 'no-user-gesture-required',
       // Скрытое окно не должно засыпать — иначе таймер на снимках замирает.
       backgroundThrottling: false,
     },

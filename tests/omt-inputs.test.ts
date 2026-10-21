@@ -26,6 +26,13 @@ const video = (data: ArrayBuffer) => ({
   FrameRateN: 30, FrameRateD: 1, Data: data, DataLength: data.byteLength,
 })
 let manager: OmtInputManager
+function complete(type: number, pointer: unknown = null): void {
+  const call = fake.receive.async.mock.calls.find(call => call[1] === type && fake.pending.includes(call[3]))
+  expect(call, `pending receive for frame type ${type}`).toBeDefined()
+  const callback = call![3]
+  fake.pending.splice(fake.pending.indexOf(callback), 1)
+  callback(null, pointer)
+}
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
@@ -41,6 +48,22 @@ afterEach(() => {
 })
 
 describe('OMT native input lifecycle', () => {
+  it('does not make audio wait for an unfinished video decode', () => {
+    manager.retain(1, [address], vi.fn())
+    vi.advanceTimersByTime(0)
+    const audio = fake.receive.async.mock.calls.find(call => call[1] === 4)
+    const video = fake.receive.async.mock.calls.find(call => call[1] === 2)
+    expect(audio).toBeDefined()
+    expect(video).toBeDefined()
+    // Leave video in flight, complete only audio, and allow its empty-poll delay.
+    const callback = audio![3]
+    fake.pending.splice(fake.pending.indexOf(callback), 1)
+    callback(null, null)
+    vi.advanceTimersByTime(8)
+    expect(fake.receive.async.mock.calls.filter(call => call[1] === 4)).toHaveLength(2)
+    expect(fake.receive.async.mock.calls.filter(call => call[1] === 2)).toHaveLength(1)
+  })
+
   it('loads the injected library lazily and reports provider failures without creating a receiver', () => {
     const provider = vi.fn(() => { throw new Error('Unavailable native library') })
     manager = new OmtInputManager(provider, vi.fn())
@@ -57,7 +80,7 @@ describe('OMT native input lifecycle', () => {
     manager.retain(1, [address], received)
     vi.advanceTimersByTime(0)
     const native = video(new Uint8Array(8).buffer)
-    fake.pending.shift()!(null, native)
+    complete(2, native)
     expect(upload).toHaveBeenCalledWith(native, address)
     expect(received).toHaveBeenCalledWith(address, texture)
     expect(finished).toHaveBeenCalledWith(texture)
@@ -70,9 +93,10 @@ describe('OMT native input lifecycle', () => {
     manager.retain(2, [address], second)
     expect(fake.create).toHaveBeenCalledTimes(1)
     vi.advanceTimersByTime(0)
-    expect(fake.receive.async).toHaveBeenCalledWith(expect.anything(), 6, 0, expect.any(Function))
+    expect(fake.receive.async).toHaveBeenCalledWith(expect.anything(), 2, 0, expect.any(Function))
+    expect(fake.receive.async).toHaveBeenCalledWith(expect.anything(), 4, 0, expect.any(Function))
     const native = new Uint8Array([1, 2, 3, 255, 4, 5, 6, 255])
-    fake.pending.shift()!(null, video(native.buffer))
+    complete(2, video(native.buffer))
     native.fill(0)
     expect([...first.mock.calls[0][1].data]).toEqual([1, 2, 3, 255, 4, 5, 6, 255])
     expect(second).toHaveBeenCalledTimes(1)
@@ -80,16 +104,20 @@ describe('OMT native input lifecycle', () => {
     manager.release(1)
     expect(fake.destroy).not.toHaveBeenCalled()
     manager.release(2)
+    expect(fake.destroy).not.toHaveBeenCalled()
+    complete(4)
     expect(fake.destroy).toHaveBeenCalledTimes(1)
   })
 
-  it('waits for an in-flight native call before destroying the receiver', () => {
+  it('waits for both in-flight native calls before destroying the receiver', () => {
     const handler = vi.fn()
     manager.retain(1, [address], handler)
     vi.advanceTimersByTime(0)
     manager.release(1)
     expect(fake.destroy).not.toHaveBeenCalled()
-    fake.pending.shift()!(null, video(new ArrayBuffer(8)))
+    complete(2, video(new ArrayBuffer(8)))
+    expect(fake.destroy).not.toHaveBeenCalled()
+    complete(4)
     expect(fake.destroy).toHaveBeenCalledTimes(1)
     expect(handler).not.toHaveBeenCalled()
   })
@@ -99,7 +127,7 @@ describe('OMT native input lifecycle', () => {
     manager.retain(1, [address], handler)
     vi.advanceTimersByTime(0)
     const native = new Float32Array([0.1, 0.2, 0.3, NaN])
-    fake.pending.shift()!(null, {
+    complete(4, {
       Type: 4, Timestamp: 2000, Codec: 0x31415046, SampleRate: 48000,
       Channels: 2, SamplesPerChannel: 2, Data: native.buffer, DataLength: 16,
     })
@@ -114,7 +142,7 @@ describe('OMT native input lifecycle', () => {
     const handler = vi.fn()
     manager.retain(1, [address], handler)
     vi.advanceTimersByTime(0)
-    fake.pending.shift()!(null, video(new ArrayBuffer(4)))
+    complete(2, video(new ArrayBuffer(4)))
     expect(handler).not.toHaveBeenCalled()
   })
 

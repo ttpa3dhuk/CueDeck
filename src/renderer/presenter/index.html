@@ -489,6 +489,7 @@
           <nav class="settings-nav">
             <button data-section="profiles">Профили площадки</button>
             <button data-section="screens" class="active">Экраны</button>
+            <button data-section="materials">Материалы</button>
             <button data-section="prompter">Суфлёр</button>
             <button data-section="clicker">Кликер</button>
             <button data-section="audio">Звук</button>
@@ -536,7 +537,7 @@
               </div>
             </section>
             <section id="setup-section" class="settings-section" data-section="screens">
-              <p class="audio-hint">Раскладка окон и экраны. Применяется кнопкой ниже: окна зала и суфлёра при этом пересоздаются.</p>
+              <p class="audio-hint">Выбери режим и назначь экраны оператору, залу и суфлёру. Изменения в этом разделе вступят в силу после нажатия «Применить».</p>
               <div class="layout-picker">
                 <label><input type="radio" name="layout" value="solo" /> 1 экран (только я)</label>
                 <label><input type="radio" name="layout" value="presenter-audience" /> 2 экрана (ноут + проектор)</label>
@@ -546,7 +547,13 @@
               <div id="audience-windowed-section" class="windowed-section hidden">
                 <label class="windowed-label">
                   <input id="audience-windowed-toggle" type="checkbox" />
-                  <span>Аудитория в окне <span class="windowed-hint">(для захвата в Zoom / OBS)</span></span>
+                  <span>Аудитория в окне <span class="windowed-hint">(небольшое окно с рамкой, для Zoom / OBS)</span></span>
+                </label>
+              </div>
+              <div id="audience-always-on-top-section" class="windowed-section hidden">
+                <label class="windowed-label">
+                  <input id="audience-always-on-top-toggle" type="checkbox" />
+                  <span>Аудитория всегда поверх окон <span class="windowed-hint">(выключи, чтобы показывать другие приложения поверх зала)</span></span>
                 </label>
               </div>
               <div id="output-monitors-section" class="windowed-section">
@@ -566,8 +573,19 @@
                 <button id="setup-apply" class="primary">Применить</button>
               </div>
             </section>
+            <section class="settings-section hidden" data-section="materials">
+              <p class="audio-hint">Время по умолчанию применяется только к новым записям. Для уже добавленных материалов выдели нужные карточки и выбери «Задать время…» в меню правой кнопки мыши.</p>
+              <label class="live-field">Таймер новых записей, мин
+                <input id="material-default-minutes" type="number" min="0" max="999" step="1" value="0" />
+              </label>
+              <p class="audio-hint">0 — время не задано. Новые записи не наследуют время текущего спикера.</p>
+              <label class="windowed-label"><input id="material-auto-timer" type="checkbox" /> Запускать таймер при выдаче презентации в эфир</label>
+              <p class="audio-hint">Для PDF и PowerPoint с заданным временем, в режиме обратного отсчёта. Работает при TAKE и прямой выдаче в эфир. Листание слайдов не перезапускает таймер.</p>
+              <button id="material-settings-save">Сохранить настройки материалов</button>
+              <p id="material-settings-status" class="audio-hint"></p>
+            </section>
             <section class="settings-section hidden" data-section="prompter">
-              <p class="audio-hint">Экран суфлёра в его пропорциях.</p>
+              <p class="audio-hint">Здесь настраивается экран спикера. Перетаскивай таймер, сообщение и границы колонок на макете. Изменения применяются сразу.</p>
               <div class="remote-row">
                 <label for="prompter-toolbar-scale" class="live-field-label">Верхняя строка</label>
                 <input id="prompter-toolbar-scale" type="range" min="100" max="400" step="10" value="100" />
@@ -628,13 +646,13 @@
               <fieldset class="prompter-settings-group">
                 <legend>Сообщение спикеру</legend>
                 <div class="remote-row">
-                  <button id="prompter-msg-reset" title="Вернуть сверху по центру, обычный размер">Сверху по центру</button>
+                  <button id="prompter-msg-reset" title="Вернуть сверху по центру, обычный размер">Сбросить положение и размер сообщения</button>
                 </div>
               </fieldset>
               <fieldset class="prompter-settings-group">
                 <legend>Колонки</legend>
                 <div class="remote-row">
-                  <button id="prompter-layout-reset" title="Слайд / «Дальше» / «Заметки» — как по умолчанию">По умолчанию</button>
+                  <button id="prompter-layout-reset" title="Слайд / «Дальше» / «Заметки» — как по умолчанию">Сбросить размеры колонок</button>
                 </div>
               </fieldset>
               </div>
@@ -833,10 +851,15 @@
     <div id="report-modal" class="modal hidden">
       <div class="modal-content report-modal-content">
         <h2>Сообщить о проблеме</h2>
-        <p class="audio-hint">Отчёт собирается в zip на рабочем столе: журнал действий, состояние программы, скриншоты окон, версия и ОС. Содержимого презентаций и текста заметок в нём нет, только имена файлов. Файл пришли в Telegram: @CueDeckSupport_Bot.</p>
+        <p class="audio-hint">Отчёт сохраняется в ZIP на рабочем столе: журналы, настройки и скриншоты окон. На скриншотах могут быть видны слайды и заметки. Исходные файлы добавляются только по твоему выбору. Автоматической отправки нет.</p>
         <label class="report-label" for="report-comment">Что делал, что ожидал, что получил</label>
         <textarea id="report-comment" rows="5" placeholder="Например: нажал TAKE на втором спикере, зал остался на первом слайде предыдущего."></textarea>
         <p id="report-markers" class="audio-hint compact hidden"></p>
+        <button id="report-materials-choose">Выбрать материалы для отчёта</button>
+        <p class="audio-hint">Выбери презентацию или другие файлы, на которых возникла ошибка. До 128 МиБ суммарно. Оригинальная презентация может содержать заметки и встроенное видео.</p>
+        <ul id="report-materials-list" style="max-height: 140px; overflow: auto"></ul>
+        <p id="report-materials-size" class="audio-hint"></p>
+        <label><input id="report-materials-include" type="checkbox" disabled> Приложить выбранные материалы к отчёту</label>
         <p id="report-result" class="report-result hidden"></p>
         <div class="modal-actions">
           <button id="report-logs">Открыть папку журналов</button>

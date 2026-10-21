@@ -51,7 +51,14 @@ function ready() { for (const w of runtime.windows) w.handlers.get('ready-to-sho
 beforeEach(() => { runtime.windows = []; runtime.displayListeners.clear() })
 afterEach(() => { Object.defineProperty(process, 'platform', { value: platform }); vi.unstubAllEnvs() })
 
-describe('output displays without macOS fullscreen Spaces', () => {
+describe('full-display output windows', () => {
+  it.each(['darwin', 'win32'])('allows restored audio to start without a gesture in %s windows', async (os) => {
+    await load(os)
+    windows.applyLayout('operator-speaker-audience', { operator: 1, audience: 2, speaker: 3 })
+    windows.createHiddenSpeakerWindow()
+    for (const w of runtime.windows) expect(w.options.webPreferences.autoplayPolicy).toBe('no-user-gesture-required')
+  })
+
   it('fills only the assigned Mac display and leaves operator focus and window chrome intact', async () => {
     await load()
     windows.applyLayout('presenter-audience', { operator: 1, audience: 2 })
@@ -76,8 +83,21 @@ describe('output displays without macOS fullscreen Spaces', () => {
     expect(runtime.windows).toHaveLength(3)
     for (const w of runtime.windows.slice(1)) expect(w.setFullScreen).not.toHaveBeenCalled()
   })
-  it('restores a normal window when windowed mode is selected, then recreates full-display mode on another display', async () => {
+  it('lets another Mac window cover the audience without recreating the output', async () => {
     await load()
+    const map = { operator: 1, audience: 2 }
+    windows.applyLayout('presenter-audience', map, false, false)
+    ready()
+    const audience = runtime.windows[1]
+    expect(audience.setAlwaysOnTop).not.toHaveBeenCalled()
+    windows.applyLayout('presenter-audience', map, false, true)
+    expect(audience.setAlwaysOnTop).toHaveBeenLastCalledWith(true, 'screen-saver')
+    windows.applyLayout('presenter-audience', map, false, false)
+    expect(audience.setAlwaysOnTop).toHaveBeenLastCalledWith(false, 'screen-saver')
+    expect(runtime.windows).toHaveLength(2)
+  })
+  it.each(['darwin', 'win32'])('restores windowed mode and changes displays on %s', async (os) => {
+    await load(os)
     windows.applyLayout('presenter-audience', { operator: 1, audience: 2 })
     ready()
     const full = runtime.windows[1]
@@ -101,19 +121,38 @@ describe('output displays without macOS fullscreen Spaces', () => {
     expect(output.showInactive).not.toHaveBeenCalled()
     expect(output.setAlwaysOnTop).not.toHaveBeenCalled()
   })
-  it('keeps native fullscreen on Windows', async () => {
+  it('toggles Windows audience pinning without recreating the display window', async () => {
     await load('win32')
-    windows.applyLayout('presenter-audience', { operator: 1, audience: 2 })
+    const map = { operator: 1, audience: 2 }
+    windows.applyLayout('presenter-audience', map, false, false)
     ready()
     const output = runtime.windows[1]
-    expect(output.options.fullscreen).toBe(true)
-    expect(output.options.frame).toBeUndefined()
-    expect(output.setFullScreen).toHaveBeenCalledWith(true)
-    expect(output.removeMenu).toHaveBeenCalledOnce()
-    expect(output.setAlwaysOnTop).not.toHaveBeenCalled()
+    expect(output.setAlwaysOnTop).toHaveBeenLastCalledWith(false)
+    windows.applyLayout('presenter-audience', map, false, true)
+    expect(output.setAlwaysOnTop).toHaveBeenLastCalledWith(true)
+    windows.applyLayout('presenter-audience', map, false, false)
+    expect(output.setAlwaysOnTop).toHaveBeenLastCalledWith(false)
+    expect(output.bounds).toEqual({ x: -1920, y: -36, width: 1920, height: 1080 })
+    expect(runtime.windows).toHaveLength(2)
   })
-  it('follows resolution changes only on its output display and removes the listener on close', async () => {
-    await load()
+  it('uses exact desktop bounds for Windows audience while retaining native fullscreen for speaker', async () => {
+    await load('win32')
+    windows.applyLayout('operator-speaker-audience', { operator: 1, audience: 2, speaker: 3 })
+    ready()
+    const audience = runtime.windows.find(w => w.options.x === -1920)
+    const speaker = runtime.windows.find(w => w.options.x === 1800)
+    expect(audience.options).toMatchObject({ frame: false, thickFrame: false, fullscreen: false, maximizable: false, roundedCorners: false })
+    expect(audience.bounds).toEqual({ x: -1920, y: -36, width: 1920, height: 1080 })
+    expect(audience.setFullScreen).not.toHaveBeenCalled()
+    expect(audience.showInactive).toHaveBeenCalledOnce()
+    expect(audience.removeMenu).toHaveBeenCalledOnce()
+    expect(audience.setAlwaysOnTop).toHaveBeenCalledWith(true)
+    expect(speaker.options.frame).toBeUndefined()
+    expect(speaker.setFullScreen).toHaveBeenCalledWith(true)
+    expect(runtime.windows[0].options.frame).toBeUndefined()
+  })
+  it.each(['darwin', 'win32'])('follows only its display resolution and removes listeners on %s', async (os) => {
+    await load(os)
     windows.applyLayout('presenter-audience', { operator: 1, audience: 2 })
     ready()
     const output = runtime.windows[1]
@@ -127,8 +166,8 @@ describe('output displays without macOS fullscreen Spaces', () => {
     output.handlers.get('closed')?.()
     expect(runtime.displayListeners.size).toBe(0)
   })
-  it('keeps development tiling windowed on Mac', async () => {
-    await load('darwin', true)
+  it.each(['darwin', 'win32'])('keeps development tiling windowed on %s', async (os) => {
+    await load(os, true)
     windows.applyLayout('presenter-audience', { operator: 1, audience: 2 })
     ready()
     const output = runtime.windows[1]

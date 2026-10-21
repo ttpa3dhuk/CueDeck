@@ -38,6 +38,7 @@ export class OmtStream {
   private video: CanvasCaptureMediaStreamTrack
   private audio: AudioContext | null = null
   private destination: MediaStreamAudioDestinationNode | null = null
+  private audioGain: GainNode | null = null
   private audioNodes = new Set<AudioBufferSourceNode>()
   private audioNextAt: number | null = null
   private audioLastPts: number | null = null
@@ -67,6 +68,8 @@ export class OmtStream {
       this.destination = this.audio.createMediaStreamDestination()
       this.destination.channelCount = 2
       this.destination.channelCountMode = 'explicit'
+      this.audioGain = this.audio.createGain()
+      this.audioGain.connect(this.destination)
       this.stream.addTrack(this.destination.stream.getAudioTracks()[0])
       void this.audio.resume()
     }
@@ -93,8 +96,9 @@ export class OmtStream {
   setAudioEnabled(enabled: boolean): void {
     if (this.audioEnabled === enabled) return
     this.audioEnabled = enabled
-    this.clearAudioScheduled()
-    for (const track of this.stream.getAudioTracks()) track.enabled = enabled
+    // Keep the stream clock running while muted; restarting the track makes
+    // Chromium readjust MediaStream playout on every switch.
+    if (this.audioGain) this.audioGain.gain.value = enabled ? 1 : 0
   }
 
   /** 80 ms playout buffer; restart the clock on source restart or a long network gap. */
@@ -141,7 +145,7 @@ export class OmtStream {
 
   receive(frame: OmtInputFrame): void {
     if (this.disposed) return
-    if (frame.type === 'audio' && (!this.audio || !this.audioEnabled)) return
+    if (frame.type === 'audio' && !this.audio) return
     try {
       const when = this.presentationTime(frame.timestamp, frame.type)
       if (frame.type === 'video') {
@@ -168,25 +172,32 @@ export class OmtStream {
         const duration = frame.samplesPerChannel / frame.sampleRate
         const discontinuity = this.audioLastPts !== null &&
           (pts < this.audioLastPts - 1 || pts - this.audioLastPts - this.audioLastDuration * 1000 > 250)
-        const underrun = this.audioNextAt !== null && this.audioNextAt < this.audio.currentTime + 0.005
+        const underrun = this.audioNextAt !== null && this.audioNextAt < this.audio.currentTime
         // A delayed UI callback can deliver many buffers at once. Never start
         // them all at currentTime: that overlaps stereo samples and changes the tone.
-        // Rebuffer after a gap; video clock corrections cannot stop audio nodes.
-        if (discontinuity || underrun || (this.audioNextAt !== null && Math.abs(target - this.audioNextAt) > 0.25)) {
+        // Once started, contiguous PCM follows its sample clock. A callback
+        // burst grows the queue and video can move `target`; neither means
+        // the audio timeline broke. Comparing target with the queue tail
+        // cancels valid buffers mid-burst and creates additional silence.
+        // Rebuffer only on a source discontinuity or actual queue underrun.
+        if (discontinuity || underrun) {
           this.clearAudioScheduled()
         }
+        // Track received PTS even when the latency limit drops this packet.
+        // Otherwise our own drops look like a source restart after 250ms
+        // and cancel the still-valid bounded queue.
+        this.audioLastPts = pts
+        this.audioLastDuration = duration
         const start = this.audioNextAt ?? Math.max(this.audio.currentTime + 0.08, target)
         // Bound latency if callbacks arrive much faster than their sample clock.
         if (start - this.audio.currentTime > 0.5) return
         const node = this.audio.createBufferSource()
         node.buffer = buffer
-        node.connect(this.destination)
+        node.connect(this.audioGain!)
         this.audioNodes.add(node)
         node.onended = () => { node.disconnect(); this.audioNodes.delete(node) }
         node.start(start)
         this.audioNextAt = start + duration
-        this.audioLastPts = pts
-        this.audioLastDuration = duration
       }
     } catch (error) { this.fail(t('Не удалось показать OMT: {error}', { error: String(error) })) }
   }
