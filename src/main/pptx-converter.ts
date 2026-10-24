@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process'
+import { app } from 'electron'
 import { log } from './diag.js'
 import { mkdir, rename, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, parse } from 'node:path'
-import { localPptxCacheDir, pptxReadCacheDir } from './project-cache.js'
+import { pathToFileURL } from 'node:url'
+import { localPptxCacheDir, pdfCachePath, pptxReadCacheDir } from './project-cache.js'
 import { getSofficePath, setSofficePath } from './display-mapping.js'
 import { t } from '../shared/i18n.js'
 
@@ -153,6 +155,14 @@ export function sofficeSearchPaths(): string[] {
 
 const cacheDir = localPptxCacheDir
 
+// Эти параметры влияют на число и вид страниц, с которыми работает CueDeck.
+const pdfExportFilter = 'pdf:impress_pdf_Export:' + JSON.stringify({
+  ExportHiddenSlides: { type: 'boolean', value: 'false' },
+  ExportNotesPages: { type: 'boolean', value: 'false' },
+  ExportNotes: { type: 'boolean', value: 'false' },
+  ReduceImageResolution: { type: 'boolean', value: 'false' },
+})
+
 export class LibreOfficeMissingError extends Error {
   constructor() {
     super(t('LibreOffice не установлен — скачай с libreoffice.org и перезапусти CueDeck'))
@@ -160,24 +170,37 @@ export class LibreOfficeMissingError extends Error {
 }
 
 export function cachedPdfPathFor(sha1: string): string {
-  return join(pptxReadCacheDir(sha1), `${sha1}.pdf`)
+  const root = pptxReadCacheDir(sha1)
+  return pdfCachePath(root, sha1) ?? join(root, `${sha1}.pdf`)
 }
 
 export function cachedPdfExists(sha1: string): boolean {
   return existsSync(cachedPdfPathFor(sha1))
 }
 
-export async function convertPptxToPdf(pptxPath: string, sourceSha1: string): Promise<string> {
+/** A source file can be named with characters forbidden by Windows. */
+function readableCacheFolder(sourcePath: string): string {
+  let stem = parse(sourcePath).name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/[. ]+$/g, '').slice(0, 120)
+  if (!stem) stem = 'presentation'
+  if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(stem)) stem = `_${stem}`
+  return stem
+}
+
+export async function convertPptxToPdf(pptxPath: string, sourceSha1: string, originalPath = pptxPath): Promise<string> {
   const cached = cachedPdfPathFor(sourceSha1)
   if (existsSync(cached)) return cached
-  const target = join(cacheDir(), `${sourceSha1}.pdf`)
+  const target = join(cacheDir(), readableCacheFolder(originalPath), `${sourceSha1}.pdf`)
 
   const soffice = await findSoffice()
   if (!soffice) {
     throw new LibreOfficeMissingError()
   }
 
+  // Отдельный профиль не наследует настройки и расширения LibreOffice пользователя.
+  // Он живёт вне PDF-кэша и остаётся при его ручной очистке.
+  const profileDir = join(app.getPath('userData'), 'libreoffice-profile')
   await mkdir(cacheDir(), { recursive: true })
+  await mkdir(profileDir, { recursive: true })
   const tmpDir = join(cacheDir(), `tmp-${sourceSha1}-${Date.now()}`)
   await mkdir(tmpDir, { recursive: true })
 
@@ -186,12 +209,13 @@ export async function convertPptxToPdf(pptxPath: string, sourceSha1: string): Pr
   try {
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(soffice, [
+        `-env:UserInstallation=${pathToFileURL(profileDir).href}`,
         '--headless',
         '--norestore',
         '--nologo',
         '--nofirststartwizard',
         '--convert-to',
-        'pdf',
+        pdfExportFilter,
         '--outdir',
         tmpDir,
         pptxPath,
@@ -210,6 +234,7 @@ export async function convertPptxToPdf(pptxPath: string, sourceSha1: string): Pr
     if (!existsSync(generated)) {
       throw new Error(t('LibreOffice не создал PDF (возможно, файл повреждён)'))
     }
+    await mkdir(join(cacheDir(), readableCacheFolder(originalPath)), { recursive: true })
     await rename(generated, target)
     log.info(`soffice: готово за ${Math.round(performance.now() - t0)} мс → ${target}`)
     return target

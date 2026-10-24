@@ -22,7 +22,7 @@ type Feedback = Preset['feedbacks'][number]
 
 const T = {
 	ru: {
-		sTimer: 'Таймер',
+		sTimer: 'Таймер суфлёра',
 		sProgram: 'Эфир',
 		sStream: 'Трансляция',
 		sOmt: 'OMT',
@@ -77,7 +77,7 @@ const T = {
 		pvClear: 'ПРЕВЬЮ\nочистить',
 	},
 	en: {
-		sTimer: 'Timer',
+		sTimer: 'Prompter timer',
 		sProgram: 'Program',
 		sStream: 'Stream',
 		sOmt: 'OMT',
@@ -394,6 +394,57 @@ export function UpdatePresets(self: ModuleInstance): void {
 		add('preview_clear', 'Preview: clear', t.pvClear, [a('preview', { cmd: 'clear' })]),
 	]
 
+	const ru = self.presetLang() === 'ru'
+	const hall = [
+		add(
+			'audience_timer',
+			'Hall timer: toggle',
+			`${ru ? 'ЗАЛ' : 'HALL'}\n${v('audience_timer')}`,
+			[a('audience_timer', { cmd: 'toggle' })],
+			[{ feedbackId: 'audience_timer_color', options: {} }],
+		),
+		...(['start', 'pause', 'reset', 'restart'] as const).map((cmd, i) =>
+			add(
+				`audience_${cmd}`,
+				`Hall timer: ${cmd}`,
+				`${ru ? 'ЗАЛ' : 'HALL'}\n${[t.start, t.pause, t.reset, t.restart][i]}`,
+				[a('audience_timer', { cmd })],
+				cmd === 'start'
+					? [{ feedbackId: 'audience_timer_flag', options: { setting: 'running' }, style: { bgcolor: C.greenBg } }]
+					: [],
+			),
+		),
+		...(['visible', 'loop', 'tick', 'gong'] as const).map((setting, i) =>
+			add(
+				`audience_${setting}`,
+				`Hall timer: ${setting}`,
+				`${ru ? 'ЗАЛ' : 'HALL'}\n${(ru ? ['ПОКАЗ', 'ЦИКЛ', 'ТИК', 'ГОНГ'] : ['SHOW', 'LOOP', 'TICK', 'GONG'])[i]}`,
+				[a('audience_timer_switch', { setting, mode: 'toggle' })],
+				[
+					{
+						feedbackId: 'audience_timer_flag',
+						options: { setting: setting === 'tick' ? 'tickEnabled' : setting === 'gong' ? 'gongEnabled' : setting },
+						style: { bgcolor: C.greenBg },
+					},
+				],
+			),
+		),
+		add('audience_set_5', 'Hall timer: set duration (editable example)', `${ru ? 'ЗАЛ' : 'HALL'}\n5 ${t.min}`, [
+			a('audience_timer_set', { duration: '5' }),
+		]),
+		add('audience_sub_1', 'Hall timer: subtract time (editable example)', `${ru ? 'ЗАЛ' : 'HALL'}\n−1 ${t.min}`, [
+			a('audience_timer_adjust', { direction: 'sub', amount: '1' }),
+		]),
+		add('audience_add_1', 'Hall timer: add time (editable example)', `${ru ? 'ЗАЛ' : 'HALL'}\n+1 ${t.min}`, [
+			a('audience_timer_adjust', { direction: 'add', amount: '1' }),
+		]),
+		...(['countdown', 'stopwatch', 'clock'] as const).map((mode) =>
+			add(`audience_mode_${mode}`, `Hall timer: ${mode}`, `${ru ? 'ЗАЛ' : 'HALL'}\n${t[mode]}`, [
+				a('audience_timer_mode', { mode }),
+			]),
+		),
+	]
+
 	const group = (id: string, name: string, list: string[]): CompanionPresetGroup<ModuleSchema> => ({
 		id,
 		type: 'simple',
@@ -411,6 +462,7 @@ export function UpdatePresets(self: ModuleInstance): void {
 				group('timer_mode', t.gTimerMode, timerMode),
 			],
 		},
+		{ id: 'audience_timer', name: ru ? 'Таймер зала' : 'Hall timer', definitions: hall },
 		{ id: 'program', name: t.sProgram, definitions: program },
 		{ id: 'stream', name: t.sStream, definitions: stream },
 		{ id: 'omt', name: t.sOmt, definitions: omt },

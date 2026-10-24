@@ -1,7 +1,10 @@
+import { createAudienceTimer } from '../src/shared/audience-timer'
 import { describe, expect, it } from 'vitest'
 import { resolveRemote, type RemoteStateView } from '../src/main/remote/commands'
 import {
   commandFor,
+  AUDIENCE_TIMER_CMDS,
+  AUDIENCE_TIMER_SWITCHES,
   commandUrl,
   ON_OFF,
   PREVIEW_CMDS,
@@ -24,6 +27,7 @@ const entry = (id: string) =>
 
 /** Состояние, в котором любая команда исполнима: ролик в эфире, превью заряжено, спикеры есть и до, и после. */
 const busy: RemoteStateView = {
+  audienceTimer: createAudienceTimer(),
   timer: { durationMs: 600_000, startedAt: null, elapsedMs: 0, running: false, cycles: 0 },
   timerPosition: 'top-right',
   timerPresets: [5, 10, 15, 20],
@@ -66,6 +70,12 @@ function viaHttp(url: string) {
 const each = <T extends string>(list: readonly T[], f: (v: T) => [string, Record<string, unknown>]) => list.map(f)
 
 const ALL: [string, Record<string, unknown>][] = [
+  ...each(AUDIENCE_TIMER_CMDS, cmd => ['audience_timer', {cmd}]),
+  ...AUDIENCE_TIMER_SWITCHES.flatMap(setting => each(ON_OFF, mode => ['audience_timer_switch', {setting, mode}])),
+  ...each(TIMER_MODES, mode => ['audience_timer_mode', {mode}]),
+  ['audience_timer_set', {duration:'1:30'}],
+  ['audience_timer_adjust', {direction:'add',amount:'1'}],
+  ['audience_timer_adjust', {direction:'sub',amount:'30s'}],
   ['program_next', {}],
   ['program_prev', {}],
   ['program_goto', { slide: 3 }],

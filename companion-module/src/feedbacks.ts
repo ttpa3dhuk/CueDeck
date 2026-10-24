@@ -18,6 +18,11 @@ export const C = {
 type NoOptions = Record<string, never>
 
 export type FeedbacksSchema = {
+	audience_timer_flag: {
+		type: 'boolean'
+		options: { setting: 'running' | 'visible' | 'loop' | 'tickEnabled' | 'gongEnabled' }
+	}
+	audience_timer_color: { type: 'advanced'; options: NoOptions }
 	offline: { type: 'boolean'; options: NoOptions }
 	timer_color: { type: 'advanced'; options: NoOptions }
 	timer_over: { type: 'boolean'; options: { blink: boolean } }
@@ -45,6 +50,33 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 	const st = () => self.state
 
 	const feedbacks: CompanionFeedbackDefinitions<FeedbacksSchema> = {
+		audience_timer_flag: {
+			type: 'boolean',
+			name: 'Hall timer: state',
+			defaultStyle: { bgcolor: C.greenBg, color: C.white },
+			options: [
+				{
+					id: 'setting',
+					type: 'dropdown',
+					label: 'State',
+					default: 'visible',
+					choices: ['running', 'visible', 'loop', 'tickEnabled', 'gongEnabled'].map((id) => ({ id, label: id })),
+				},
+			],
+			callback: (e) => !!st()?.audienceTimer?.[e.options.setting],
+		},
+		audience_timer_color: {
+			type: 'advanced',
+			name: 'Hall timer: time colour',
+			options: [],
+			callback: () => {
+				const timer = st()?.audienceTimer
+				if (!timer) return { color: C.muted }
+				return {
+					color: ({ green: C.green, yellow: C.yellow, red: C.red } as Record<string, number>)[timer.color] ?? C.white,
+				}
+			},
+		},
 		offline: {
 			type: 'boolean',
 			name: 'CueDeck: no connection',

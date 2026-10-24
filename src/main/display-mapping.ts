@@ -1,6 +1,9 @@
+import { DEFAULT_TIMER_ADJUSTMENTS, timerAdjustments } from '../shared/timer-controls.js'
+import { sanitizeSlideFadeMs } from '../shared/slide-transition.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { DEFAULT_TAKE_FADE_MS, sanitizeTakeFadeMs } from '../shared/take-transition.js'
 import Store from 'electron-store'
+import { audienceTimerConfig, DEFAULT_AUDIENCE_TIMER, type AudienceTimerConfig } from '../shared/audience-timer.js'
 import { DEFAULT_MATERIAL_SETTINGS, sanitizeMaterialSettings, type MaterialSettings } from '../shared/material-settings.js'
 import { screen } from 'electron'
 import type { DisplayMap, Layout } from './layout.js'
@@ -34,6 +37,7 @@ interface SavedMapping {
 }
 
 interface PersistedShape {
+  audienceTimer: Partial<AudienceTimerConfig>
   materialSettings: MaterialSettings
   mappings: Record<string, SavedMapping>
   lastPdfPath: string | null
@@ -71,6 +75,7 @@ interface PersistedShape {
   clickerGlobal: boolean
   clickerGlobalArrows: boolean
   speakerMsgPresets: string[]
+  timerAdjustments: number[]
   timerPresets: number[]
   outputMonitorsEnabled: boolean
   uiTheme: UiTheme
@@ -99,7 +104,10 @@ interface PersistedShape {
   cleanExit: boolean
 }
 
+// Leave cue flags absent until first restore so pre-hall settings can migrate.
+const { tickEnabled: _tick, gongEnabled: _gong, loop: _loop, ...audienceTimerDefaults } = DEFAULT_AUDIENCE_TIMER
 const STORE_DEFAULTS: PersistedShape = {
+  audienceTimer: audienceTimerDefaults,
   materialSettings: { ...DEFAULT_MATERIAL_SETTINGS },
   mappings: {},
   lastPdfPath: null,
@@ -136,7 +144,8 @@ const STORE_DEFAULTS: PersistedShape = {
   clickerGlobal: false,
   clickerGlobalArrows: false,
   speakerMsgPresets: [...DEFAULT_SPEAKER_MSG_PRESETS],
-  timerPresets: [...DEFAULT_TIMER_PRESETS],
+  timerAdjustments: [...DEFAULT_TIMER_ADJUSTMENTS],
+    timerPresets: [...DEFAULT_TIMER_PRESETS],
   outputMonitorsEnabled: true,
   // Новые установки — светлая (Азат 2026-09-24). У старых тема уже записана в
   // файл настроек явно, их это не переключит.
@@ -310,7 +319,7 @@ export function setSpeakerLayout(v: { sidebarPct: number; nextPct: number | null
 export function sanitizeSpeakerMsgLayout(v: unknown): { pos: { x: number; y: number } | null; scale: number } {
   const raw = (v ?? {}) as { pos?: { x?: unknown; y?: unknown } | null; scale?: unknown }
   const pos = raw.pos && typeof raw.pos === 'object'
-    ? { x: Math.round(clamp01(raw.pos.x, 0.5) * 1000) / 1000, y: Math.round(clamp01(raw.pos.y, 0.15) * 1000) / 1000 }
+    ? { x: Math.round(clamp01(raw.pos.x, 0.5) * 1_000_000) / 1_000_000, y: Math.round(clamp01(raw.pos.y, 0.15) * 1_000_000) / 1_000_000 }
     : null
   return { pos, scale: clampRange(raw.scale, 0.3, 3, 1) }
 }
@@ -364,6 +373,7 @@ export function getPlaylist(): PlaylistEntry[] {
       ...(typeof v.folderId === 'string' ? { folderId: v.folderId } : {}),
     ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
       ...(v.loop ? { loop: true } : {}),
+      ...(typeof v.slideFadeMs === 'number' ? { slideFadeMs: sanitizeSlideFadeMs(v.slideFadeMs) } : {}),
       ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
       ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),
     }
@@ -444,6 +454,21 @@ export function getAudioOutputId(): string | null {
 
 export function setAudioOutputId(id: string | null): void {
   store().set('audioOutputId', id)
+}
+
+export function getAudienceTimer(): AudienceTimerConfig {
+  const raw = store().get('audienceTimer')
+  const config = audienceTimerConfig({ ...raw,
+    tickEnabled: raw.tickEnabled ?? getTimerTickEnabled(),
+    gongEnabled: raw.gongEnabled ?? getTimerGongEnabled(),
+    loop: raw.loop ?? getTimerLoop(),
+  })
+  // Persist the migrated flags once; old speaker preferences no longer run a hidden loop.
+  setAudienceTimer(config)
+  return config
+}
+export function setAudienceTimer(config: AudienceTimerConfig): void {
+  store().set('audienceTimer', audienceTimerConfig(config))
 }
 
 export function getSofficePath(): string | null {
@@ -712,3 +737,6 @@ export function setTakeFadeMs(value: number): void {
 
 export function getMaterialSettings(): MaterialSettings { return sanitizeMaterialSettings(store().get('materialSettings')) }
 export function setMaterialSettings(value: MaterialSettings): void { store().set('materialSettings', sanitizeMaterialSettings(value)) }
+
+export function getTimerAdjustments(): number[] { return timerAdjustments(store().get('timerAdjustments')) }
+export function setTimerAdjustments(values: number[]): void { store().set('timerAdjustments', values) }

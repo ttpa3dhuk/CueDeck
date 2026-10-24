@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createAudienceTimer } from '../src/shared/audience-timer'
 import { encodeOscBundle, encodeOscMessage, parseOscPacket } from '../src/main/remote/osc'
 import { parseDurationMs, rawUrlToUtf8, resolveRemote, type RemoteStateView } from '../src/main/remote/commands'
 import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF } from '../src/shared/types'
@@ -20,6 +21,7 @@ const entry = (id: string, kind = 'pdf') =>
   ({ id, kind, filePath: `/x/${id}`, fileName: id, durationMs: 0 }) as unknown as RemoteStateView['playlist'][number]
 
 const state = (over: Partial<RemoteStateView> = {}): RemoteStateView => ({
+  audienceTimer: createAudienceTimer(),
   timer: { durationMs: 600_000, startedAt: null, elapsedMs: 0, running: false, cycles: 0 },
   timerPosition: 'top-right',
   timerPresets: [5, 10, 15, 20],

@@ -23,6 +23,21 @@ export interface CueDeckState {
 		elapsedMs: number
 		remainingMs: number
 	}
+	audienceTimer?: {
+		text: string
+		color: string
+		overtime: boolean
+		running: boolean
+		visible: boolean
+		mode: string
+		durationMs: number
+		durationText: string
+		elapsedMs: number
+		remainingMs: number
+		loop: boolean
+		tickEnabled: boolean
+		gongEnabled: boolean
+	}
 	program: {
 		name: string | null
 		kind: string | null
@@ -91,6 +106,15 @@ export function presetCounts(s: CueDeckState | null): { timer: number; message: 
 /** Определения переменных: id → подпись в Companion (Variables). */
 export function variableNames(s: CueDeckState | null): Record<string, string> {
 	const out: Record<string, string> = {
+		audience_timer: 'Hall timer: displayed time',
+		audience_timer_color: 'Hall timer colour',
+		audience_timer_over: 'Hall countdown is over',
+		audience_timer_running: 'Hall timer is running',
+		audience_timer_visible: 'Hall timer is shown',
+		audience_timer_mode: 'Hall timer mode',
+		audience_timer_loop: 'Hall timer loop is enabled',
+		audience_timer_tick: 'Hall timer tick is enabled',
+		audience_timer_gong: 'Hall timer gong is enabled',
 		connected: 'CueDeck connected (true / false)',
 		version: 'CueDeck version',
 		timer: 'Timer as shown on the confidence monitor: 04:59, −00:12 (empty when offline)',
@@ -143,6 +167,13 @@ export function variableValues(s: CueDeckState | null): Record<string, VarValue>
 		return {
 			...off,
 			connected: false,
+			audience_timer_over: false,
+			audience_timer_running: false,
+			audience_timer_visible: false,
+			audience_timer_loop: false,
+			audience_timer_tick: false,
+			audience_timer_gong: false,
+
 			timer_over: false,
 			timer_running: false,
 			video_playing: false,
@@ -161,6 +192,16 @@ export function variableValues(s: CueDeckState | null): Record<string, VarValue>
 	const omtOn = !!omt?.on
 	const v: Record<string, VarValue> = {
 		connected: true,
+		audience_timer: s.audienceTimer?.text ?? '',
+		audience_timer_color: s.audienceTimer?.color ?? '',
+		audience_timer_mode: s.audienceTimer?.mode ?? '',
+		audience_timer_over: s.audienceTimer?.overtime ?? false,
+		audience_timer_running: s.audienceTimer?.running ?? false,
+		audience_timer_visible: s.audienceTimer?.visible ?? false,
+		audience_timer_loop: s.audienceTimer?.loop ?? false,
+		audience_timer_tick: s.audienceTimer?.tickEnabled ?? false,
+		audience_timer_gong: s.audienceTimer?.gongEnabled ?? false,
+
 		version: s.version ?? '',
 		timer: s.timer.text,
 		timer_color: s.timer.color,

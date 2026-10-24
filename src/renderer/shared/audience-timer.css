@@ -1,0 +1,15 @@
+.audience-timer {
+  position: absolute;
+  z-index: 6;
+  transform: translate(-50%, -50%);
+  padding: .1em .25em;
+  border-radius: .12em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+}
+.audience-timer.hidden, .audience-timer[hidden] { display: none !important; }

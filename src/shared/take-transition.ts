@@ -11,4 +11,6 @@ export function sanitizeTakeFadeMs(value: unknown): number {
 export interface TakeTransition {
   id: string
   durationMs: number
+  /** In-place slide navigation keeps media on the program route. */
+  scope?: 'slide'
 }

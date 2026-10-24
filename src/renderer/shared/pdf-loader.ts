@@ -139,6 +139,7 @@ export class PdfLoader {
     pageNum: number,
     visibleCanvas: HTMLCanvasElement,
     targetWidth: number,
+    targetHeight = Infinity,
   ): Promise<void> {
     this.latestRequest.set(visibleCanvas, pageNum)
     const off = await this.renderToOffscreen(pageNum, targetWidth)
@@ -150,8 +151,12 @@ export class PdfLoader {
       visibleCanvas.width = off.width
       visibleCanvas.height = off.height
     }
-    visibleCanvas.style.width = `${Math.floor(off.width / dpr)}px`
-    visibleCanvas.style.height = `${Math.floor(off.height / dpr)}px`
+    // Clamp both dimensions with the same factor. Independent max-height and
+    // max-width constraints distort a canvas with an explicit CSS size.
+    const width = off.width / dpr, height = off.height / dpr
+    const fit = Math.min(1, targetWidth / width, targetHeight > 0 ? targetHeight / height : 1)
+    visibleCanvas.style.width = `${width * fit}px`
+    visibleCanvas.style.height = `${height * fit}px`
 
     const ctx = visibleCanvas.getContext('2d')
     if (!ctx) return
@@ -183,8 +188,9 @@ export function renderPageTo(
   pageNum: number,
   visibleCanvas: HTMLCanvasElement,
   targetWidth: number,
+  targetHeight = Infinity,
 ): Promise<void> {
-  return defaultLoader.renderPageTo(pageNum, visibleCanvas, targetWidth)
+  return defaultLoader.renderPageTo(pageNum, visibleCanvas, targetWidth, targetHeight)
 }
 
 export function prerender(pageNum: number, targetWidth: number): Promise<void> {

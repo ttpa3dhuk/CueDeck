@@ -3,6 +3,7 @@ import { app, ipcMain, MessageChannelMain, utilityProcess, type UtilityProcess, 
 import { join } from 'node:path'
 import { libDir } from './libomt.js'
 import { logsDir } from '../diag.js'
+import log from 'electron-log/main'
 import { validOmtAddress } from '../../shared/omt-input.js'
 
 interface Consumer { wc: WebContents; addresses: string[]; worker?: UtilityProcess }
@@ -45,6 +46,16 @@ export function registerOmtInputIpc(): void {
     })
     child = worker
     worker.on('message', message => {
+      if (message.type === 'stats') {
+        const consumer = consumers.get(message.consumer)
+        if (child !== worker || consumer?.worker !== worker || !consumer.addresses.includes(message.address)) return
+        log.info(
+          `omt input #${message.consumer} «${message.address}»: нативно пришло ${message.rawFrames} аудиокадров, ` + // i18n-ok: журнал
+            `макс. пауза между ними ${message.rawMaxGapMs} мс, с последнего кадра ${message.rawSinceLastMs ?? '—'} мс, ` + // i18n-ok: журнал
+            `не дошло до окна ${message.dropped}`, // i18n-ok: журнал
+        )
+        return
+      }
       if (message.type === 'gpu-frame') {
         const consumer = consumers.get(message.consumer)
         const wc = child === worker && consumer?.worker === worker && consumer.addresses.includes(message.address) ? consumer.wc : undefined

@@ -47,3 +47,9 @@ Program commands go **straight to the audience screen**, like the clicker.
 Команда, которой нет в списке действий, — действие **Custom command** и путь из CueDeck → ⚙ Настройки → Внешнее управление → **Список команд…** (например `timer/set/20`).
 
 Команды эфира идут **сразу в зал**, как с кликера.
+
+## Independent hall timer
+
+Prompter timer actions keep their existing IDs and continue to control the confidence monitor. Hall timer actions and the Hall timer preset section control the separate audience clock: start/pause/reset, duration, mode, visibility, loop, tick and gong. Starting also shows the timer. Tick and gong use program audio.
+
+Hall timer feedback and `audience_timer*` variables are separate from `timer*`. Older CueDeck versions without a hall timer leave the new variables empty or false; update CueDeck before using these actions. Existing custom commands `timer/loop`, `timer/tick` and `timer/gong` now target the hall controls.

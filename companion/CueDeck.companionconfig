@@ -16221,7 +16221,7 @@
 										"isExpression": false
 									},
 									"text": {
-										"value": "ЦИКЛ\n↔",
+										"value": "ЗАЛ\nЦИКЛ\n↔",
 										"isExpression": false
 									},
 									"color": {
@@ -16260,7 +16260,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "Цикл таймера: переключить"
+							"notes": "Цикл таймера зала: переключить"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -16406,7 +16406,7 @@
 										"isExpression": false
 									},
 									"text": {
-										"value": "ЦИКЛ\nВКЛ",
+										"value": "ЗАЛ\nЦИКЛ\nВКЛ",
 										"isExpression": false
 									},
 									"color": {
@@ -16445,7 +16445,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "Цикл таймера: включить"
+							"notes": "Цикл таймера зала: включить"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -16591,7 +16591,7 @@
 										"isExpression": false
 									},
 									"text": {
-										"value": "ЦИКЛ\nВЫКЛ",
+										"value": "ЗАЛ\nЦИКЛ\nВЫКЛ",
 										"isExpression": false
 									},
 									"color": {
@@ -16630,7 +16630,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "Цикл таймера: выключить"
+							"notes": "Цикл таймера зала: выключить"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -16776,7 +16776,7 @@
 										"isExpression": false
 									},
 									"text": {
-										"value": "ТИКАНЬЕ\n↔",
+										"value": "ЗАЛ\nТИК\n↔",
 										"isExpression": false
 									},
 									"color": {
@@ -16815,7 +16815,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "Тиканье таймера: переключить"
+							"notes": "Тиканье таймера зала: переключить"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -16961,7 +16961,7 @@
 										"isExpression": false
 									},
 									"text": {
-										"value": "ТИКАНЬЕ\nВКЛ",
+										"value": "ЗАЛ\nТИК\nВКЛ",
 										"isExpression": false
 									},
 									"color": {
@@ -17000,7 +17000,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "Тиканье таймера: включить"
+							"notes": "Тиканье таймера зала: включить"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -17146,7 +17146,7 @@
 										"isExpression": false
 									},
 									"text": {
-										"value": "ТИКАНЬЕ\nВЫКЛ",
+										"value": "ЗАЛ\nТИК\nВЫКЛ",
 										"isExpression": false
 									},
 									"color": {
@@ -17185,7 +17185,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "Тиканье таймера: выключить"
+							"notes": "Тиканье таймера зала: выключить"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -17331,7 +17331,7 @@
 										"isExpression": false
 									},
 									"text": {
-										"value": "ГОНГ\n↔",
+										"value": "ЗАЛ\nГОНГ\n↔",
 										"isExpression": false
 									},
 									"color": {
@@ -17370,7 +17370,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "Гонг таймера: переключить"
+							"notes": "Гонг таймера зала: переключить"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -17518,7 +17518,7 @@
 										"isExpression": false
 									},
 									"text": {
-										"value": "ГОНГ\nВКЛ",
+										"value": "ЗАЛ\nГОНГ\nВКЛ",
 										"isExpression": false
 									},
 									"color": {
@@ -17557,7 +17557,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "Гонг таймера: включить"
+							"notes": "Гонг таймера зала: включить"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -17703,7 +17703,7 @@
 										"isExpression": false
 									},
 									"text": {
-										"value": "ГОНГ\nВЫКЛ",
+										"value": "ЗАЛ\nГОНГ\nВЫКЛ",
 										"isExpression": false
 									},
 									"color": {
@@ -17742,7 +17742,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "Гонг таймера: выключить"
+							"notes": "Гонг таймера зала: выключить"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -19461,226 +19461,4817 @@
 				"minRow": 0,
 				"maxRow": 3
 			}
+		},
+		"5": {
+			"id": "cuedeckHallTimer",
+			"name": "CueDeck: таймер зала",
+			"controls": {
+				"0": {
+					"0": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_running) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nСТАРТ",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Пуск"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002t",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/start",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"1": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nПАУЗА",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Пауза"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002u",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/pause",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"2": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_running) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "$(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10 ? \"ЗАЛ\\n\" + $(custom:cuedeck_audience_timer) : 'нет связи'",
+										"isExpression": true
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Старт / пауза (одна кнопка)"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002v",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/toggle",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"3": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nСБРОС",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Сброс"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002w",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/reset",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"4": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nЗАНОВО",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Сброс и пуск таймера зала"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002x",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/restart",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"5": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 38,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\n+",
+										"isExpression": false
+									},
+									"color": {
+										"value": 9147299,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 60,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text1",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 34,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 66,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "$(local:minutes) + ' мин'",
+										"isExpression": true
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 100,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Добавить время"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002y",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/add/$(local:minutes)",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": [
+							{
+								"id": "lv00002z",
+								"type": "feedback",
+								"definitionId": "user_value",
+								"connectionId": "internal",
+								"variableName": "minutes",
+								"options": {
+									"persist_value": {
+										"value": false,
+										"isExpression": false
+									},
+									"startup_value": {
+										"value": "1",
+										"isExpression": false
+									}
+								},
+								"isInverted": {
+									"value": false,
+									"isExpression": false
+								}
+							}
+						]
+					},
+					"6": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 38,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\n−",
+										"isExpression": false
+									},
+									"color": {
+										"value": 9147299,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 60,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text1",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 34,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 66,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "$(local:minutes) + ' мин'",
+										"isExpression": true
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 100,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Убавить время"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000030",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/sub/$(local:minutes)",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": [
+							{
+								"id": "lv000031",
+								"type": "feedback",
+								"definitionId": "user_value",
+								"connectionId": "internal",
+								"variableName": "minutes",
+								"options": {
+									"persist_value": {
+										"value": false,
+										"isExpression": false
+									},
+									"startup_value": {
+										"value": "1",
+										"isExpression": false
+									}
+								},
+								"isInverted": {
+									"value": false,
+									"isExpression": false
+								}
+							}
+						]
+					},
+					"7": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 38,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nВРЕМЯ",
+										"isExpression": false
+									},
+									"color": {
+										"value": 9147299,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 60,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text1",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 34,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 66,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "$(local:minutes) + ' мин'",
+										"isExpression": true
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 100,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Задать длительность и сбросить прошедшее время (без запуска)"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000032",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/set/$(local:minutes)",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": [
+							{
+								"id": "lv000033",
+								"type": "feedback",
+								"definitionId": "user_value",
+								"connectionId": "internal",
+								"variableName": "minutes",
+								"options": {
+									"persist_value": {
+										"value": false,
+										"isExpression": false
+									},
+									"startup_value": {
+										"value": "5",
+										"isExpression": false
+									}
+								},
+								"isInverted": {
+									"value": false,
+									"isExpression": false
+								}
+							}
+						]
+					}
+				},
+				"1": {
+					"0": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nРЕЖИМ\ncountdown",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Режим: обратный отсчёт / секундомер / часы"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000034",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/mode/countdown",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"1": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nРЕЖИМ\nstopwatch",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Режим: обратный отсчёт / секундомер / часы"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000035",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/mode/stopwatch",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"2": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nРЕЖИМ\nclock",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Режим: обратный отсчёт / секундомер / часы"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000036",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/mode/clock",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"3": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_visible) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nПОКАЗ\n↔",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Показ таймера в зале: переключить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000037",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/visible/toggle",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"4": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_visible) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nПОКАЗ\nВКЛ",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Показ таймера в зале: включить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000038",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/visible/on",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"5": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_visible) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nПОКАЗ\nВЫКЛ",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Показ таймера в зале: выключить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000039",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/visible/off",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"6": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_loop) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nЦИКЛ\n↔",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Цикл таймера зала: переключить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00003a",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/loop/toggle",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"7": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_loop) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nЦИКЛ\nВКЛ",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Цикл таймера зала: включить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00003b",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/loop/on",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					}
+				},
+				"2": {
+					"0": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_loop) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nЦИКЛ\nВЫКЛ",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Цикл таймера зала: выключить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00003c",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/loop/off",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"1": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_tick) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nТИК\n↔",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Тиканье таймера зала: переключить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00003d",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/tick/toggle",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"2": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_tick) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nТИК\nВКЛ",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Тиканье таймера зала: включить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00003e",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/tick/on",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"3": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_tick) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nТИК\nВЫКЛ",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Тиканье таймера зала: выключить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00003f",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/tick/off",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"4": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_gong) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nГОНГ\n↔",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Гонг таймера зала: переключить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00003g",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/gong/toggle",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"5": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_gong) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nГОНГ\nВКЛ",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Гонг таймера зала: включить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00003h",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/gong/on",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"6": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_timer_gong) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "ЗАЛ\nГОНГ\nВЫКЛ",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 18,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Гонг таймера зала: выключить"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00003i",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-timer/gong/off",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					}
+				}
+			},
+			"gridSize": {
+				"minColumn": 0,
+				"maxColumn": 7,
+				"minRow": 0,
+				"maxRow": 3
+			}
 		}
 	},
 	"triggers": {},
 	"triggerCollections": [],
 	"custom_variables": {
+		"cuedeck_audience_timer": {
+			"description": "CueDeck — Таймер зала: текст текущего отсчёта, секундомера или часов",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 0
+		},
+		"cuedeck_audience_timer_color": {
+			"description": "CueDeck — Состояние таймера зала: green / yellow / red / neutral",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 1
+		},
+		"cuedeck_audience_timer_over": {
+			"description": "CueDeck — Время таймера зала вышло: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 2
+		},
+		"cuedeck_audience_timer_running": {
+			"description": "CueDeck — Таймер зала идёт: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 3
+		},
+		"cuedeck_audience_timer_visible": {
+			"description": "CueDeck — Таймер зала показан: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 4
+		},
+		"cuedeck_audience_timer_mode": {
+			"description": "CueDeck — Режим таймера зала: countdown / stopwatch / clock",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 5
+		},
+		"cuedeck_audience_timer_loop": {
+			"description": "CueDeck — Повтор таймера зала включён: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 6
+		},
+		"cuedeck_audience_timer_tick": {
+			"description": "CueDeck — Тиканье таймера зала включено: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 7
+		},
+		"cuedeck_audience_timer_gong": {
+			"description": "CueDeck — Гонг таймера зала включён: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 8
+		},
 		"cuedeck_online": {
 			"description": "CueDeck — CueDeck запущен и шлёт данные: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 0
+			"sortOrder": 9
 		},
 		"cuedeck_seen": {
 			"description": "CueDeck — Когда CueDeck последний раз слал данные (unix-секунды). Отстаёт от $(internal:time_unix) больше чем на 10 с — CueDeck упал или сеть пропала",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 1
+			"sortOrder": 10
 		},
 		"cuedeck_timer": {
 			"description": "CueDeck — Таймер как на суфлёре: 04:59, −00:12 (или часы в режиме «часы»)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 2
+			"sortOrder": 11
 		},
 		"cuedeck_timer_color": {
 			"description": "CueDeck — Цвет таймера: green / yellow / red / neutral",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 3
+			"sortOrder": 12
 		},
 		"cuedeck_timer_over": {
 			"description": "CueDeck — Время вышло (обратный отсчёт ушёл в минус): 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 4
+			"sortOrder": 13
 		},
 		"cuedeck_timer_running": {
 			"description": "CueDeck — Таймер идёт: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 5
+			"sortOrder": 14
 		},
 		"cuedeck_slide": {
 			"description": "CueDeck — Слайд в эфире: 3/12 (пусто, если листать нечего)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 6
+			"sortOrder": 15
 		},
 		"cuedeck_slides_left": {
 			"description": "CueDeck — Сколько слайдов осталось после текущего: 9",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 7
+			"sortOrder": 16
 		},
 		"cuedeck_program": {
 			"description": "CueDeck — Что в эфире (имя записи плейлиста или файла)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 8
+			"sortOrder": 17
 		},
 		"cuedeck_preview": {
 			"description": "CueDeck — Что в превью — уйдёт в зал по ЭФИР",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 9
+			"sortOrder": 18
 		},
 		"cuedeck_next": {
 			"description": "CueDeck — Какую запись поставит в превью «следующий спикер»",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 10
+			"sortOrder": 19
 		},
 		"cuedeck_video": {
 			"description": "CueDeck — Остаток ролика в эфире: 00:13 (пусто, если ролика нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 11
+			"sortOrder": 20
 		},
 		"cuedeck_video_playing": {
 			"description": "CueDeck — Ролик в эфире играет: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 12
+			"sortOrder": 21
 		},
 		"cuedeck_muted": {
 			"description": "CueDeck — Звук эфира выключен: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 13
+			"sortOrder": 22
 		},
 		"cuedeck_blackout": {
 			"description": "CueDeck — Заставка / blackout включены: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 14
+			"sortOrder": 23
 		},
 		"cuedeck_message": {
 			"description": "CueDeck — Сообщение спикеру на суфлёре (пусто — нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 15
+			"sortOrder": 24
 		},
 		"cuedeck_stream_running": {
 			"description": "CueDeck — Трансляция включена (кнопка STREAM нажата): 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 16
+			"sortOrder": 25
 		},
 		"cuedeck_stream_warn": {
 			"description": "CueDeck — С трансляцией что-то не так — площадка переподключается, нет картинки, сеть не успевает: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 17
+			"sortOrder": 26
 		},
 		"cuedeck_stream_live": {
 			"description": "CueDeck — Сколько площадок сейчас в эфире: 2",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 18
+			"sortOrder": 27
 		},
 		"cuedeck_stream_total": {
 			"description": "CueDeck — Сколько площадок включено всего: 3",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 19
+			"sortOrder": 28
 		},
 		"cuedeck_timer_preset_1": {
 			"description": "CueDeck — Пресет таймера 1, минуты: 5 (пусто, если пресета нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 20
+			"sortOrder": 29
 		},
 		"cuedeck_timer_preset_2": {
 			"description": "CueDeck — Пресет таймера 2, минуты: 10 (пусто, если пресета нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 21
+			"sortOrder": 30
 		},
 		"cuedeck_timer_preset_3": {
 			"description": "CueDeck — Пресет таймера 3, минуты: 15 (пусто, если пресета нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 22
+			"sortOrder": 31
 		},
 		"cuedeck_timer_preset_4": {
 			"description": "CueDeck — Пресет таймера 4, минуты: 20 (пусто, если пресета нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 23
+			"sortOrder": 32
 		},
 		"cuedeck_program_index": {
 			"description": "CueDeck — Номер записи плейлиста в эфире, как на карточке: 3 (пусто, если в эфире не из плейлиста)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 24
+			"sortOrder": 33
 		},
 		"cuedeck_preview_index": {
 			"description": "CueDeck — Номер записи плейлиста в превью, как на карточке: 4 (пусто, если нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 25
+			"sortOrder": 34
 		},
 		"cuedeck_message_preset_1": {
 			"description": "CueDeck — Текст пресета сообщения 1 (пусто, если пресета нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 26
+			"sortOrder": 35
 		},
 		"cuedeck_message_preset_2": {
 			"description": "CueDeck — Текст пресета сообщения 2 (пусто, если пресета нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 27
+			"sortOrder": 36
 		},
 		"cuedeck_message_preset_3": {
 			"description": "CueDeck — Текст пресета сообщения 3 (пусто, если пресета нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 28
+			"sortOrder": 37
 		},
 		"cuedeck_message_preset_4": {
 			"description": "CueDeck — Текст пресета сообщения 4 (пусто, если пресета нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 29
+			"sortOrder": 38
 		},
 		"cuedeck_message_preset_5": {
 			"description": "CueDeck — Текст пресета сообщения 5 (пусто, если пресета нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 30
+			"sortOrder": 39
 		},
 		"cuedeck_message_preset_6": {
 			"description": "CueDeck — Текст пресета сообщения 6 (пусто, если пресета нет)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 31
+			"sortOrder": 40
 		},
 		"cuedeck_omt_on": {
 			"description": "CueDeck — Выход OMT «Зал» включён: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 32
+			"sortOrder": 41
 		},
 		"cuedeck_omt_program": {
 			"description": "CueDeck — vMix держит «Зал» в эфире (красная лампа OMT): 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 33
+			"sortOrder": 42
 		},
 		"cuedeck_omt_preview": {
 			"description": "CueDeck — vMix держит «Зал» в превью (зелёная лампа OMT): 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 34
+			"sortOrder": 43
 		},
 		"cuedeck_omt_receivers": {
 			"description": "CueDeck — Сколько получателей забирают «Зал» по OMT: 2",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 35
+			"sortOrder": 44
 		}
 	},
 	"customVariablesCollections": [],

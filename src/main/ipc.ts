@@ -1,16 +1,22 @@
+import { timerAdjustments } from '../shared/timer-controls.js'
 import { materialTakeTimer, sanitizeMaterialSettings, validMaterialDuration } from '../shared/material-settings.js'
 import { setMaterialSettings } from './display-mapping.js'
 import { initialSlideVideo } from '../shared/slide-video.js'
+import { slideNavigationPatch, sanitizeSlideFadeMs } from '../shared/slide-transition.js'
+import { recoveryTakeFrame } from '../shared/recovery-take.js'
 import { createClickerNavigation } from './clicker-navigation.js'
+import { audienceTimerConfig, createAudienceTimer } from '../shared/audience-timer.js'
+import { createAudienceTimerCommands } from './audience-timer.js'
+import { getAudienceTimer, setAudienceTimer } from './display-mapping.js'
 import { createClickerShortcutManager } from './clicker-shortcuts.js'
 import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders } from '../shared/playlist-folders.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { sanitizeTakeFadeMs, type TakeTransition } from '../shared/take-transition.js'
 import { app, dialog, globalShortcut, ipcMain, screen, shell } from 'electron'
 import { homedir } from 'node:os'
-import { access, copyFile, readFile, rm } from 'node:fs/promises'
+import { access, copyFile, mkdir, readFile, rm, stat } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { basename, join } from 'node:path'
+import { basename, isAbsolute, join } from 'node:path'
 import type { DisplayMap, Layout } from './layout.js'
 import type {
   DeckState,
@@ -30,7 +36,7 @@ import { getLang, parseLang, t } from '../shared/i18n.js'
 import { isLiveUri, liveDisplayName, makeLiveUri, parseLiveUri } from '../shared/live.js'
 import type { LiveSource } from '../shared/live.js'
 import { computePdfSha1, computeStatSha1, loadNotes, notesWriter, sha1FromBuffer, sidecarPathFor } from './notes-store.js'
-import { applyLayout, getOperatorWindow } from './windows.js'
+import { applyLayout, getOperatorWindow, getActiveWindows, ghostWindow } from './windows.js'
 import {
   saveMapping,
   getLastPdfPath,
@@ -78,6 +84,7 @@ import {
   setClickerGlobalArrows,
   setSpeakerMsgPresets,
   setTimerPresets,
+  setTimerAdjustments,
   setOutputMonitorsEnabled,
   setUiTheme,
   getUiLang,
@@ -89,10 +96,10 @@ import { cachedPdfPathFor, convertPptxToPdf, findSoffice, LibreOfficeMissingErro
 import { beginProjectTransfer, endProjectTransfer, isProjectTransferRunning, transferProject } from './project-transfer.js'
 import { runPptxWork } from './pptx-work.js'
 import type { ProjectTransferStatus } from '../shared/types.js'
-import { exportProjectCache, forgetProjectCache, useProjectCache } from './project-cache.js'
+import { clearLocalCache, exportProjectCache, forgetProjectCache, localCacheStats, localPptxCacheDir, useProjectCache } from './project-cache.js'
 import { preparePptxMedia } from './pptx-media.js'
 import { substitutedFonts } from './pptx-fonts.js'
-import { log } from './diag.js'
+import { log, setRecoveryStager } from './diag.js'
 import { adjustPatch } from '../renderer/shared/timer.js'
 import { addFonts, addedFontsCount, removeAddedFonts, type FontHooks } from './user-fonts.js'
 import { installWinFont, uninstallWinFont } from './win-fonts.js'
@@ -236,7 +243,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
       pptxNotes = prepared.pageNotes
       pptxNotesBySha1.set(sha1, pptxNotes)
       try {
-        const cachedPath = await convertPptxToPdf(prepared.convertSource, sha1)
+        const cachedPath = await convertPptxToPdf(prepared.convertSource, sha1, filePath)
         const buf = await readFile(cachedPath)
         totalSlides = countPdfPages(buf)
         if (opts.reportFontIssues !== false) setFontIssues(filePath, substitutedFonts(prepared.fonts, buf))
@@ -476,6 +483,7 @@ async function loadPreview(
   try {
     const info = await inspectFile(filePath)
     store.patchPreview({
+      recoveryTake: false,
       path: filePath,
       sha1: info.sha1,
       kind: info.kind,
@@ -501,9 +509,8 @@ async function loadPreview(
 
 /** Entering a PPTX slide restarts its clip using the source playback policy. */
 function changeProgramSlide(slide: number): void {
-  const s = store.get()
-  store.patch({ currentSlide: slide, ...(s.fileKind === 'pptx'
-    ? initialSlideVideo(s.fileKind, s.slideMedia, slide, s.video.muted) : {}) })
+  const patch = slideNavigationPatch(store.get(), slide, randomUUID())
+  if (patch) store.patch(patch)
 }
 
 function resetPreviewVideoOnSlideChange(): void {
@@ -690,6 +697,7 @@ export async function saveProject(
       playlist: state.playlist,
       playlistFolders: state.playlistFolders,
       keyVisualPath: state.keyVisualPath,
+      audienceTimer: audienceTimerConfig(state.audienceTimer),
     })
     store.patch({ projectPath: target })
     setProjectPath(target)
@@ -700,6 +708,30 @@ export async function saveProject(
 }
 
 export function registerIpcHandlers(): void {
+  setRecoveryStager(async plan => {
+    if (isProjectTransferRunning()) throw new Error(t('Дождись окончания сборки проекта'))
+    const folderId = randomUUID()
+    const entries = plan.project.playlist.map(entry => ({ ...entry, id: randomUUID(), folderId }))
+    if (plan.preview) {
+      const entry = entries.find(item => item.filePath === plan.preview!.path)
+      const result = await loadPreview(plan.preview.path, { playlistId: entry?.id ?? null })
+      if (!result.ok) throw new Error(result.error ?? t('Не удалось открыть материалы отчёта'))
+      const preview = store.get().preview
+      store.patchPreview({
+        recoveryTake: true,
+        currentSlide: Math.max(1, Math.min(preview.totalSlides || 1, plan.preview.slide)),
+        video: { ...preview.video, playing: false, muted: true, anchorSec: plan.preview.positionSec, anchorAt: null },
+      })
+    }
+    if (entries.length) {
+      const state = store.get()
+      store.patch({
+        playlist: [...state.playlist, ...entries],
+        playlistFolders: [...state.playlistFolders, { id: folderId, name: t('Материалы отчёта') }],
+      })
+      persistPlaylist()
+    }
+  })
   ipcMain.handle('pdf:open-dialog', async () => {
     const op = getOperatorWindow()
     const res = await dialog.showOpenDialog(op!, {
@@ -898,14 +930,17 @@ export function registerIpcHandlers(): void {
       return
     }
 
-    const takeSlide =
+    const recovery = recoveryTakeFrame(p, store.previewVideoPositionSec())
+    const takeSlide = recovery?.slide ?? (
       (p.kind === 'pdf' || p.kind === 'pptx') && state.slideTakeMode === 'from-start'
-        ? 1 : p.currentSlide
+        ? 1 : p.currentSlide)
     const sourceVideo = initialSlideVideo(p.kind, p.slideMedia, takeSlide, state.video.muted)
     // New program video: always autoplayed on take; mode only picks start point.
     // PPTX uses the playback mode authored in its media timing.
     let video: import('./state.js').VideoState
-    if (p.kind === 'video') {
+    if (recovery) {
+      video = recovery.video
+    } else if (p.kind === 'video') {
       const mode = state.videoTakeMode
       // «Стоп на первом кадре»: ролик уходит в эфир замороженным на нулевой
       // позиции — первый кадр работает заставкой, а запускает его кликер
@@ -932,6 +967,7 @@ export function registerIpcHandlers(): void {
     // takes ping-pong the two decks. If program was empty, preview becomes empty.
     const oldProgramPos = store.videoPositionSec()
     const newPreview: DeckState = {
+      recoveryTake: false,
       path: state.pdfPath,
       sha1: state.pdfSha1,
       kind: state.fileKind,
@@ -962,7 +998,7 @@ export function registerIpcHandlers(): void {
       video,
       // Цикл берём у выдаваемой записи: ролик-заставка должен уйти в эфир
       // зациклённым сразу, без второго действия оператора.
-      videoLoop: p.kind === 'pptx' ? sourceVideo.videoLoop : Boolean(
+      videoLoop: recovery ? false : p.kind === 'pptx' ? sourceVideo.videoLoop : Boolean(
         p.playlistId ? state.playlist.find((e) => e.id === p.playlistId)?.loop : false,
       ),
       preview: newPreview,
@@ -971,7 +1007,7 @@ export function registerIpcHandlers(): void {
     setCurrentPlaylistId(p.playlistId)
 
     const entry = p.playlistId ? state.playlist.find((e) => e.id === p.playlistId) : undefined
-    if (entry) {
+    if (entry && !recovery) {
       store.patchTimer(materialTakeTimer(entry.durationMs, p.kind, state.timerMode, state.materialSettings.autoStartTimer, Date.now()))
       setLastDurationMs(entry.durationMs)
     }
@@ -1048,6 +1084,17 @@ export function registerIpcHandlers(): void {
     if (pdfPath && pdfSha1) notesWriter.schedule(pdfPath, pdfSha1, ownNotes(pdfSha1, notes))
   })
 
+  const audienceTimer = createAudienceTimerCommands(store, setAudienceTimer)
+  setInterval(() => audienceTimer.tick(), 100)
+  for (const action of ['start', 'pause', 'reset'] as const) {
+    ipcMain.handle(`audience-timer:${action}`, () => {
+      audienceTimer.action(action)
+    })
+  }
+  ipcMain.handle('audience-timer:adjust', (_e, deltaMs: unknown) => audienceTimer.adjust(deltaMs))
+  ipcMain.handle('audience-timer:visible', (_e, visible: unknown) => audienceTimer.setVisible(visible))
+  ipcMain.handle('audience-timer:configure', (_e, config: unknown) => audienceTimer.configure(config))
+
   ipcMain.handle('timer:start', () => {
     const t = store.get().timer
     if (t.running) return
@@ -1112,7 +1159,7 @@ export function registerIpcHandlers(): void {
   // Свободное положение таймера на суфлёре: центр в долях экрана (0..1).
   ipcMain.handle('timer:set-free', (_e, x: number, y: number) => {
     const c = (v: number): number => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5)
-    const pos = { x: Math.round(c(x) * 1000) / 1000, y: Math.round(c(y) * 1000) / 1000 }
+    const pos = { x: Math.round(c(x) * 1_000_000) / 1_000_000, y: Math.round(c(y) * 1_000_000) / 1_000_000 }
     store.patch({ timerFree: pos, timerPosition: 'free' })
     setTimerFree(pos)
     setTimerPosition('free')
@@ -1156,24 +1203,30 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('timer:set-tick-sound', (_e, enabled: boolean) => {
     const v = Boolean(enabled)
-    store.patch({ timerTickEnabled: v })
+    audienceTimer.configure({ tickEnabled: v })
     setTimerTickEnabled(v)
   })
 
   ipcMain.handle('timer:set-gong-sound', (_e, enabled: boolean) => {
     const v = Boolean(enabled)
-    store.patch({ timerGongEnabled: v })
+    audienceTimer.configure({ gongEnabled: v })
     setTimerGongEnabled(v)
   })
 
   ipcMain.handle('timer:set-loop', (_e, enabled: boolean) => {
     const v = Boolean(enabled)
-    store.patch({ timerLoop: v })
+    audienceTimer.configure({ loop: v })
     setTimerLoop(v)
   })
 
   // Minutes of the four preset buttons are user-editable (ПКМ по кнопке);
   // invalid/empty slots fall back to the defaults slot by slot.
+  ipcMain.handle('timer:set-adjustments', (_e, values: unknown) => {
+    const clean = timerAdjustments(values)
+    store.patch({ timerAdjustments: clean })
+    setTimerAdjustments(clean)
+  })
+
   ipcMain.handle('timer:set-presets', (_e, presets: number[]) => {
     const arr = Array.isArray(presets) ? presets : []
     const clean = DEFAULT_TIMER_PRESETS.map((def, i) => {
@@ -1183,20 +1236,6 @@ export function registerIpcHandlers(): void {
     store.patch({ timerPresets: clean })
     setTimerPresets(clean)
   })
-
-  // Цикличный таймер: на нуле перезапускаем круг. cycles++ — сигнал рендерерам
-  // (гонг/вспышка), даже если между их тиками ноль «проскочил». Только countdown
-  // и только при ненулевой длительности (иначе бесконечный спин рестартов).
-  setInterval(() => {
-    const s = store.get()
-    const t = s.timer
-    if (!s.timerLoop || s.timerMode !== 'countdown' || !t.running || t.startedAt === null) return
-    if (t.durationMs <= 0) return
-    const elapsed = t.elapsedMs + (Date.now() - t.startedAt)
-    if (elapsed >= t.durationMs) {
-      store.patchTimer({ startedAt: Date.now(), elapsedMs: 0, cycles: t.cycles + 1 })
-    }
-  }, 250)
 
   ipcMain.handle('notes:set-font-size', (_e, px: number) => {
     const clamped = Math.max(10, Math.min(72, Math.round(px)))
@@ -1359,6 +1398,16 @@ export function registerIpcHandlers(): void {
   })
 
   // Мониторы выходов под эфиром (живые снимки окон суфлёра/зала)
+  ipcMain.handle('monitor:audience-size', (event) => {
+    if (event.sender !== getOperatorWindow()?.webContents) return { width: 1920, height: 1080 }
+    const win = getActiveWindows().get('audience') ?? ghostWindow('audience')
+    if (win && !win.isDestroyed()) {
+      const [width, height] = win.getContentSize()
+      return { width, height }
+    }
+    const display = screen.getAllDisplays().find(d => d.id === store.get().displayMap.audience)
+    return { width: display?.size.width ?? 1920, height: display?.size.height ?? 1080 }
+  })
   ipcMain.handle('monitor:set-enabled', (_e, enabled: boolean) => {
     const v = Boolean(enabled)
     store.patch({ outputMonitorsEnabled: v })
@@ -1693,6 +1742,7 @@ export function registerIpcHandlers(): void {
         durationMs?: number
         liveFit?: LiveFit
         loop?: boolean
+        slideFadeMs?: number
       },
     ) => {
       const next = store.get().playlist.map((e) =>
@@ -1705,6 +1755,8 @@ export function registerIpcHandlers(): void {
                 typeof payload.durationMs === 'number' ? payload.durationMs : e.durationMs,
               liveFit: payload.liveFit ?? e.liveFit,
               loop: typeof payload.loop === 'boolean' ? payload.loop : e.loop,
+              ...(typeof payload.slideFadeMs === 'number' && (e.kind === 'pdf' || e.kind === 'pptx')
+                ? { slideFadeMs: sanitizeSlideFadeMs(payload.slideFadeMs) } : {}),
             }
           : e,
       )
@@ -1820,6 +1872,46 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('soffice:check', async () => {
     return Boolean(await findSoffice())
+  })
+
+  const activePptxHashes = (): Set<string> => {
+    const state = store.get()
+    const hashes = new Set<string>()
+    if (state.fileKind === 'pptx' && state.pdfSha1) hashes.add(state.pdfSha1)
+    if (state.preview.kind === 'pptx' && state.preview.sha1) hashes.add(state.preview.sha1)
+    return hashes
+  }
+
+  ipcMain.handle('pptx-cache:stats', () => runPptxWork(() => localCacheStats(activePptxHashes())))
+  ipcMain.handle('pptx-cache:open-folder', async () => {
+    try {
+      const path = localPptxCacheDir()
+      await mkdir(path, { recursive: true })
+      const error = await shell.openPath(path)
+      return error ? { ok: false, error } : { ok: true }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+  ipcMain.handle('pptx-cache:clear', async () => {
+    if (isProjectTransferRunning()) return { ok: false, error: t('Дождись окончания сборки проекта перед очисткой кэша') }
+    const stats = await runPptxWork(() => localCacheStats(activePptxHashes()))
+    if (stats.bytes === stats.protectedBytes) return { ok: true, clearedBytes: 0, remainingBytes: stats.protectedBytes }
+    const { response } = await dialog.showMessageBox(getOperatorWindow()!, {
+      type: 'warning',
+      buttons: [t('Отмена'), t('Очистить кэш')],
+      defaultId: 0,
+      cancelId: 0,
+      message: t('Очистить локальный кэш презентаций?'),
+      detail: t('Удалённые PPTX при следующем выборе конвертируются заново. Открытые сейчас презентации и кэш собранных проектов останутся.'),
+    })
+    if (response !== 1) return { ok: false, cancelled: true }
+    try {
+      const cleared = await runPptxWork(() => clearLocalCache(activePptxHashes()))
+      return { ok: true, clearedBytes: cleared.bytes, remainingBytes: cleared.protectedBytes }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
   })
 
   /**
@@ -1955,6 +2047,7 @@ export function registerIpcHandlers(): void {
       currentPlaylistId: savedPlaylistId,
       keyVisualPath: savedKeyVisual,
       projectPath: savedProjectPath,
+      audienceTimer: createAudienceTimer(getAudienceTimer()),
     })
 
     void refreshMissingFiles()
@@ -1992,6 +2085,7 @@ export function registerIpcHandlers(): void {
       blackout: false,
       preview: initialDeckState(),
       speakerMessage: null,
+      audienceTimer: createAudienceTimer(getAudienceTimer()),
     })
   })
 
@@ -2023,6 +2117,7 @@ export function registerIpcHandlers(): void {
           playlist: loaded.playlist,
           playlistFolders: loaded.playlistFolders,
           keyVisualPath: loaded.keyVisualPath,
+          audienceTimer: createAudienceTimer(loaded.audienceTimer ?? getAudienceTimer()),
           currentPlaylistId: null,
           projectPath: path,
           pdfPath: null,
@@ -2036,6 +2131,7 @@ export function registerIpcHandlers(): void {
         })
         persistPlaylist()
         setKeyVisualPath(loaded.keyVisualPath)
+        if (loaded.audienceTimer) setAudienceTimer(loaded.audienceTimer)
         setCurrentPlaylistId(null)
         setProjectPath(path)
         setLastPdfPath(null)
@@ -2131,6 +2227,7 @@ export function registerIpcHandlers(): void {
       const result = await transferProject({
         parent: res.filePaths[0], name,
         playlist: snapshot.playlist, playlistFolders: snapshot.playlistFolders, keyVisualPath: snapshot.keyVisualPath,
+        audienceTimer: audienceTimerConfig(snapshot.audienceTimer),
         progress,
         prepare: async (source, target, directory) => {
           if (kindOf(source) !== 'pptx') return []
@@ -2164,11 +2261,27 @@ export function registerIpcHandlers(): void {
     },
   )
 
-  /**
-   * Указать файл заново для конкретной записи: материал переехал, но запись со
-   * всеми настройками (комментарий, имя, таймер) должна остаться. Меняем путь,
-   * имя файла и kind — вместо «удалить и завести заново».
-   */
+  /** Only known playlist sources may be revealed, never a renderer-supplied arbitrary path. */
+  ipcMain.handle('playlist:reveal-source', async (_e, id: unknown, itemPath?: unknown) => {
+    const entry = typeof id === 'string' ? store.get().playlist.find((item) => item.id === id) : undefined
+    const path = entry?.kind === 'list'
+      ? entry.items?.find((item) => item.path === itemPath)?.path
+      : entry?.kind !== 'live' ? entry?.filePath : undefined
+    if (!path || !isAbsolute(path) || isLiveUri(path)) {
+      return { ok: false, error: t('У этого материала нет исходного файла') }
+    }
+    try {
+      if (!(await stat(path)).isFile()) throw new Error('Not a file')
+    } catch {
+      return { ok: false, error: t('Исходный файл не найден: {name}', { name: basename(path) }) }
+    }
+    try {
+      shell.showItemInFolder(path)
+      return { ok: true }
+    } catch { return { ok: false, error: t('Не удалось показать исходный файл') } }
+  })
+
+  /** Relink a moved material while preserving its playlist settings. */
   ipcMain.handle('playlist:relocate', async (_e, id: string): Promise<boolean> => {
     const entry = store.get().playlist.find((e) => e.id === id)
     // У списка материалов много — их чинит «Найти в папке…» или правка списка.

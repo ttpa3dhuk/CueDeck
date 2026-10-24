@@ -33,9 +33,14 @@ export class ReportMaterialSelection {
   }
 
   async read(token: string): Promise<{ name: string; data: Buffer }[]> {
+    return (await this.readWithSources(token)).map(({ name, data }) => ({ name, data }))
+  }
+
+  /** Source paths stay in main and are used only to map approved originals into the snapshot. */
+  async readWithSources(token: string): Promise<{ name: string; data: Buffer; sourcePath: string }[]> {
     const selection = this.selection
     if (!selection || token !== selection.token) throw new Error(t('Выберите материалы для отчёта заново.'))
-    const result: { name: string; data: Buffer }[] = []
+    const result: { name: string; data: Buffer; sourcePath: string }[] = []
     for (const [index, file] of selection.files.entries()) {
       const handle = await open(file.path, 'r')
       try {
@@ -56,8 +61,9 @@ export class ReportMaterialSelection {
           throw new Error(t('Материалы изменились после выбора. Выберите файлы заново.'))
         }
         // Separate numbered folders preserve duplicate basenames and Unicode.
-        const safeName = file.name.replace(/[\\/\x00-\x1f]/g, '_') || 'file'
-        result.push({ name: `materials/${index + 1}/${safeName}`, data })
+        const safeBase = file.name.replace(/[\\/<>:\x22|?*\x00-\x1f]/g, '_').replace(/[. ]+$/g, '') || 'file'
+        const safeName = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(safeBase) ? `_${safeBase}` : safeBase
+        result.push({ name: `materials/${index + 1}/${safeName}`, data, sourcePath: file.path })
       } finally { await handle.close() }
     }
     return result

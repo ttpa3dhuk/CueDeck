@@ -1,4 +1,5 @@
 import type { TakeTransition } from '../../shared/take-transition'
+import { paddingBox } from './element-box'
 
 type Source = HTMLCanvasElement | HTMLImageElement | HTMLVideoElement
 
@@ -15,9 +16,11 @@ export class TakeFade {
   constructor(private host: HTMLElement, private sources: Source[]) {}
 
   begin(event: TakeTransition | null, oldVideoInPreview = false): void {
-    // An ordinary file open or Cut interrupts an unfinished fade immediately.
-    if (!event || event.durationMs <= 0) { this.cancel(); return }
-    const rect = this.host.getBoundingClientRect()
+    // Slide cuts still need a readiness barrier: load() clears the outgoing
+    // video frame before the next decoder has produced its first picture.
+    if (!event || (event.durationMs <= 0 && event.scope !== 'slide')) { this.cancel(); return }
+    // The frame occupies the padding box, excluding the visible deck border.
+    const rect = paddingBox(this.host)
     if (!rect.width || !rect.height) { this.cancel(); return }
     const frame = document.createElement('canvas')
     frame.width = Math.ceil(rect.width * devicePixelRatio)
@@ -33,10 +36,10 @@ export class TakeFade {
       const bounds = source.getBoundingClientRect()
       if (!bounds.width || !bounds.height) continue
       this.draw(ctx, source, bounds, rect, getComputedStyle(source).objectFit)
-      if (source instanceof HTMLVideoElement && source.readyState >= 2 && !source.paused) {
+      if (event.durationMs > 0 && source instanceof HTMLVideoElement && source.readyState >= 2 && !source.paused) {
         // The two media decks swap on TAKE. The old file is now served by preview.
         // Clones are always silent, so they never add a second audio route.
-        if (!source.srcObject && !oldVideoInPreview) continue
+        if (!source.srcObject && !oldVideoInPreview && event.scope !== 'slide') continue
         const clip = document.createElement('video')
         clip.muted = true
         clip.playsInline = true
@@ -44,7 +47,7 @@ export class TakeFade {
         clip.style.clipPath = getComputedStyle(source).clipPath
         if (source.srcObject) clip.srcObject = source.srcObject
         else {
-          clip.src = source.src.replace('://stream/program?', '://stream/preview?')
+          clip.src = event.scope === 'slide' ? source.src : source.src.replace('://stream/program?', '://stream/preview?')
             .replace('://stream/slide/program/', '://stream/slide/preview/')
           const position = source.currentTime
           clip.addEventListener('loadedmetadata', () => { clip.currentTime = position }, { once: true })
@@ -90,6 +93,7 @@ export class TakeFade {
       if (signal.aborted || this.frame !== frame) return
     }
     if (signal.aborted || this.frame !== frame || this.animation) return
+    if (event.durationMs <= 0) { this.cancel(); return }
     if (this.timeout) clearTimeout(this.timeout)
     this.timeout = null
     this.animation = frame.animate([{ opacity: 1 }, { opacity: 0 }], {
@@ -121,7 +125,7 @@ export class TakeFade {
     this.id = null
   }
 
-  private draw(ctx: CanvasRenderingContext2D, source: Source, r: DOMRect, host: DOMRect, fit: string): void {
+  private draw(ctx: CanvasRenderingContext2D, source: Source, r: DOMRect, host: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>, fit: string): void {
     const w = source instanceof HTMLVideoElement ? source.videoWidth
       : source instanceof HTMLImageElement ? source.naturalWidth : source.width
     const h = source instanceof HTMLVideoElement ? source.videoHeight

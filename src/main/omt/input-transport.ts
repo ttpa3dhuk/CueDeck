@@ -6,6 +6,10 @@ export class OmtInputTransport {
   private addresses = new Set<string>()
   private sequence: number
   private closed = false
+  /** Frames dropped because the renderer did not acknowledge its window. */
+  droppedVideo = 0
+  /** Audio frames dropped before the port: PCM that never reached the renderer. */
+  droppedAudio = 0
   constructor(private send: (packet: OmtInputPacket) => void, initialSequence = 0) { this.sequence = initialSequence }
   retain(addresses: string[]): void {
     this.addresses = new Set(addresses)
@@ -18,7 +22,11 @@ export class OmtInputTransport {
     if (this.closed || !this.addresses.has(address)) return
     let outstanding = 0
     for (const packet of this.pending.values()) if (packet.address === address && packet.type === frame.type) outstanding++
-    if (outstanding >= (frame.type === 'video' ? 2 : 24)) return
+    if (outstanding >= (frame.type === 'video' ? 2 : 24)) {
+      if (frame.type === 'audio') this.droppedAudio++
+      else this.droppedVideo++
+      return
+    }
     const sequence = ++this.sequence
     this.pending.set(sequence, { address, type: frame.type })
     try { this.send({ address, sequence, frame }) }

@@ -30,6 +30,7 @@ import {
   setAskLayoutOnStartup,
   getLastDurationMs,
   getMaterialSettings,
+  getAudienceTimer,
   getTimerMode,
   getTimerPosition,
   getTimerScale,
@@ -56,6 +57,7 @@ import {
   getClickerGlobalArrows,
   getSpeakerMsgPresets,
   getTimerPresets,
+  getTimerAdjustments,
   getOutputMonitorsEnabled,
   getUiTheme,
   getUiLang,
@@ -65,6 +67,7 @@ import {
 } from './display-mapping.js'
 import { startOutputMonitor } from './output-monitor.js'
 import { store } from './state.js'
+import { createAudienceTimer } from '../shared/audience-timer.js'
 
 export const MEDIA_SCHEME = 'cuedeck-media'
 
@@ -458,6 +461,7 @@ app.whenReady().then(async () => {
   store.patch({
     timer: { ...store.get().timer, durationMs: getLastDurationMs() },
     materialSettings: getMaterialSettings(),
+    audienceTimer: createAudienceTimer(getAudienceTimer()),
     timerMode: getTimerMode(),
     timerPosition: getTimerPosition(),
     timerScale: getTimerScale(),
@@ -482,6 +486,7 @@ app.whenReady().then(async () => {
     timerLoop: getTimerLoop(),
     speakerMsgPresets: getSpeakerMsgPresets(),
     timerPresets: getTimerPresets(),
+    timerAdjustments: getTimerAdjustments(),
     outputMonitorsEnabled: getOutputMonitorsEnabled(),
     uiTheme: getUiTheme(),
     // Re-register the global clicker if it was on; reflect actual success

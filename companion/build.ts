@@ -657,9 +657,9 @@ function build(lang: Lang, file: string): void {
     'take/slide-mode': ['СЛАЙДЫ', 'SLIDES'],
     'preview/video/forward': ['ПРЕВЬЮ\n+10с', 'PREVIEW\n+10s'],
     'preview/video/back': ['ПРЕВЬЮ\n-10с', 'PREVIEW\n-10s'],
-    'timer/loop': ['ЦИКЛ', 'LOOP'],
-    'timer/tick': ['ТИКАНЬЕ', 'TICK'],
-    'timer/gong': ['ГОНГ', 'GONG'],
+    'timer/loop': ['ЗАЛ\nЦИКЛ', 'HALL\nLOOP'],
+    'timer/tick': ['ЗАЛ\nТИК', 'HALL\nTICK'],
+    'timer/gong': ['ЗАЛ\nГОНГ', 'HALL\nGONG'],
     'omt/timer': ['OMT\nТАЙМЕР', 'OMT\nTIMER'],
     'omt/program': ['OMT\nЗАЛ', 'OMT\nMAIN'],
     'omt/prompter': ['OMT\nСУФЛЁР', 'OMT\nPROMPTER'],
@@ -693,6 +693,30 @@ function build(lang: Lang, file: string): void {
     })
     pageDefs.push({ id: `cuedeckExtra${offset}`, name: `CueDeck: Remote ${offset / 32 + 1}`, grid: extraGrid })
   }
+  // A separate page keeps the two independent timers unambiguous.
+  const hallLabels: Record<string, [string, string]> = {
+    start: ['СТАРТ', 'START'], pause: ['ПАУЗА', 'PAUSE'], toggle: ['ПУСК/ПАУЗА', 'PLAY/PAUSE'],
+    reset: ['СБРОС', 'RESET'], restart: ['ЗАНОВО', 'RESTART'], set: ['ВРЕМЯ', 'DURATION'], add: ['+', '+'], sub: ['−', '−'],
+    mode: ['РЕЖИМ', 'MODE'], visible: ['ПОКАЗ', 'SHOW'], loop: ['ЦИКЛ', 'LOOP'], tick: ['ТИК', 'TICK'], gong: ['ГОНГ', 'GONG'],
+  }
+  const hallCommands = REMOTE_COMMANDS.filter(c => c.path.startsWith('audience-timer/'))
+    .flatMap(c => (c.values ?? [c.example ?? '']).map(value => ({ c, value })))
+  const hallGrid: Record<number, Record<number, ReturnType<typeof button>>> = {}
+  hallCommands.forEach(({c, value}, i) => {
+    const [, action, state] = c.path.split('/')
+    const editableDuration = ['set', 'add', 'sub'].includes(action)
+    const flag = ['visible', 'loop', 'tick', 'gong'].includes(action) ? action : action === 'start' || action === 'toggle' ? 'running' : null
+    const label = `${lang === 'ru' ? 'ЗАЛ' : 'HALL'}\n${hallLabels[action]?.[lang === 'ru' ? 0 : 1] ?? action}`
+      + (state ? `\n${extraValues[state]?.[lang === 'ru' ? 0 : 1] ?? state}` : value && !editableDuration ? `\n${value}` : '')
+    ;(hallGrid[Math.floor(i / 8)] ??= {})[i % 8] = button({
+      cmd: editableDuration ? c.path + '/$(local:minutes)' : c.path + (value ? `/${value}` : ''),
+      ...(editableDuration ? {locals: {minutes: value}, value: x(`$(local:minutes) + '${lang === 'ru' ? ' мин' : ' min'}'`)} : {}),
+      label: action === 'toggle' ? x(`${online} ? ${JSON.stringify((lang === 'ru' ? 'ЗАЛ' : 'HALL') + '\n')} + ${cv('cuedeck_audience_timer')} : '${T.offline}'`) : label,
+      size: 18, notes: commandTitle(c),
+      ...(flag ? { bg: x(`(${online}) && ${cv(('cuedeck_audience_timer_' + flag) as keyof typeof COMPANION_VARS)} == '1' ? '${C.greenBg}' : '${C.black}'`) } : {}),
+    })
+  })
+  pageDefs.push({id:'cuedeckHallTimer', name:lang === 'ru' ? 'CueDeck: таймер зала' : 'CueDeck: hall timer', grid:hallGrid})
   const pages = Object.fromEntries(
     pageDefs.map((p, i) => [
       String(i + 1),

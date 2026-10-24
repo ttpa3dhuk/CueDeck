@@ -155,6 +155,14 @@ export interface PresenterApi {
     setLoop(enabled: boolean): Promise<void>
     /** Minutes of the four preset buttons (ПКМ по кнопке). */
     setPresets(presets: number[]): Promise<void>
+    setAdjustments(values: number[]): Promise<void>
+  }
+  audienceTimer: {
+    start(): Promise<void>
+    pause(): Promise<void>
+    reset(): Promise<void>
+    setVisible(visible: boolean): Promise<void>
+    configure(config: Partial<import('../shared/audience-timer').AudienceTimerConfig>): Promise<void>
   }
   blackout: {
     toggle(): Promise<void>
@@ -194,6 +202,8 @@ export interface PresenterApi {
     setAskOnStartup(value: boolean): Promise<void>
   }
   monitor: {
+    /** CSS-pixel dimensions of the actual audience surface, for overlay alignment. */
+    audienceSize(): Promise<{ width: number; height: number }>
     /** Мониторы выходов под эфиром: вкл/выкл (персистится). */
     setEnabled(value: boolean): Promise<void>
     /** JPEG-кадры окон суфлёра/зала (~2 fps); приходят только оператору. */
@@ -256,6 +266,8 @@ export interface PresenterApi {
     pathFor(file: File): string
   }
   playlist: {
+    /** Reveal the original media; list items must name a path belonging to this entry. */
+    revealSource(id: string, itemPath?: string): Promise<{ ok: boolean; error?: string }>
     add(): Promise<PlaylistEntry[]>
     /** Append files by path (drag & drop); unsupported paths are skipped. */
     addPaths(paths: string[]): Promise<PlaylistEntry[]>
@@ -271,7 +283,7 @@ export interface PresenterApi {
     setFolderCollapsed(id: string, collapsed: boolean): Promise<void>
     remove(id: string): Promise<void>
     reorder(ids: string[]): Promise<void>
-    update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number; liveFit?: LiveFit; loop?: boolean }): Promise<void>
+    update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number; liveFit?: LiveFit; loop?: boolean; slideFadeMs?: number }): Promise<void>
     /** Load entry into the off-air preview deck (safe; does not touch the audience feed). */
     activate(id: string): Promise<OpenPdfResult>
     /** Load entry straight to the program/audience feed (double-click / Take-now). */
@@ -346,6 +358,9 @@ export interface PresenterApi {
   pptx: {
     /** Сбросить кэш PDF этого PPTX и сконвертировать заново (после установки шрифтов). */
     rebuild(path: string): Promise<{ ok: boolean; remaining?: string[]; error?: string }>
+    cacheStats(): Promise<{ bytes: number; files: number; protectedBytes: number }>
+    openCacheFolder(): Promise<{ ok: boolean; error?: string }>
+    clearCache(): Promise<{ ok: boolean; cancelled?: boolean; clearedBytes?: number; remainingBytes?: number; error?: string }>
   }
   soffice: {
     check(): Promise<boolean>
@@ -423,7 +438,8 @@ export interface PresenterApi {
     info(): Promise<DiagInfo>
     /** Собрать zip на рабочий стол. Комментарий оператора уходит в report.txt. */
     chooseMaterials(): Promise<{ selection: ReportMaterials | null; error?: string }>
-    buildReport(comment: string, materialToken?: string): Promise<ReportResult>
+    buildReport(comment: string, materialToken?: string, markerN?: number): Promise<ReportResult>
+    openRecovery(): Promise<{ ok: boolean; error?: string; cancelled?: boolean; missing?: number }>
     showInFolder(path: string): Promise<void>
     openLogFolder(): Promise<void>
     /** Только у оператора: маркер поставлен (хоткеем или из меню). */

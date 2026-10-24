@@ -4,6 +4,8 @@ import { isLiveUri } from '../shared/live.js'
 import { t } from '../shared/i18n.js'
 import { normalizeFolderPlaylist, sanitizePlaylistFolders } from '../shared/playlist-folders.js'
 import type { PlaylistFolder, PlaylistEntry } from './state.js'
+import { audienceTimerConfig, type AudienceTimerConfig } from '../shared/audience-timer.js'
+import { sanitizeSlideFadeMs } from '../shared/slide-transition.js'
 
 /** 2 — пути к материалам внутри папки проекта пишутся относительными. */
 export const PROJECT_SCHEMA_VERSION = 2
@@ -34,6 +36,7 @@ export function fromStoredPath(stored: string, projectPath: string): string {
 }
 
 export interface ProjectFile {
+  audienceTimer?: AudienceTimerConfig
   schemaVersion: number
   createdAt: string
   updatedAt: string
@@ -43,6 +46,7 @@ export interface ProjectFile {
 }
 
 export interface LoadedProject {
+  audienceTimer?: AudienceTimerConfig
   playlist: PlaylistEntry[]
   playlistFolders: PlaylistFolder[]
   keyVisualPath: string | null
@@ -67,6 +71,7 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
     ...(typeof v.folderId === 'string' ? { folderId: v.folderId } : {}),
     ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
     ...(v.loop ? { loop: true } : {}),
+    ...(typeof v.slideFadeMs === 'number' ? { slideFadeMs: sanitizeSlideFadeMs(v.slideFadeMs) } : {}),
     ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
     ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),
   }
@@ -97,6 +102,7 @@ export async function loadProjectFile(path: string): Promise<LoadedProject> {
     typeof parsed.keyVisualPath === 'string' ? parsed.keyVisualPath : null
   const playlistFolders = sanitizePlaylistFolders(parsed.playlistFolders)
   return {
+    ...(parsed.audienceTimer ? { audienceTimer: audienceTimerConfig(parsed.audienceTimer) } : {}),
     playlistFolders,
     playlist: normalizeFolderPlaylist(playlist, playlistFolders),
     keyVisualPath: keyVisual ? fromStoredPath(keyVisual, path) : null,
@@ -105,9 +111,10 @@ export async function loadProjectFile(path: string): Promise<LoadedProject> {
 
 export async function saveProjectFile(
   path: string,
-  data: { playlist: PlaylistEntry[]; playlistFolders?: PlaylistFolder[]; keyVisualPath: string | null },
+  data: { playlist: PlaylistEntry[]; playlistFolders?: PlaylistFolder[]; keyVisualPath: string | null; audienceTimer?: AudienceTimerConfig },
 ): Promise<void> {
   const project: ProjectFile = {
+    ...(data.audienceTimer ? { audienceTimer: audienceTimerConfig(data.audienceTimer) } : {}),
     schemaVersion: PROJECT_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

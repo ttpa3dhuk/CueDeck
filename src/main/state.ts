@@ -1,7 +1,9 @@
+import { DEFAULT_TIMER_ADJUSTMENTS } from '../shared/timer-controls.js'
 import { DEFAULT_TAKE_FADE_MS } from '../shared/take-transition.js'
 import { BrowserWindow } from 'electron'
 import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/types.js'
 import type { AppState, DeckState, Role, TimerState, VideoState } from '../shared/types.js'
+import { createAudienceTimer } from '../shared/audience-timer.js'
 
 // Canonical definitions live in src/shared/types.ts (shared with preload/renderer).
 // Re-exported here so main-process modules keep importing them from './state.js'.
@@ -40,6 +42,7 @@ export function initialVideoState(): VideoState {
 
 export function initialDeckState(): DeckState {
   return {
+    recoveryTake: false,
     path: null,
     sha1: null,
     kind: null,
@@ -64,6 +67,7 @@ export function initialState(): AppState {
     video: initialVideoState(),
     slideMedia: [],
     timer: { durationMs: DEFAULT_DURATION_MS, startedAt: null, elapsedMs: 0, running: false, cycles: 0 },
+    audienceTimer: createAudienceTimer(),
     materialSettings: { defaultDurationMs: 0, autoStartTimer: false },
     timerMode: 'countdown',
     timerPosition: 'top-right',
@@ -106,6 +110,7 @@ export function initialState(): AppState {
     timerTickEnabled: false,
     timerGongEnabled: false,
     timerLoop: false,
+    timerAdjustments: [...DEFAULT_TIMER_ADJUSTMENTS],
     timerPresets: [...DEFAULT_TIMER_PRESETS],
     clickerGlobal: false,
     clickerGlobalArrows: false,
@@ -196,6 +201,12 @@ export class StateStore {
   }
 
   patch(partial: Partial<AppState>): void {
+    // Legacy remote/profile fields mirror the hall timer after the controls moved there.
+    if (partial.audienceTimer) {
+      partial = { ...partial, timerTickEnabled: partial.audienceTimer.tickEnabled,
+        timerGongEnabled: partial.audienceTimer.gongEnabled, timerLoop: partial.audienceTimer.loop }
+    }
+
     this.state = { ...this.state, ...partial }
     for (const win of this.windows.values()) {
       if (!win.isDestroyed()) {

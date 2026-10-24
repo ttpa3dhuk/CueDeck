@@ -1,5 +1,5 @@
 import type { CompanionActionDefinitions, DropdownChoice } from '@companion-module/base'
-import { commandFor } from './commands.js'
+import { commandFor, AUDIENCE_TIMER_CMDS, AUDIENCE_TIMER_SWITCHES, TIMER_MODES } from './commands.js'
 import type ModuleInstance from './main.js'
 
 type OnOff = 'toggle' | 'on' | 'off'
@@ -19,6 +19,11 @@ export type ActionsSchema = {
 	playlist_step: { options: { direction: 'next' | 'prev' } }
 	preview: { options: { cmd: string } }
 	preview_goto: { options: { slide: number } }
+	audience_timer: { options: { cmd: string } }
+	audience_timer_adjust: { options: { direction: 'add' | 'sub'; amount: string } }
+	audience_timer_set: { options: { duration: string } }
+	audience_timer_mode: { options: { mode: string } }
+	audience_timer_switch: { options: { setting: string; mode: OnOff } }
 	timer: { options: { cmd: string } }
 	timer_set: { options: { duration: string } }
 	timer_adjust: { options: { direction: 'add' | 'sub'; amount: string } }
@@ -191,8 +196,89 @@ export function UpdateActions(self: ModuleInstance): void {
 		},
 
 		// ── Таймер ──
+		audience_timer: {
+			name: 'Hall timer: Start / pause / reset',
+			options: [
+				{
+					id: 'cmd',
+					type: 'dropdown',
+					label: 'Command',
+					default: 'toggle',
+					choices: AUDIENCE_TIMER_CMDS.map((id) => ({ id, label: id })),
+				},
+			],
+			callback: async (e) => run(e.actionId, e.options),
+		},
+		audience_timer_adjust: {
+			name: 'Hall timer: Add / subtract time',
+			description:
+				'Adjusts the current countdown without restarting it. In stopwatch mode, adjusts elapsed time. Clock mode is unchanged.',
+			options: [
+				{
+					id: 'direction',
+					type: 'dropdown',
+					label: 'Direction',
+					default: 'add',
+					choices: [
+						{ id: 'add', label: 'Add' },
+						{ id: 'sub', label: 'Subtract' },
+					],
+				},
+				{
+					id: 'amount',
+					type: 'textinput',
+					label: 'Amount',
+					default: '1',
+					description: DURATION_HELP,
+					useVariables: true,
+				},
+			],
+			callback: async (e) => run(e.actionId, e.options),
+		},
+		audience_timer_set: {
+			name: 'Hall timer: Set duration',
+			options: [
+				{
+					id: 'duration',
+					type: 'textinput',
+					label: 'Duration',
+					default: '5',
+					description: DURATION_HELP,
+					useVariables: true,
+				},
+			],
+			callback: async (e) => run(e.actionId, e.options),
+		},
+		audience_timer_mode: {
+			name: 'Hall timer: Mode',
+			options: [
+				{
+					id: 'mode',
+					type: 'dropdown',
+					label: 'Mode',
+					default: 'countdown',
+					choices: TIMER_MODES.map((id) => ({ id, label: id })),
+				},
+			],
+			callback: async (e) => run(e.actionId, e.options),
+		},
+		audience_timer_switch: {
+			name: 'Hall timer: Visibility / loop / tick / gong',
+			description: 'Tick and gong use the program audio output. Start also shows the hall timer.',
+			options: [
+				{
+					id: 'setting',
+					type: 'dropdown',
+					label: 'Setting',
+					default: 'visible',
+					choices: AUDIENCE_TIMER_SWITCHES.map((id) => ({ id, label: id })),
+				},
+				{ id: 'mode', type: 'dropdown', label: 'Action', default: 'toggle', choices: onOffChoices },
+			],
+			callback: async (e) => run(e.actionId, e.options),
+		},
 		timer: {
-			name: 'Timer: Control',
+			name: 'Prompter timer: Control',
 			options: [
 				{
 					id: 'cmd',
@@ -212,7 +298,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			callback: async (e) => run(e.actionId, e.options),
 		},
 		timer_set: {
-			name: 'Timer: Set duration',
+			name: 'Prompter timer: Set duration',
 			options: [
 				{
 					id: 'duration',
@@ -226,7 +312,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			callback: async (e) => run(e.actionId, e.options),
 		},
 		timer_adjust: {
-			name: 'Timer: Add / subtract time',
+			name: 'Prompter timer: Add / subtract time',
 			options: [
 				{
 					id: 'direction',
@@ -250,13 +336,13 @@ export function UpdateActions(self: ModuleInstance): void {
 			callback: async (e) => run(e.actionId, e.options),
 		},
 		timer_preset: {
-			name: 'Timer: Duration preset N',
+			name: 'Prompter timer: Duration preset N',
 			description: 'The 5 / 10 / 15 / 20 buttons in CueDeck — minutes are set there.',
 			options: [{ id: 'preset', type: 'number', label: 'Preset №', default: 1, min: 1, max: 99, asInteger: true }],
 			callback: async (e) => run(e.actionId, e.options),
 		},
 		timer_mode: {
-			name: 'Timer: Mode',
+			name: 'Prompter timer: Mode',
 			options: [
 				{
 					id: 'mode',
@@ -273,7 +359,7 @@ export function UpdateActions(self: ModuleInstance): void {
 			callback: async (e) => run(e.actionId, e.options),
 		},
 		timer_position: {
-			name: 'Timer: Position on the confidence monitor',
+			name: 'Prompter timer: Position on the confidence monitor',
 			options: [
 				{
 					id: 'position',

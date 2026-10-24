@@ -1,4 +1,5 @@
 import type { TakeTransition } from './take-transition.js'
+import type { ReportMarkerContext } from './report-recovery.js'
 /**
  * Single source of truth for the state types shared by the main process and
  * the preload/renderer side. Type-only module — safe to import from any
@@ -181,6 +182,8 @@ export interface PlaylistEntry {
    * превращает слайдшоу в мигание.
    */
   fadeMs?: number
+  /** PDF/PPTX slide crossfade; absent/zero keeps a cut. */
+  slideFadeMs?: number
   /**
    * Зациклить ролик этой записи: видео-заставка крутится, пока спикер на
    * сцене, а обычный ролик доигрывает и встаёт. Настройка живёт у записи, а не
@@ -197,6 +200,8 @@ export interface PlaylistEntry {
  * program fields. Keeping program top-level avoids touching audience/speaker code.
  */
 export interface DeckState {
+  /** Transient staging of a report snapshot; never a venue/project preference. */
+  recoveryTake?: boolean
   path: string | null
   sha1: string | null
   kind: FileKind | null
@@ -232,6 +237,8 @@ export interface AppState {
   slideMedia: SlideMedia[]
   materialSettings: import('./material-settings.js').MaterialSettings
   timer: TimerState
+  /** Independent countdown over the audience feed; speaker timer is unaffected. */
+  audienceTimer: import('./audience-timer.js').AudienceTimerState
   timerMode: TimerMode
   timerPosition: TimerPosition
   timerScale: number
@@ -335,6 +342,7 @@ export interface AppState {
    */
   previewListIndex: number
   /** User-editable minutes of the four timer preset buttons (ПКМ по кнопке). */
+  timerAdjustments: number[]
   timerPresets: number[]
   /**
    * Global clicker: PgUp/PgDn switch program slides system-wide (globalShortcut),
@@ -665,7 +673,7 @@ export interface DiagMarker {
   n: number
   /** Локальное время «HH:MM:SS» — так же, как в журнале. */
   at: string
-  context?: { atUnixMs: number; programPath: string | null; slide: number; previewPath: string | null; previewSlide: number; video: VideoState; keyVisualPath: string | null }
+  context?: ReportMarkerContext
 }
 
 export interface ReportMaterials {

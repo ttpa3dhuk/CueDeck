@@ -8,6 +8,7 @@ import { sanitizePlaylistFolders } from '../shared/playlist-folders.js'
 import { loadProjectFile, PROJECT_EXTENSION, saveProjectFile } from './project.js'
 import { uniqueName } from './project-files.js'
 import { sidecarPathFor } from './notes-store.js'
+import { audienceTimerConfig, type AudienceTimerConfig } from '../shared/audience-timer.js'
 
 let running = false
 export function beginProjectTransfer(): boolean {
@@ -33,6 +34,7 @@ export async function verifyTransferFile(file: TransferFile): Promise<void> {
 
 /** Build a snapshot in a staging folder; expose its project only after verification. */
 export async function transferProject(opts: {
+  audienceTimer?: AudienceTimerConfig
   parent: string
   name: string
   playlist: PlaylistEntry[]
@@ -41,7 +43,7 @@ export async function transferProject(opts: {
   prepare(source: string, target: string, directory: string): Promise<TransferFile[]>
   progress(status: ProjectTransferStatus): void
 }): Promise<{ path: string; copied: number }> {
-  const snapshot = structuredClone({ playlist: opts.playlist, playlistFolders: opts.playlistFolders ?? [], keyVisualPath: opts.keyVisualPath })
+  const snapshot = structuredClone({ playlist: opts.playlist, playlistFolders: opts.playlistFolders ?? [], keyVisualPath: opts.keyVisualPath, audienceTimer: opts.audienceTimer })
   const sources = new Set<string>()
   for (const entry of snapshot.playlist) {
     if (entry.kind === 'live') continue
@@ -93,8 +95,11 @@ export async function transferProject(opts: {
     }
     const projectFile = `${opts.name}.${PROJECT_EXTENSION}`
     const stagedProject = join(stage, projectFile)
-    await saveProjectFile(stagedProject, { playlist, playlistFolders: snapshot.playlistFolders, keyVisualPath })
+    await saveProjectFile(stagedProject, { playlist, playlistFolders: snapshot.playlistFolders, keyVisualPath, audienceTimer: snapshot.audienceTimer })
     const loaded = await loadProjectFile(stagedProject)
+    if (snapshot.audienceTimer && JSON.stringify(loaded.audienceTimer) !== JSON.stringify(audienceTimerConfig(snapshot.audienceTimer))) {
+      throw new Error(t('Проверка файла проекта не прошла'))
+    }
     const identity = (entries: PlaylistEntry[]): string => JSON.stringify(entries.map((entry) => ({
       id: entry.id, folderId: entry.folderId, path: entry.filePath, items: entry.items?.map((item) => item.path),
     })))

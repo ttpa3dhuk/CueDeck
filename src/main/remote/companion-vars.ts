@@ -1,5 +1,5 @@
 import type { AppState } from '../../shared/types.js'
-import { formatMs, timerView } from '../../renderer/shared/timer.js'
+import { elapsedMs, formatMs, remainingMs, timerView } from '../../renderer/shared/timer.js'
 import { neighbour, programHasVideo, type RemoteStateView } from './commands.js'
 
 /**
@@ -17,6 +17,16 @@ import { neighbour, programHasVideo, type RemoteStateView } from './commands.js'
  */
 
 export const COMPANION_VARS = {
+  cuedeck_audience_timer: 'Таймер зала: текст текущего отсчёта, секундомера или часов',
+  cuedeck_audience_timer_color: 'Состояние таймера зала: green / yellow / red / neutral',
+  cuedeck_audience_timer_over: 'Время таймера зала вышло: 1 / 0',
+  cuedeck_audience_timer_running: 'Таймер зала идёт: 1 / 0',
+  cuedeck_audience_timer_visible: 'Таймер зала показан: 1 / 0',
+  cuedeck_audience_timer_mode: 'Режим таймера зала: countdown / stopwatch / clock',
+  cuedeck_audience_timer_loop: 'Повтор таймера зала включён: 1 / 0',
+  cuedeck_audience_timer_tick: 'Тиканье таймера зала включено: 1 / 0',
+  cuedeck_audience_timer_gong: 'Гонг таймера зала включён: 1 / 0',
+
   cuedeck_online: 'CueDeck запущен и шлёт данные: 1 / 0',
   cuedeck_seen:
     'Когда CueDeck последний раз слал данные (unix-секунды). Отстаёт от $(internal:time_unix) больше чем на 10 с — CueDeck упал или сеть пропала',
@@ -60,6 +70,16 @@ export type CompanionVarName = keyof typeof COMPANION_VARS
 
 /** Те же описания для английской страницы Companion (companion/build.ts). */
 export const COMPANION_VARS_EN: Record<CompanionVarName, string> = {
+  cuedeck_audience_timer: 'Hall timer: current countdown, stopwatch or clock text',
+  cuedeck_audience_timer_color: 'Hall timer status: green / yellow / red / neutral',
+  cuedeck_audience_timer_over: 'Hall timer has expired: 1 / 0',
+  cuedeck_audience_timer_running: 'Hall timer running: 1 / 0',
+  cuedeck_audience_timer_visible: 'Hall timer visible: 1 / 0',
+  cuedeck_audience_timer_mode: 'Hall timer mode: countdown / stopwatch / clock',
+  cuedeck_audience_timer_loop: 'Hall timer repeat enabled: 1 / 0',
+  cuedeck_audience_timer_tick: 'Hall timer tick enabled: 1 / 0',
+  cuedeck_audience_timer_gong: 'Hall timer gong enabled: 1 / 0',
+
   cuedeck_online: 'CueDeck is running and sending data: 1 / 0',
   cuedeck_seen:
     'When CueDeck last sent data (unix seconds). More than 10 s behind $(internal:time_unix) — CueDeck crashed or the network dropped',
@@ -121,9 +141,22 @@ function entryName(s: CompanionStateView, id: string | null, path: string | null
   return shortName(e ? e.displayName || e.fileName : baseName(path))
 }
 
+/** Shared HTTP/custom-variable projection of the independent hall clock. */
+export function audienceTimerStatus(timer: AppState['audienceTimer'], now = Date.now()) {
+  const view = timerView(timer, timer.mode, now)
+  return {
+    text: view.text, color: view.color, overtime: view.overtime,
+    running: timer.running, visible: timer.visible, mode: timer.mode,
+    durationMs: timer.durationMs, durationText: formatMs(timer.durationMs),
+    elapsedMs: elapsedMs(timer, now), remainingMs: remainingMs(timer, now),
+    loop: timer.loop, tickEnabled: timer.tickEnabled, gongEnabled: timer.gongEnabled,
+  }
+}
+
 /** Снимок переменных. `videoPosSec` — позиция эфирного ролика (store.videoPositionSec()). */
 export function companionVars(s: CompanionStateView, now: number, videoPosSec: number): CompanionVars {
   const view = timerView(s.timer, s.timerMode, now)
+  const hall = audienceTimerStatus(s.audienceTimer, now)
   const slides = s.totalSlides > 0 && s.fileKind !== 'video' && s.fileKind !== 'live'
   const hasVideo = programHasVideo(s)
   const dur = s.video.durationSec
@@ -149,6 +182,15 @@ export function companionVars(s: CompanionStateView, now: number, videoPosSec: n
     cuedeck_timer_color: view.color,
     cuedeck_timer_over: flag(view.overtime),
     cuedeck_timer_running: flag(s.timer.running),
+    cuedeck_audience_timer: hall.text,
+    cuedeck_audience_timer_color: hall.color,
+    cuedeck_audience_timer_over: flag(hall.overtime),
+    cuedeck_audience_timer_running: flag(hall.running),
+    cuedeck_audience_timer_visible: flag(hall.visible),
+    cuedeck_audience_timer_mode: hall.mode,
+    cuedeck_audience_timer_loop: flag(hall.loop),
+    cuedeck_audience_timer_tick: flag(hall.tickEnabled),
+    cuedeck_audience_timer_gong: flag(hall.gongEnabled),
     cuedeck_slide: slides ? `${s.currentSlide}/${s.totalSlides}` : '',
     cuedeck_slides_left: slides ? String(Math.max(0, s.totalSlides - s.currentSlide)) : '',
     cuedeck_program: s.pdfPath ? entryName(s, s.currentPlaylistId, s.pdfPath) : '',
@@ -189,6 +231,15 @@ export function companionOfflineVars(): Partial<CompanionVars> {
     cuedeck_timer: '',
     cuedeck_timer_over: '0',
     cuedeck_timer_running: '0',
+    cuedeck_audience_timer: '',
+    cuedeck_audience_timer_color: 'neutral',
+    cuedeck_audience_timer_over: '0',
+    cuedeck_audience_timer_running: '0',
+    cuedeck_audience_timer_visible: '0',
+    cuedeck_audience_timer_mode: '',
+    cuedeck_audience_timer_loop: '0',
+    cuedeck_audience_timer_tick: '0',
+    cuedeck_audience_timer_gong: '0',
     cuedeck_video: '',
     cuedeck_video_playing: '0',
     cuedeck_stream_running: '0',

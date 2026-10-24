@@ -17,6 +17,8 @@ export const ON_OFF = ['toggle', 'on', 'off'] as const
 export const VIDEO_CMDS = ['toggle', 'play', 'pause', 'restart', 'stop'] as const
 export const PREVIEW_CMDS = ['next', 'prev', 'clear', 'video_toggle'] as const
 export const TIMER_CMDS = ['toggle', 'start', 'pause', 'reset', 'restart', 'fullscreen'] as const
+export const AUDIENCE_TIMER_CMDS = ['toggle', 'start', 'pause', 'reset', 'restart'] as const
+export const AUDIENCE_TIMER_SWITCHES = ['visible', 'loop', 'tick', 'gong'] as const
 export const TIMER_MODES = ['countdown', 'stopwatch', 'clock'] as const
 export const TIMER_POSITIONS = [
 	'top-left',
@@ -92,6 +94,20 @@ export function commandFor(actionId: string, o: Options): Command | null {
 		case 'preview_goto':
 			return { path: 'preview/goto', value: int(o.slide) }
 
+		case 'audience_timer':
+			return { path: `audience-timer/${oneOf(AUDIENCE_TIMER_CMDS, o.cmd, 'toggle')}` }
+		case 'audience_timer_adjust':
+			return str(o.amount)
+				? { path: `audience-timer/${o.direction === 'sub' ? 'sub' : 'add'}`, value: str(o.amount) }
+				: null
+		case 'audience_timer_set':
+			return str(o.duration) ? { path: 'audience-timer/set', value: str(o.duration) } : null
+		case 'audience_timer_mode':
+			return { path: 'audience-timer/mode', value: oneOf(TIMER_MODES, o.mode, 'countdown') }
+		case 'audience_timer_switch':
+			return {
+				path: `audience-timer/${oneOf(AUDIENCE_TIMER_SWITCHES, o.setting, 'visible')}/${oneOf(ON_OFF, o.mode, 'toggle')}`,
+			}
 		case 'timer': {
 			const cmd = oneOf(TIMER_CMDS, o.cmd, 'toggle')
 			return { path: cmd === 'fullscreen' ? 'timer/full' : `timer/${cmd}` }

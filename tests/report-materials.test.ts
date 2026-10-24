@@ -42,3 +42,15 @@ it('rejects oversized, missing and changed files instead of silently producing a
   await expect(selection.select([join(root, 'missing')])).rejects.toThrow()
   await expect(selection.select([root])).rejects.toThrow()
 })
+
+it('makes picked names portable to Windows without adding extra files or exposing source paths', async () => {
+  const selection = new ReportMaterialSelection()
+  const path = join(root, 'CON.mp4')
+  await writeFile(path, 'clip')
+  const chosen = await selection.select([path])
+  const files = await selection.read(chosen.token)
+  expect(files[0].name).toBe('materials/1/_CON.mp4')
+  expect(files[0]).not.toHaveProperty('sourcePath')
+  const internal = await selection.readWithSources(chosen.token)
+  expect(internal[0].sourcePath).toBe(path)
+})

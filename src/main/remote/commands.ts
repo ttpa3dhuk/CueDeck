@@ -26,6 +26,7 @@ export interface IpcCall {
 export type RemoteStateView = Pick<
   AppState,
   | 'timer'
+  | 'audienceTimer'
   | 'timerPosition'
   | 'timerPresets'
   | 'speakerMsgPresets'
@@ -54,6 +55,7 @@ type Group =
   | 'Плейлист'
   | 'Превью'
   | 'Таймер'
+  | 'Таймер зала'
   | 'Сообщение спикеру'
   | 'Трансляция'
   | 'Выходы OMT'
@@ -638,9 +640,92 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     build: () => [call('speaker-message:set', null)],
   },
 
-  ...onOff('timer/loop', 'Таймер', 'Цикл таймера', (want) => [call('timer:set-loop', want)], (s) => s.timerLoop),
-  ...onOff('timer/tick', 'Таймер', 'Тиканье таймера', (want) => [call('timer:set-tick-sound', want)], (s) => s.timerTickEnabled),
-  ...onOff('timer/gong', 'Таймер', 'Гонг таймера', (want) => [call('timer:set-gong-sound', want)], (s) => s.timerGongEnabled),
+  // Independent audience clock; speaker timer routes above keep their original target.
+  {
+    path: 'audience-timer/start',
+    arg: 'none',
+    group: 'Таймер зала',
+    title: 'Пуск',
+    build: () => [call('audience-timer:start')],
+  },
+  {
+    path: 'audience-timer/pause', aliases: ['audience-timer/stop'],
+    arg: 'none',
+    group: 'Таймер зала',
+    title: 'Пауза',
+    build: () => [call('audience-timer:pause')],
+  },
+  {
+    path: 'audience-timer/toggle',
+    arg: 'none',
+    group: 'Таймер зала',
+    title: 'Старт / пауза (одна кнопка)',
+    build: (_a, s) => [call(s.audienceTimer.running ? 'audience-timer:pause' : 'audience-timer:start')],
+  },
+  {
+    path: 'audience-timer/reset',
+    arg: 'none',
+    group: 'Таймер зала',
+    title: 'Сброс',
+    build: () => [call('audience-timer:reset')],
+  },
+  {
+    path: 'audience-timer/restart',
+    arg: 'none',
+    group: 'Таймер зала',
+    title: 'Сброс и пуск таймера зала',
+    build: () => [call('audience-timer:reset'), call('audience-timer:start')],
+  },
+  ...(['add', 'sub'] as const).map((direction): RemoteCommand => ({
+    path: `audience-timer/${direction}`,
+    arg: 'duration',
+    group: 'Таймер зала',
+    title: direction === 'add' ? 'Добавить время' : 'Убавить время', // i18n-ok: commandTitle
+    example: '1',
+    build: (a) => {
+      const ms = parseDurationMs(a)
+      return ms === null || ms > 24 * 3600_000
+        ? t('нужна длительность до 24 часов: 5 (минуты), 1:30, 90s')
+        : [call('audience-timer:adjust', direction === 'add' ? ms : -ms)]
+    },
+  })),
+  {
+    path: 'audience-timer/set',
+    arg: 'duration',
+    group: 'Таймер зала',
+    title: 'Задать длительность и сбросить прошедшее время (без запуска)', example: '5',
+    build: (a) => {
+      const ms = parseDurationMs(a)
+      return ms === null || ms > 24 * 3600_000
+        ? t('нужна длительность до 24 часов: 5 (минуты), 1:30, 90s')
+        : [call('audience-timer:configure', { durationMs: ms }), call('audience-timer:reset')]
+    },
+  },
+  {
+    path: 'audience-timer/mode',
+    arg: 'enum', values: TIMER_MODES,
+    group: 'Таймер зала',
+    title: 'Режим: обратный отсчёт / секундомер / часы', example: 'countdown',
+    build: (a) => {
+      const mode = typeof a === 'string' ? a.trim().toLowerCase() : ''
+      return (TIMER_MODES as readonly string[]).includes(mode)
+        ? [call('audience-timer:configure', { mode })]
+        : t('режим: {values}', { values: TIMER_MODES.join(' / ') })
+    },
+  },
+  ...onOff('audience-timer/visible', 'Таймер зала', 'Показ таймера в зале',
+    (want) => [call('audience-timer:visible', want)], (s) => s.audienceTimer.visible),
+  ...onOff('audience-timer/loop', 'Таймер зала', 'Цикл таймера зала',
+    (want) => [call('audience-timer:configure', { loop: want })], (s) => s.audienceTimer.loop),
+  ...onOff('audience-timer/tick', 'Таймер зала', 'Тиканье таймера зала',
+    (want) => [call('audience-timer:configure', { tickEnabled: want })], (s) => s.audienceTimer.tickEnabled),
+  ...onOff('audience-timer/gong', 'Таймер зала', 'Гонг таймера зала',
+    (want) => [call('audience-timer:configure', { gongEnabled: want })], (s) => s.audienceTimer.gongEnabled),
+
+  // Compatibility routes from before hall controls had their own namespace.
+  ...onOff('timer/loop', 'Таймер зала', 'Цикл таймера зала', (want) => [call('timer:set-loop', want)], (s) => s.timerLoop),
+  ...onOff('timer/tick', 'Таймер зала', 'Тиканье таймера зала', (want) => [call('timer:set-tick-sound', want)], (s) => s.timerTickEnabled),
+  ...onOff('timer/gong', 'Таймер зала', 'Гонг таймера зала', (want) => [call('timer:set-gong-sound', want)], (s) => s.timerGongEnabled),
   ...(['timer', 'program', 'prompter'] as const).flatMap((id) => onOff(
     `omt/${id}`, 'Выходы OMT', // i18n-ok: helpPage переводит группу
     id === 'timer' ? 'OMT: таймер' : id === 'program' ? 'OMT: зал' : 'OMT: суфлёр', // i18n-ok: commandTitle переводит ключ

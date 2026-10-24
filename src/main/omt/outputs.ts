@@ -120,7 +120,7 @@ class OmtSender {
   /** Буфер под сжатый кадр — один на отправителя, а не 8 МБ на каждый кадр. */
   private scratch: Buffer | null = null
   /** Счётчики за окно журнала (раз в 10 с, пока есть получатели). */
-  private stats = { pushed: 0, encoded: 0, encodeMs: 0, sent: 0, since: 0 }
+  private stats = { pushed: 0, encoded: 0, encodeMs: 0, sent: 0, audioChunks: 0, audioBackward: 0, audioResyncs: 0, audioLeadTicks: 0, since: 0 }
   private receivers = 0
   /** Последний сжатый кадр — уходит получателям с постоянной частотой. */
   private current: VmxFrame | null = null
@@ -218,8 +218,17 @@ class OmtSender {
         `omt: «${this.name}» за ${dt.toFixed(0)} с: кадров от источника ${(st.pushed / dt).toFixed(1)}/с, ` + // i18n-ok: журнал
           `сжато ${(st.encoded / dt).toFixed(1)}/с по ${enc} мс, отправлено ${(st.sent / dt).toFixed(1)}/с (цель ${this.fps})`, // i18n-ok: журнал
       )
+      if (st.audioChunks) {
+        const rate = st.audioChunks / dt
+        log.info(
+          `omt: «${this.name}» звук: ${st.audioChunks} кусков за ${dt.toFixed(1)} с (${rate.toFixed(1)}/с, ` + // i18n-ok: журнал
+            `пакет 20 мс = ${((st.audioChunks * 0.02) / dt * 100).toFixed(1)}% времени), ` + // i18n-ok: журнал
+            `опоздало >150 мс: ${st.audioResyncs}, откат метки: ${st.audioBackward}, ` + // i18n-ok: журнал
+            `счётчик впереди прихода до ${(st.audioLeadTicks / 10000).toFixed(0)} мс`, // i18n-ok: журнал
+        )
+      }
     }
-    this.stats = { pushed: 0, encoded: 0, encodeMs: 0, sent: 0, since: now }
+    this.stats = { pushed: 0, encoded: 0, encodeMs: 0, sent: 0, audioChunks: 0, audioBackward: 0, audioResyncs: 0, audioLeadTicks: 0, since: now }
   }
 
   setFps(fps: OmtFps): void {
@@ -316,7 +325,12 @@ class OmtSender {
   /**
    * Звук зала. Метки — счётчиком семплов от первого куска (ровно, без дрожи
    * IPC); ушли от часов дальше 150 мс (пауза в захвате, сон ноутбука) —
-   * начинаем отсчёт заново от часов.
+   * начинаем отсчёт заново от часов. Поведение прежнее: это A/B-кандидат,
+   * здесь только счётчики.
+   *
+   * Известный дефект: сравнение с часами по модулю откатывает метку назад,
+   * когда IPC отдаёт пачку позже; откаты считает `audioBackward` (в журнале
+   * «откат метки»). Изменение политики требует отдельного живого прогона.
    */
   pushAudio(chunk: OmtAudioChunk): void {
     if (!this.inst || this.closing) return
@@ -326,12 +340,18 @@ class OmtSender {
     // Метка начала куска — он только что закончился.
     const start = now - Math.round((frames * 1e7) / sampleRate)
     let ts = this.audioBase === null ? start : this.audioBase + Math.round((this.audioSamples * 1e7) / sampleRate)
+    const lead = ts - start
+    this.stats.audioLeadTicks = Math.max(this.stats.audioLeadTicks, lead)
     if (this.audioBase === null || Math.abs(ts - start) > AUDIO_RESYNC) {
+      // Re-anchor direction relative to the sample counter; arrival time does not identify a capture pause.
+      if (this.audioBase !== null && start < ts) this.stats.audioBackward++
+      else if (this.audioBase !== null) this.stats.audioResyncs++
       this.audioBase = start
       this.audioSamples = 0
       ts = start
     }
     this.audioSamples += frames
+    this.stats.audioChunks++
     const buf = Buffer.from(data.buffer, data.byteOffset, frames * channels * 4)
     this.lib.send(this.inst, {
       Type: OMT_FRAME_AUDIO, Timestamp: ts, Codec: OMT_CODEC_FPA1,

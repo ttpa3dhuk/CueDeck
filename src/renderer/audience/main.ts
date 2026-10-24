@@ -1,5 +1,8 @@
+import { ProgramTimerAudio } from '../shared/program-timer-audio'
 import { TakeFade } from '../shared/take-fade'
+import { SlidePaintTracker, overlayFrameReady } from '../shared/slide-paint'
 import { initBus, getState, subscribe } from '../shared/bus'
+import { AudienceTimerView } from '../shared/audience-timer-view'
 import { loadDocument, renderPageTo, prerender } from '../shared/pdf-loader'
 import {
   applySinkId,
@@ -39,13 +42,19 @@ const kvVideo = document.getElementById('keyvisual-video') as HTMLVideoElement
 const slideImageUnder = document.getElementById('slide-image-under') as HTMLImageElement
 
 const takeFade = new TakeFade(document.body, [slideImageUnder, canvas, slideImage, slideVideo, liveVideo, mediaOverlay])
+const slidePaint = new SlidePaintTracker()
 
 function programFrameReady(): boolean {
   const s = getState()
-  if (s.fileKind === 'video') return slideVideo.readyState >= 2
+  if (s.fileKind === 'video') return slideVideo.readyState >= 2 && !slideVideo.seeking
   if (s.fileKind === 'live') return liveVideo.readyState >= 2
   if (s.fileKind === 'image') return slideImage.complete && slideImage.naturalWidth > 0
-  return docLoaded && lastRenderedSlide === s.currentSlide
+  if (!docLoaded || slidePaint.pending || lastRenderedSlide !== s.currentSlide) return false
+  const media = slideMediaAt(s.fileKind, s.slideMedia, s.currentSlide)
+  if (!media || !s.pdfSha1) return true
+  const expected = slideVideoSrc('program', media.file, s.pdfSha1)
+  return overlayFailedSrc === expected || (overlaySlide === s.currentSlide &&
+    overlayFrameReady(expected, overlaySrc, overlayFailedSrc, mediaOverlay.readyState, mediaOverlay.seeking))
 }
 
 let programLoadGeneration = 0
@@ -143,6 +152,7 @@ function unloadVideo(): void {
 // по прямоугольнику плейсхолдера и ведём его тем же общим клоком state.video.
 
 let overlaySrc: string | null = null
+let overlaySlide = -1
 let overlaySinkId: string | null | undefined = undefined
 // src, на котором <video> упал (кодек) — не перезаряжать его на каждом тике.
 let overlayFailedSrc: string | null = null
@@ -155,9 +165,15 @@ function unloadMediaOverlay(): void {
   }
   mediaOverlay.classList.add('hidden')
   overlaySrc = null
+  overlaySlide = -1
 }
 
 function updateMediaOverlay(state: AppState): void {
+  if (state.fileKind === 'pptx' && (!docLoaded || slidePaint.pending || lastRenderedSlide !== state.currentSlide)) {
+    mediaOverlay.muted = true
+    mediaOverlay.pause()
+    return
+  }
   const m = slideMediaAt(state.fileKind, state.slideMedia, state.currentSlide)
   if (!m || !state.pdfSha1 || canvas.classList.contains('hidden')) {
     unloadMediaOverlay()
@@ -168,6 +184,7 @@ function updateMediaOverlay(state: AppState): void {
     unloadMediaOverlay()
     return
   }
+  overlaySlide = state.currentSlide
   if (overlaySrc !== src) {
     overlaySrc = src
     mediaOverlay.src = src
@@ -257,11 +274,17 @@ async function renderSlide(): Promise<void> {
   const state = getState()
   if (state.fileKind === 'image' || state.fileKind === null) return
   if (!docLoaded) return
-  if (state.currentSlide === lastRenderedSlide) return
-  lastRenderedSlide = state.currentSlide
+  if (state.currentSlide === lastRenderedSlide && !slidePaint.pending) return
+  const slide = state.currentSlide
+  const path = state.pdfPath
+  const generation = programLoadGeneration
   const width = window.innerWidth
   const t0 = performance.now()
-  await renderPageTo(state.currentSlide, canvas, width)
+  const request = slidePaint.begin()
+  await renderPageTo(slide, canvas, width)
+  if (generation !== programLoadGeneration || !docLoaded || getState().pdfPath !== path || getState().currentSlide !== slide) return
+  if (!slidePaint.finish(request)) return
+  lastRenderedSlide = slide
   window.api.diag.log('info', `слайд ${state.currentSlide} отрисован за ${Math.round(performance.now() - t0)} мс`)
   if (state.currentSlide + 1 <= state.totalSlides) {
     prerender(state.currentSlide + 1, width).catch(() => undefined)
@@ -356,7 +379,7 @@ async function applyState(state: AppState): Promise<void> {
   } else if (
     state.fileKind !== 'image' &&
     state.fileKind !== null &&
-    state.currentSlide !== lastRenderedSlide
+    (state.currentSlide !== lastRenderedSlide || slidePaint.pending)
   ) {
     await renderSlide()
   }
@@ -366,6 +389,10 @@ async function applyState(state: AppState): Promise<void> {
 
 async function bootstrap(): Promise<void> {
   await initBus()
+  const programTimerAudio = new ProgramTimerAudio('audience')
+  setInterval(() => programTimerAudio.update(getState()), 100)
+  new AudienceTimerView(document.getElementById('audience-timer')!, document.body,
+    () => ({ timer: getState().audienceTimer, covered: getState().blackout }))
 
   // Unsupported codec → keep the projector black instead of showing a broken element.
   slideVideo.addEventListener('error', () => {

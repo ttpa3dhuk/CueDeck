@@ -60,6 +60,7 @@ canvas, .slide-image, .slide-video {
   z-index: 11;
 }
 .hidden { display: none; }
+#audience-timer { z-index: 9; }
 
 /* Слайд-видео из PPTX (2.10): накладывается поверх канваса по прямоугольнику
    плейсхолдера; под blackout/keyvisual, чтобы гашение экрана перекрывало ролик. */

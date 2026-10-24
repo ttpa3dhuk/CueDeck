@@ -10,6 +10,8 @@ describe('direct OMT worker transport', () => {
     for (let i = 0; i < 30; i++) { flow.frame(first, video); flow.frame(first, audio) }
     expect(send.mock.calls.filter(([p]) => p.frame.type === 'video')).toHaveLength(2)
     expect(send.mock.calls.filter(([p]) => p.frame.type === 'audio')).toHaveLength(24)
+    expect(flow.droppedAudio).toBe(6) // 30 sent, 24 unacked window
+    expect(flow.droppedVideo).toBe(28) // 2 sent, window of 2
     flow.frame(second, video)
     expect(send).toHaveBeenCalledTimes(27)
     flow.ack(send.mock.calls[0][0].sequence)

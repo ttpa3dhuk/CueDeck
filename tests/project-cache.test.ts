@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import { existsSync } from 'node:fs'
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, parse } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const runtime = vi.hoisted(() => ({ userData: '', spawn: vi.fn() }))
@@ -11,8 +13,8 @@ vi.mock('node:child_process', () => ({ spawn: runtime.spawn }))
 vi.mock('../src/main/diag', () => ({ log: { info: vi.fn(), error: vi.fn() } }))
 vi.mock('../src/main/display-mapping', () => ({ getSofficePath: () => null, setSofficePath: vi.fn() }))
 
-import { PPTX_MANIFEST_VERSION, exportProjectCache, forgetProjectCache, localPptxCacheDir, pptxReadCacheDir, useProjectCache } from '../src/main/project-cache'
-import { cachedPdfPathFor, convertPptxToPdf } from '../src/main/pptx-converter'
+import { PPTX_MANIFEST_VERSION, clearLocalCache, exportProjectCache, forgetProjectCache, localCacheStats, localPptxCacheDir, pptxReadCacheDir, useProjectCache } from '../src/main/project-cache'
+import { cachedPdfPathFor, convertPptxToPdf, setManualSoffice } from '../src/main/pptx-converter'
 import { mediaDirFor, preparePptxMedia } from '../src/main/pptx-media'
 import { loadProjectFile, saveProjectFile } from '../src/main/project'
 
@@ -46,6 +48,102 @@ afterEach(async () => {
 })
 
 describe('project on a flash drive', () => {
+  it('clears local generated files while preserving open decks, user files, and exported projects', async () => {
+    const root = localPptxCacheDir()
+    const other = createHash('sha1').update('corrected presentation').digest('hex')
+    await mkdir(join(root, 'Conference'))
+    await writeFile(join(root, 'Conference', `${other}.pdf`), 'new pdf')
+    await mkdir(join(root, `${other}.media`))
+    await writeFile(join(root, `${other}.media`, 'clip.mp4'), 'video bytes')
+    await writeFile(join(root, `${other}.media.json`), 'manifest')
+    await writeFile(join(root, 'keep.txt'), 'user file')
+    await mkdir(join(runtime.userData, 'libreoffice-profile'))
+    await writeFile(join(runtime.userData, 'libreoffice-profile', 'config.txt'), 'private profile')
+    await exportProjectCache(sha, source, projectDir)
+
+    const before = await localCacheStats(new Set([sha]))
+    expect(before.bytes).toBeGreaterThan(before.protectedBytes)
+    const cleared = await clearLocalCache(new Set([sha]))
+    expect(cleared.bytes).toBeGreaterThan(0)
+    expect(existsSync(join(root, 'Conference', `${other}.pdf`))).toBe(false)
+    expect(existsSync(join(root, `${other}.media`))).toBe(false)
+    expect(existsSync(join(root, `${sha}.pdf`))).toBe(true)
+    expect(existsSync(join(root, 'keep.txt'))).toBe(true)
+    expect(existsSync(join(projectDir, 'pptx-cache', `${sha}.pdf`))).toBe(true)
+    expect(await readFile(join(runtime.userData, 'libreoffice-profile', 'config.txt'), 'utf8')).toBe('private profile')
+    await clearLocalCache(new Set())
+    expect(existsSync(join(root, `${sha}.pdf`))).toBe(false)
+    expect(existsSync(join(root, 'keep.txt'))).toBe(true)
+    expect(existsSync(join(projectDir, 'pptx-cache', `${sha}.pdf`))).toBe(true)
+  })
+
+  it('writes a new PDF with the original presentation name, even when LibreOffice reads a rebuilt copy', async () => {
+    await rm(join(localPptxCacheDir(), `${sha}.pdf`))
+    const rebuilt = join(dir, 'temporary.rebuilt.pptx')
+    await writeFile(rebuilt, 'rebuilt copy')
+    runtime.spawn.mockImplementation((_path: string, args: string[]) => {
+      const proc = Object.assign(new EventEmitter(), {
+        stdout: new EventEmitter(), stderr: new EventEmitter(), kill: vi.fn(),
+      })
+      if (args[0] === '--version') {
+        queueMicrotask(() => {
+          proc.stdout.emit('data', 'LibreOffice 26.2')
+          proc.emit('close', 0)
+        })
+      } else {
+        const out = args[args.indexOf('--outdir') + 1]
+        void writeFile(join(out, `${parse(rebuilt).name}.pdf`), 'converted pdf')
+          .then(() => proc.emit('close', 0), (err) => proc.emit('error', err))
+      }
+      return proc
+    })
+    await setManualSoffice(process.execPath)
+    const pdf = await convertPptxToPdf(rebuilt, sha, source)
+    expect(pdf).toBe(join(localPptxCacheDir(), 'deck', `${sha}.pdf`))
+    expect(await readFile(pdf, 'utf8')).toBe('converted pdf')
+    const conversionArgs = runtime.spawn.mock.calls.find(([, args]) => args.includes('--convert-to'))?.[1] as string[]
+    expect(conversionArgs).toContain(`-env:UserInstallation=${pathToFileURL(join(runtime.userData, 'libreoffice-profile')).href}`)
+    const filter = conversionArgs[conversionArgs.indexOf('--convert-to') + 1]
+    expect(filter).toMatch(/^pdf:impress_pdf_Export:/)
+    expect(JSON.parse(filter.slice('pdf:impress_pdf_Export:'.length))).toMatchObject({
+      ExportHiddenSlides: { value: 'false' },
+      ExportNotesPages: { value: 'false' },
+      ExportNotes: { value: 'false' },
+      ReduceImageResolution: { value: 'false' },
+    })
+    const correctedSha = createHash('sha1').update('corrected presentation bytes').digest('hex')
+    const correctedPdf = await convertPptxToPdf(rebuilt, correctedSha, source)
+    expect(correctedPdf).toBe(join(localPptxCacheDir(), 'deck', `${correctedSha}.pdf`))
+    expect(existsSync(pdf)).toBe(true)
+  })
+
+  it('keeps a readable PDF name in new caches and portable projects', async () => {
+    const local = localPptxCacheDir()
+    await mkdir(join(local, 'deck'))
+    await rename(join(local, `${sha}.pdf`), join(local, 'deck', `${sha}.pdf`))
+    expect(cachedPdfPathFor(sha)).toBe(join(local, 'deck', `${sha}.pdf`))
+
+    await exportProjectCache(sha, source, projectDir)
+    expect(await readFile(join(projectDir, 'pptx-cache', 'deck', `${sha}.pdf`), 'utf8')).toBe('%PDF-1.7 ready animation pages')
+    runtime.userData = join(dir, 'backup-user')
+    expect(await useProjectCache(sha, source, join(projectDir, 'show.pdpres'))).toBe(true)
+    expect(cachedPdfPathFor(sha)).toBe(join(projectDir, 'pptx-cache', 'deck', `${sha}.pdf`))
+    expect(await convertPptxToPdf(source, sha)).toBe(cachedPdfPathFor(sha))
+    expect(runtime.spawn).not.toHaveBeenCalled()
+  })
+
+  it('replaces an old readable name when exporting the same content again', async () => {
+    const local = localPptxCacheDir()
+    await mkdir(join(local, 'deck'))
+    await rename(join(local, `${sha}.pdf`), join(local, 'deck', `${sha}.pdf`))
+    await exportProjectCache(sha, source, projectDir)
+    await mkdir(join(local, 'renamed'))
+    await rename(join(local, 'deck', `${sha}.pdf`), join(local, 'renamed', `${sha}.pdf`))
+    await exportProjectCache(sha, source, projectDir)
+    expect(await readdir(join(projectDir, 'pptx-cache', 'renamed'))).toEqual([`${sha}.pdf`])
+    expect(existsSync(join(projectDir, 'pptx-cache', 'deck', `${sha}.pdf`))).toBe(false)
+  })
+
   it('moves the complete project to a clean machine and opens PDF, notes and video without LibreOffice', async () => {
     await saveProjectFile(join(projectDir, 'show.pdpres'), {
       playlist: [{ id: 'deck', kind: 'pptx', filePath: source, fileName: 'deck.pptx', displayName: '', speakerName: '', durationMs: 60000 }],

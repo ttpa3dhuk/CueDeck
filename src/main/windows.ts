@@ -162,7 +162,7 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
         if (role === 'audience') win.setAlwaysOnTop(audienceAlwaysOnTop)
       }
     }
-    if (desktopDisplayWindow) win.showInactive()
+    if (role !== 'operator') win.showInactive()
     else win.show()
     if (role === 'operator') win.focus()
   })
@@ -206,7 +206,8 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
 
   // Open missing windows and reposition existing ones
   for (const role of desiredRoles) {
-    const windowed = role === 'audience' && audienceWindowed
+    const windowed = (role === 'audience' && audienceWindowed) ||
+      (role === 'speaker' && displayMap.speaker === displayMap.operator)
     const fullscreen = (role === 'audience' || role === 'speaker') && !windowed
     const existing = activeWindows.get(role)
     if (existing && !existing.isDestroyed()) {

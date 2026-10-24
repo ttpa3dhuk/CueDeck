@@ -6,9 +6,9 @@ describe('operator display safety', () => {
     expect(safeDisplayLayout('presenter-audience', { operator: 1 }, screens.slice(0, 2)))
       .toEqual({ layout: 'presenter-audience', displayMap: { operator: 1, audience: 2 } })
   })
-  it('repairs explicit conflicts for both fullscreen outputs', () => {
+  it('keeps an explicitly windowed prompter on the operator and repairs the audience', () => {
     const { displayMap } = safeDisplayLayout('operator-speaker-audience', { operator: 1, speaker: 1, audience: 1 }, screens)
-    expect(displayMap).toEqual({ operator: 1, speaker: 2, audience: 3 })
+    expect(displayMap).toEqual({ operator: 1, speaker: 1, audience: 2 })
   })
   it('preserves a valid audience assignment when enabling the prompter', () => {
     expect(safeDisplayLayout('operator-speaker-audience', { operator: 1, audience: 2 }, screens).displayMap)
@@ -32,7 +32,7 @@ describe('operator display safety', () => {
   })
   it('keeps the windowed audience when three roles are requested on one display', () => {
     expect(safeDisplayLayout('operator-speaker-audience', { operator: 1, speaker: 2, audience: 2 }, screens.slice(0, 1), true))
-      .toEqual({ layout: 'presenter-audience', displayMap: { operator: 1, audience: 1 } })
+      .toEqual({ layout: 'operator-speaker-audience', displayMap: { operator: 1, speaker: 1, audience: 1 } })
   })
   it('keeps all roles when the prompter has a separate display and the audience is windowed', () => {
     expect(safeDisplayLayout('operator-speaker-audience', { operator: 1, speaker: 2, audience: 1 }, screens.slice(0, 2), true))

@@ -10,6 +10,7 @@ import http from 'node:http'
 import os from 'node:os'
 import { log } from '../diag.js'
 import { getMidiInputs, getRemoteSettings, setMidiInputs, setRemoteSettings, validHost } from '../display-mapping.js'
+import { audienceTimerStatus } from './companion-vars.js'
 import { configureCompanionPush } from './companion-push.js'
 import { store, type RemoteSettings, type RemoteStatus } from '../state.js'
 import { DEFAULT_REMOTE_SETTINGS } from '../../shared/types.js'
@@ -157,6 +158,7 @@ function statusJson(): Record<string, unknown> {
       elapsedMs: elapsedMs(s.timer, now),
       remainingMs: remainingMs(s.timer, now),
     },
+    audienceTimer: audienceTimerStatus(s.audienceTimer, now),
     program: {
       name: entryName(s.currentPlaylistId, s.pdfPath),
       kind: s.fileKind,
@@ -224,6 +226,7 @@ const TEXT_ENDPOINTS: Record<string, () => string> = {
     const s = store.get()
     return timerView(s.timer, s.timerMode).text
   },
+  '/api/audience-timer/text': () => audienceTimerStatus(store.get().audienceTimer).text,
   '/api/program/text': () => {
     const s = store.get()
     return s.totalSlides > 0 ? `${s.currentSlide}/${s.totalSlides}` : ''

@@ -103,6 +103,14 @@ const api: PresenterApi = {
     setGongSound: (enabled) => ipcRenderer.invoke('timer:set-gong-sound', enabled),
     setLoop: (enabled) => ipcRenderer.invoke('timer:set-loop', enabled),
     setPresets: (presets) => ipcRenderer.invoke('timer:set-presets', presets),
+    setAdjustments: (values) => ipcRenderer.invoke('timer:set-adjustments', values),
+  },
+  audienceTimer: {
+    start: () => ipcRenderer.invoke('audience-timer:start'),
+    pause: () => ipcRenderer.invoke('audience-timer:pause'),
+    reset: () => ipcRenderer.invoke('audience-timer:reset'),
+    setVisible: (visible) => ipcRenderer.invoke('audience-timer:visible', visible),
+    configure: (config) => ipcRenderer.invoke('audience-timer:configure', config),
   },
   blackout: {
     toggle: () => ipcRenderer.invoke('blackout:toggle'),
@@ -137,6 +145,7 @@ const api: PresenterApi = {
     setAskOnStartup: (value) => ipcRenderer.invoke('layout:set-ask-on-startup', Boolean(value)),
   },
   monitor: {
+    audienceSize: () => ipcRenderer.invoke('monitor:audience-size'),
     setEnabled: (value) => ipcRenderer.invoke('monitor:set-enabled', Boolean(value)),
     onFrame: (cb) => {
       const listener = (_e: Electron.IpcRendererEvent, frame: { role: 'speaker' | 'audience'; dataUrl: string }) => cb(frame)
@@ -182,6 +191,7 @@ const api: PresenterApi = {
     pathFor: (file) => webUtils.getPathForFile(file),
   },
   playlist: {
+    revealSource: (id, itemPath) => ipcRenderer.invoke('playlist:reveal-source', id, itemPath),
     add: () => ipcRenderer.invoke('playlist:add'),
     addPaths: (paths) => ipcRenderer.invoke('playlist:add-paths', paths),
     addLive: (src) => ipcRenderer.invoke('playlist:add-live', src),
@@ -295,6 +305,9 @@ const api: PresenterApi = {
   },
   pptx: {
     rebuild: (path: string) => ipcRenderer.invoke('pptx:rebuild', path),
+    cacheStats: () => ipcRenderer.invoke('pptx-cache:stats'),
+    openCacheFolder: () => ipcRenderer.invoke('pptx-cache:open-folder'),
+    clearCache: () => ipcRenderer.invoke('pptx-cache:clear'),
   },
   soffice: {
     current: () => ipcRenderer.invoke('soffice:current'),
@@ -373,7 +386,8 @@ const api: PresenterApi = {
     mark: () => ipcRenderer.invoke('diag:mark'),
     info: () => ipcRenderer.invoke('diag:info'),
     chooseMaterials: () => ipcRenderer.invoke('diag:choose-materials'),
-    buildReport: (comment, token) => ipcRenderer.invoke('diag:build-report', comment, token),
+    buildReport: (comment, token, markerN) => ipcRenderer.invoke('diag:build-report', comment, token, markerN),
+    openRecovery: () => ipcRenderer.invoke('diag:open-recovery'),
     showInFolder: (path) => ipcRenderer.invoke('diag:show-in-folder', path),
     openLogFolder: () => ipcRenderer.invoke('diag:open-log-folder'),
     onMarked: (cb) => {

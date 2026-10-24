@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, screen, shell, type WebContents } from 'electron'
 import { ReportMaterialSelection } from './report-materials.js'
+import { buildRecoveryPackage, captureMarkerContext, readRecoveryProject, selectRecoveryMarker, type RecoveryPlan } from './report-recovery.js'
 import { t } from '../shared/i18n.js'
 import log from 'electron-log/main'
 import { existsSync } from 'node:fs'
@@ -53,6 +54,10 @@ const reportMaterials = new ReportMaterialSelection()
 let reportBuilding = false
 let lastMarkAt = 0
 let abnormalPrevious = false
+let recoveryStager: ((plan: RecoveryPlan) => Promise<void>) | null = null
+
+/** Supplied by IPC orchestration to avoid the diag/windows/ipc module cycle. */
+export function setRecoveryStager(callback: (plan: RecoveryPlan) => Promise<void>): void { recoveryStager = callback }
 
 // ── Инициализация ─────────────────────────────────────────────────────────────
 
@@ -148,6 +153,7 @@ const QUIET_CHANNELS = new Set([
   'keyvisual:read',
   'state:get',
   'displays:list',
+  'monitor:audience-size',
   'sidecar:path',
   'soffice:check',
   'soffice:paths',
@@ -300,11 +306,7 @@ export function markMoment(source: 'hotkey' | 'menu'): number | null {
   if (now - lastMarkAt < MARK_DEBOUNCE_MS) return null
   lastMarkAt = now
   const state = store.get()
-  const marker: DiagMarker = { n: markers.length + 1, at: new Date(now).toLocaleTimeString('ru-RU'), context: {
-    atUnixMs: now, programPath: state.pdfPath, slide: state.currentSlide,
-    previewPath: state.preview.path, previewSlide: state.preview.currentSlide,
-    video: structuredClone(state.video), keyVisualPath: state.keyVisualPath,
-  } }
+  const marker: DiagMarker = { n: markers.length + 1, at: new Date(now).toLocaleTimeString('ru-RU'), context: captureMarkerContext(state, now) }
   markers.push(marker)
   log.warn(`⚑ МАРКЕР #${marker.n} (${source}) — оператор отметил момент`)
   getOperatorWindow()?.webContents.send('diag:marked', marker.n)
@@ -345,11 +347,24 @@ export function registerDiagIpc(): void {
       return { selection: result.canceled ? null : await reportMaterials.select(result.filePaths) }
     } catch (error) { return { selection: null, error: String(error instanceof Error ? error.message : error) } }
   })
-  ipcMain.handle('diag:build-report', (event, comment: unknown, token: unknown) =>
+  ipcMain.handle('diag:build-report', (event, comment: unknown, token: unknown, markerN: unknown) =>
     event.sender === getOperatorWindow()?.webContents
-      ? buildReport(typeof comment === 'string' ? comment : '', typeof token === 'string' ? token : undefined)
+      ? buildReport(typeof comment === 'string' ? comment : '', typeof token === 'string' ? token : undefined, typeof markerN === 'number' ? markerN : undefined)
       : { ok: false, error: 'Operator only' },
   )
+  ipcMain.handle('diag:open-recovery', async (event) => {
+    if (event.sender !== getOperatorWindow()?.webContents || reportBuilding || !recoveryStager) return { ok: false, error: 'Operator only or unavailable' }
+    try {
+      const selected = await dialog.showOpenDialog(getOperatorWindow()!, {
+        title: t('Открыть снимок для воспроизведения…'), properties: ['openFile'],
+        filters: [{ name: 'CueDeck recovery', extensions: ['pdpres'] }],
+      })
+      if (selected.canceled || !selected.filePaths[0]) return { ok: false, cancelled: true }
+      const plan = await readRecoveryProject(selected.filePaths[0])
+      await recoveryStager(plan)
+      return { ok: true, missing: plan.missing }
+    } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) } }
+  })
   ipcMain.handle('diag:show-in-folder', (_e, path: unknown) => {
     if (typeof path === 'string' && path) shell.showItemInFolder(path)
   })
@@ -362,7 +377,7 @@ export function registerDiagIpc(): void {
  * скриншоты всех окон. Исходные материалы добавляются только по токену
  * подтверждённого выбора; скриншоты могут содержать слайды и заметки.
  */
-export async function buildReport(comment: string, materialToken?: string): Promise<ReportResult> {
+export async function buildReport(comment: string, materialToken?: string, markerN?: number): Promise<ReportResult> {
   if (reportBuilding) return { ok: false, error: t('Отчёт уже собирается.') }
   reportBuilding = true
   const stamp = new Date()
@@ -375,8 +390,10 @@ export async function buildReport(comment: string, materialToken?: string): Prom
   try {
     // Validate and read the explicitly approved selection before producing any ZIP.
     if (materialToken) {
-      const attached = await reportMaterials.read(materialToken)
-      files.push(...attached)
+      const selectedMarker = selectRecoveryMarker(markers, markerN, store.get(), stamp.getTime())
+      const attached = await reportMaterials.readWithSources(materialToken)
+      files.push(...attached.map(({ name, data }) => ({ name, data })))
+      files.push(...buildRecoveryPackage(selectedMarker, attached))
       push('materials.json', JSON.stringify(attached.map(({ name, data }) => ({ name, bytes: data.length })), null, 2))
     }
     push('markers.json', JSON.stringify(markers, null, 2))

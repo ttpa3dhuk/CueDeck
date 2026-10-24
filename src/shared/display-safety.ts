@@ -14,16 +14,15 @@ export function safeDisplayLayout(
   const external = displays.filter(d => d.id !== operator)
   const map: DisplayMap = { operator }
   if (!external.length && layout !== 'solo') {
-    // Only the fullscreen prompter is unsafe here. Keep a requested audience
-    // window, including when the user selected three roles before unplugging.
+    // The audience still needs an explicit windowed choice. A prompter sharing
+    // the operator display is created as a normal window by the window manager.
     if (!audienceWindowed) return { layout: 'solo', displayMap: map }
-    layout = 'presenter-audience'
   }
   const roles: Role[] = layout === 'solo' ? [] :
     layout === 'presenter-audience' ? ['audience'] : ['speaker', 'audience']
   // Reserve valid explicit assignments before assigning newly enabled roles.
   for (const role of roles) {
-    if (exists(current[role]) && (current[role] !== operator || (role === 'audience' && audienceWindowed))) {
+    if (exists(current[role]) && (current[role] !== operator || role === 'speaker' || (role === 'audience' && audienceWindowed))) {
       map[role] = current[role]
     }
   }

@@ -4,6 +4,11 @@ import { t } from '../../shared/i18n'
 
 interface NetworkState { status: 'connecting' | 'live' | 'error'; message: string | null; width: number; height: number; frameRate: number }
 
+/** Initial audio lead, re-applied after an underrun to keep the shared A/V clock. */
+const AUDIO_PREBUFFER = 0.08
+/** Renderer-side counters go to the diagnostic log this often. */
+const AUDIO_STATS_MS = 10_000
+
 // Every source is received once in main, then once per renderer, even when it is in both desks.
 const sessions = new Map<string, Set<OmtStream>>()
 let unsubscribeGpu: (() => void) | null = null
@@ -49,6 +54,14 @@ export class OmtStream {
   private originTime = 0
   private lastVideoAt = 0
   private startedAt = performance.now()
+  private audioUnderruns = 0
+  private audioScheduleResets = 0
+  /** Audio packets the renderer itself refused past the latency cap (~500 ms). */
+  private audioLateDropped = 0
+  private audioStatsAt = performance.now()
+  private audioStatsUnderruns = 0
+  private audioStatsScheduleResets = 0
+  private audioStatsLateDropped = 0
   private watchdog: number
   private disposed = false
   private width = 0
@@ -80,7 +93,29 @@ export class OmtStream {
     retain()
     this.watchdog = window.setInterval(() => {
       if (performance.now() - (this.lastVideoAt || this.startedAt) > 5000) this.fail(t('Нет сигнала OMT. Ожидаем источник…'))
+      this.logAudioStats()
     }, 1000)
+  }
+
+  /** Per-window reset/drop counters. Added prebuffer is not a measured PCM gap. */
+  private logAudioStats(): void {
+    const now = performance.now()
+    if (now - this.audioStatsAt < AUDIO_STATS_MS) return
+    const scheduleResets = this.audioScheduleResets - this.audioStatsScheduleResets
+    const late = this.audioLateDropped - this.audioStatsLateDropped
+    this.audioStatsAt = now
+    if (!scheduleResets && !late) return
+    const underruns = this.audioUnderruns - this.audioStatsUnderruns
+    this.audioStatsUnderruns = this.audioUnderruns
+    this.audioStatsScheduleResets = this.audioScheduleResets
+    this.audioStatsLateDropped = this.audioLateDropped
+    window.api?.diag?.log('info', 'omt-stream: audio schedule reset', {
+      address: this.address,
+      underruns,
+      discontinuities: scheduleResets - underruns,
+      lateDropped: late,
+      rebufferLeadMs: Math.round(underruns * AUDIO_PREBUFFER * 1000),
+    })
   }
 
   private notify(status: NetworkState['status'], message: string | null): void {
@@ -181,6 +216,8 @@ export class OmtStream {
         // cancels valid buffers mid-burst and creates additional silence.
         // Rebuffer only on a source discontinuity or actual queue underrun.
         if (discontinuity || underrun) {
+          if (underrun) this.audioUnderruns++
+          this.audioScheduleResets++
           this.clearAudioScheduled()
         }
         // Track received PTS even when the latency limit drops this packet.
@@ -188,9 +225,12 @@ export class OmtStream {
         // and cancel the still-valid bounded queue.
         this.audioLastPts = pts
         this.audioLastDuration = duration
-        const start = this.audioNextAt ?? Math.max(this.audio.currentTime + 0.08, target)
+        const start = this.audioNextAt ?? Math.max(this.audio.currentTime + AUDIO_PREBUFFER, target)
         // Bound latency if callbacks arrive much faster than their sample clock.
-        if (start - this.audio.currentTime > 0.5) return
+        if (start - this.audio.currentTime > 0.5) {
+          this.audioLateDropped++
+          return
+        }
         const node = this.audio.createBufferSource()
         node.buffer = buffer
         node.connect(this.audioGain!)

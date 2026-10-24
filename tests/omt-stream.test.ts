@@ -13,6 +13,7 @@ let OmtStream: typeof import('../src/renderer/shared/omt-stream')['OmtStream']
 let streams: InstanceType<typeof OmtStream>[]
 let audioTime: number
 let gain: { gain: { value: number }; connect: ReturnType<typeof vi.fn> }
+let diagLog: ReturnType<typeof vi.fn>
 
 function video(timestamp = 10000000): OmtInputFrame {
   return { type: 'video', data: new Uint8Array(16), width: 2, height: 2, stride: 8,
@@ -25,7 +26,7 @@ beforeEach(async () => {
   receiver = null
   gain = { gain: { value: 1 }, connect: vi.fn() }
   nodes = []; copied = []; frames = []; streams = []; audioTime = 0
-  retain = vi.fn(async () => undefined); ack = vi.fn(); unsubscribe = vi.fn()
+  retain = vi.fn(async () => undefined); ack = vi.fn(); unsubscribe = vi.fn(); diagLog = vi.fn()
   draw = vi.fn(); requestFrame = vi.fn(); trackStop = vi.fn(); audioClose = vi.fn(async () => undefined)
   const videoTrack = { requestFrame, stop: trackStop }
   class FakeMediaStream {
@@ -62,7 +63,7 @@ beforeEach(async () => {
     getContext: () => ({ drawImage: draw }), captureStream: () => new FakeMediaStream() }) })
   vi.stubGlobal('window', {
     setTimeout, clearTimeout, setInterval, clearInterval, addEventListener: vi.fn(),
-    api: { omtInput: { retain, ack, onError: () => vi.fn(), onFrame: (callback: typeof receiver) => { receiver = callback; return unsubscribe } } },
+    api: { diag: { log: diagLog }, omtInput: { retain, ack, onError: () => vi.fn(), onFrame: (callback: typeof receiver) => { receiver = callback; return unsubscribe } } },
   })
   OmtStream = (await import('../src/renderer/shared/omt-stream')).OmtStream
 })
@@ -143,6 +144,34 @@ describe('OMT renderer playout', () => {
     expect(nodes[0].stop).toHaveBeenCalledOnce()
     expect(nodes[1].start.mock.calls[0][0]).toBeCloseTo(1.08)
     expect(nodes[2].start.mock.calls[0][0]).toBeCloseTo(1.1)
+  })
+
+  it('reports renderer audio schedule resets separately from late drops', () => {
+    const stream = open(true)
+    const chunk = { type: 'audio' as const, data: new Float32Array(1920), sampleRate: 48000,
+      channels: 2, samplesPerChannel: 960, timestamp: 10000000 }
+    stream.receive(chunk)
+    vi.advanceTimersByTime(1000)
+    audioTime = 1
+    // A real queue underrun delays the next buffer by the 80 ms prebuffer.
+    stream.receive({ ...chunk, timestamp: 20000000 })
+    // A backlog reaching the 0.5 s latency bound skips packets instead of
+    // scheduling them; those are counted separately from the underrun.
+    let lateDropped = 0
+    for (let i = 0; i < 30; i++) {
+      const before = nodes.length
+      stream.receive({ ...chunk, timestamp: 20600000 + i * 200000 })
+      if (nodes.length === before) lateDropped++
+    }
+    vi.advanceTimersByTime(10000)
+    expect(diagLog).toHaveBeenCalledTimes(1)
+    expect(diagLog).toHaveBeenCalledWith('info', 'omt-stream: audio schedule reset', expect.objectContaining({
+      underruns: 1, discontinuities: 0, lateDropped, rebufferLeadMs: 80,
+    }))
+    audioTime = 2
+    stream.receive({ ...chunk, timestamp: 30000000 })
+    vi.advanceTimersByTime(10000)
+    expect(diagLog.mock.calls[1][2]).toMatchObject({ underruns: 1, discontinuities: 0, rebufferLeadMs: 80 })
   })
 
   it('video timestamp resets cannot cancel playing audio', () => {
