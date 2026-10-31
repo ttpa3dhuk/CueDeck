@@ -1,28 +1,27 @@
-<p align="center"><img src="docs/screenshots/icon.png" width="96" alt="Иконка CueDeck"></p>
+![Иконка CueDeck](docs/screenshots/icon.png)
 
-<h1 align="center">CueDeck</h1>
+# CueDeck
 
-<p align="center"><b>Презентации всех спикеров с одного места: превью, TAKE, таймеры, суфлёр, трансляция.</b><br>
-Бесплатно · macOS и Windows · для мероприятий и конференций</p>
+**Презентации всех спикеров с одного места: превью, TAKE, таймеры, суфлёр, трансляция.**
 
-<p align="center">
-<a href="https://github.com/ttpa3dhuk/CueDeck/releases/latest"><b>Скачать</b></a> ·
-<a href="README.md">English</a> ·
-<a href="CHANGELOG.md">Что нового</a> ·
-<a href="https://www.youtube.com/watch?v=Vi5BDG_WoRg">Видеообзор</a>
-</p>
+Бесплатно · macOS и Windows · для мероприятий и конференций
 
-![Следующего спикера готовишь в превью, жмёшь TAKE, и он уходит в зал](docs/screenshots/take.gif)
+[**Скачать**](https://github.com/ttpa3dhuk/CueDeck/releases/latest) ·
+[English](README.md) ·
+[Что нового](CHANGELOG.md) ·
+[Видеообзор](https://www.youtube.com/watch?v=Vi5BDG_WoRg)
+
+![Следующего спикера готовишь в превью, жмёшь TAKE, и он уходит в зал](docs/screenshots/take.ru.gif)
 
 Заранее собираешь всех спикеров: PDF, PowerPoint, Keynote, ролики, ноутбук гостя. Следующего готовишь в превью и жмёшь TAKE. Он уходит в зал, подгружается его таймер, суфлёр переключается следом.
 
 Несколько материалов одного спикера можно собрать в папку и свернуть. Cmd/Ctrl выделяет карточки, правая кнопка → «Группировать» создаёт папку. Таймеры и комментарии остаются у каждого материала, группировка сохраняется в проекте.
 
-<sub>Интерфейс на скриншотах английский, русский выбирается при первом запуске.</sub>
+Язык интерфейса выбирается при первом запуске. В примерах используются вымышленные спикеры и презентации.
 
 ## Три экрана, один оператор
 
-![Ноутбук оператора, суфлёр спикера и экран зала рядом](docs/screenshots/screens.png)
+![Ноутбук оператора, суфлёр спикера и экран зала рядом](docs/screenshots/screens.ru.png)
 
 ## Суфлёр, который спикер правда читает
 
@@ -30,17 +29,17 @@
 
 | | |
 |---|---|
-| ![Суфлёр: слайд, следующий, заметки, таймер](docs/screenshots/prompter.png) | ![Суфлёр в режиме «только таймер»](docs/screenshots/prompter-timer.png) |
+| ![Суфлёр: слайд, следующий, заметки, таймер](docs/screenshots/prompter.ru.png) | ![Суфлёр в режиме «только таймер»](docs/screenshots/prompter-timer.ru.png) |
 
 Таймер и сообщение спикеру ставятся мышкой куда угодно:
 
-<img src="docs/screenshots/settings-prompter.png" width="640" alt="Макет суфлёра в Настройках">
+![Макет суфлёра в Настройках](docs/screenshots/settings-prompter.ru.png)
 
 ## Трансляция без OBS
 
 Кнопка STREAM отправляет картинку и звук зала на YouTube, VK и Telegram, до 5 площадок разом. Площадку можно включить или отключить прямо в эфире. Статистика показывает, где проблема: в компьютере, в сети или на площадке.
 
-<img src="docs/screenshots/stream.png" width="720" alt="Окно трансляции с площадками YouTube, VK и Telegram">
+![Окно трансляции с площадками YouTube, VK и Telegram](docs/screenshots/stream.ru.png)
 
 ## Захват окон и приём OMT
 
@@ -64,7 +63,7 @@
 
 Готовая страница для [Bitfocus Companion](https://bitfocus.io/companion): живой таймер, TAKE с именем спикера, лампа OMT (горит красным, когда vMix взял нас в эфир). На двух дополнительных страницах есть кнопка под каждую команду CueDeck, их можно копировать и раскладывать под свою деку. Ещё есть HTTP и OSC ([как подключить](companion/README.md)).
 
-<img src="docs/screenshots/streamdeck.png" width="480" alt="Кнопки CueDeck на Stream Deck через Companion">
+![Кнопки превью и видео из библиотеки CueDeck в Companion](docs/screenshots/streamdeck.png)
 
 ## Скачать
 
@@ -75,23 +74,21 @@
 | Windows 10 / 11, установка | `CueDeck-<версия>-Setup.exe` |
 | Windows 10 / 11, Portable (без установки) | `CueDeck-<версия>-win.zip` |
 
-<details>
-<summary>Первый запуск: приложение без подписи</summary>
+### Первый запуск: приложение без подписи
 
 На macOS: распакуй, перетащи `CueDeck.app` в «Программы», затем правый клик, «Открыть» и ещё раз «Открыть». Если пишет «приложение повреждено»: `xattr -cr /Applications/CueDeck.app`.
 
 На Windows: распакуй и запусти `CueDeck.exe`. SmartScreen предупредит, нажми «Подробнее», потом «Выполнить в любом случае». Всё равно не запускается? Смотри [Windows по шагам](docs/windows.ru.md).
 
 Для PowerPoint и Keynote нужен [LibreOffice](https://ru.libreoffice.org/download/). PDF, картинки и видео работают без него.
-</details>
 
-<a href="https://www.youtube.com/watch?v=Vi5BDG_WoRg"><img src="https://img.youtube.com/vi/Vi5BDG_WoRg/maxresdefault.jpg" width="480" alt="Видеообзор всех возможностей"></a><br>
-<sub>Видеообзор всех возможностей, 40 мин</sub>
+[![Видеообзор всех возможностей](https://img.youtube.com/vi/Vi5BDG_WoRg/maxresdefault.jpg)](https://www.youtube.com/watch?v=Vi5BDG_WoRg)
+
+Видеообзор всех возможностей, 40 мин
 
 ## Подробнее
 
-<details>
-<summary>Все возможности</summary>
+### Все возможности
 
 - Превью и эфир, TAKE на `Tab`. Глобальный кликер: PgUp/PgDn листают, даже когда CueDeck не в фокусе
 - Плейлист спикеров: перетаскивание, имя и таймер на каждого
@@ -110,10 +107,8 @@
 - Проект переезжает на другой компьютер, пропавшие файлы видны при открытии, а не в эфире
 - Подтверждение при закрытии посреди шоу. «Сообщить о проблеме…» в меню Help сохраняет zip с журналом
 - Русский и английский интерфейс
-</details>
 
-<details>
-<summary>Форматы и устройства</summary>
+### Форматы и устройства
 
 | Что | Работает | Заметка |
 |---|---|---|
@@ -124,10 +119,8 @@
 | ProRes, DNxHD | нет | перекодируй в [HandBrake](https://handbrake.fr/) |
 | USB-захват (UVC): Elgato Cam Link, AVMatrix, ATEM Mini, веб-камеры | да | видит Photo Booth, значит увидит и CueDeck |
 | Blackmagic DeckLink / UltraStudio | нет | свой драйвер, камерой не видны |
-</details>
 
-<details>
-<summary>Клавиши</summary>
+### Клавиши
 
 Переназначаются в Настройки → Горячие клавиши.
 
@@ -139,10 +132,8 @@
 | `B` | Заставка / blackout |
 | `T` / `R` | Таймер: старт-пауза / сброс |
 | `Cmd+,` | Настройки |
-</details>
 
-<details>
-<summary>Сборка из исходников</summary>
+### Сборка из исходников
 
 ```bash
 git clone https://github.com/ttpa3dhuk/CueDeck.git
@@ -155,7 +146,6 @@ npm run package:win   # zip для Windows
 ```
 
 Electron + TypeScript.
-</details>
 
 Нашёл баг? [Заведи issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose) или напиши в бот поддержки [@CueDeckSupport_Bot](https://t.me/CueDeckSupport_Bot) в Telegram. Пункт «Сообщить о проблеме…» в меню Help (на маке оно называется «Справка») сохраняет zip с журналом, его можно приложить.
 

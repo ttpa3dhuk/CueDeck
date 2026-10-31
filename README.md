@@ -1,16 +1,15 @@
-<p align="center"><img src="docs/screenshots/icon.png" width="96" alt="CueDeck icon"></p>
+![CueDeck icon](docs/screenshots/icon.png)
 
-<h1 align="center">CueDeck</h1>
+# CueDeck
 
-<p align="center"><b>Every speaker's slides from one seat: preview, TAKE, timers, prompter, streaming.</b><br>
-Free · macOS &amp; Windows · for live events and conferences</p>
+**Every speaker's slides from one seat: preview, TAKE, timers, prompter, streaming.**
 
-<p align="center">
-<a href="https://github.com/ttpa3dhuk/CueDeck/releases/latest"><b>Download</b></a> ·
-<a href="README.ru.md">Русская версия</a> ·
-<a href="CHANGELOG.md">What's new</a> ·
-<a href="https://www.youtube.com/watch?v=Vi5BDG_WoRg">Video</a>
-</p>
+Free · macOS & Windows · for live events and conferences
+
+[**Download**](https://github.com/ttpa3dhuk/CueDeck/releases/latest) ·
+[Русская версия](README.ru.md) ·
+[What's new](CHANGELOG.md) ·
+[Video](https://www.youtube.com/watch?v=Vi5BDG_WoRg)
 
 ![Stage the next speaker in Preview, press TAKE, and it goes to the hall](docs/screenshots/take.gif)
 
@@ -32,13 +31,13 @@ Current and next slide, your notes in real time, a timer that turns yellow and r
 
 Drag the timer and messages wherever you want them:
 
-<img src="docs/screenshots/settings-prompter.png" width="640" alt="Prompter layout editor in Settings">
+![Prompter layout editor in Settings](docs/screenshots/settings-prompter.png)
 
 ## Stream without OBS
 
 The STREAM button sends the hall picture and sound to YouTube, VK and Telegram, up to 5 destinations at once. You can add or drop one while live. Stats show whether a problem is your computer, the network or the platform.
 
-<img src="docs/screenshots/stream.png" width="720" alt="Stream window with YouTube, VK and Telegram destinations">
+![Stream window with YouTube, VK and Telegram destinations](docs/screenshots/stream.png)
 
 ## Window capture and OMT input
 
@@ -62,7 +61,7 @@ We haven't tested live vMix 29 yet, only OBS. If something goes wrong in vMix, [
 
 A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live timer, TAKE with the speaker's name, and an OMT lamp that turns red when vMix takes us on air. Two more pages have a button for every CueDeck command, so you can copy them and lay out your own deck. HTTP and OSC are there too ([setup](companion/README.md)).
 
-<img src="docs/screenshots/streamdeck.png" width="480" alt="CueDeck buttons on a Stream Deck via Companion">
+![Preview and video buttons from the CueDeck library in Companion (Russian page)](docs/screenshots/streamdeck.png)
 
 ## Download
 
@@ -73,23 +72,21 @@ A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live time
 | Windows 10 / 11, installer | `CueDeck-<version>-Setup.exe` |
 | Windows 10 / 11, Portable (no installation) | `CueDeck-<version>-win.zip` |
 
-<details>
-<summary>First launch: the app isn't signed</summary>
+### First launch: the app isn't signed
 
 On macOS: unzip, drag `CueDeck.app` to Applications, then right-click, "Open", and "Open" again. If macOS says the app is damaged: `xattr -cr /Applications/CueDeck.app`.
 
 On Windows: unzip and run `CueDeck.exe`. SmartScreen will warn: click "More info", then "Run anyway". Still won't start? See [Windows: step by step](docs/windows.md).
 
 PowerPoint and Keynote files need [LibreOffice](https://www.libreoffice.org/download/download-libreoffice/). PDF, images and video work without it.
-</details>
 
-<a href="https://www.youtube.com/watch?v=Vi5BDG_WoRg"><img src="https://img.youtube.com/vi/Vi5BDG_WoRg/maxresdefault.jpg" width="480" alt="Full walkthrough video"></a><br>
-<sub>Full walkthrough, 40 min (in Russian)</sub>
+[![Full walkthrough video](https://img.youtube.com/vi/Vi5BDG_WoRg/maxresdefault.jpg)](https://www.youtube.com/watch?v=Vi5BDG_WoRg)
+
+Full walkthrough, 40 min (in Russian)
 
 ## More
 
-<details>
-<summary>All features</summary>
+### All features
 
 - Preview and Program, TAKE on `Tab`. Global clicker: PgUp/PgDn work even when CueDeck isn't focused
 - Speaker playlist: drag-and-drop, a name and a timer per speaker
@@ -108,10 +105,8 @@ PowerPoint and Keynote files need [LibreOffice](https://www.libreoffice.org/down
 - Projects move between computers, missing files are flagged when you open the project, not on air
 - Quit confirmation mid-show. Help → Report a problem saves a zip with logs
 - English and Russian interface
-</details>
 
-<details>
-<summary>Formats and devices</summary>
+### Formats and devices
 
 | What | Works | Note |
 |---|---|---|
@@ -122,10 +117,8 @@ PowerPoint and Keynote files need [LibreOffice](https://www.libreoffice.org/down
 | ProRes, DNxHD | no | transcode with [HandBrake](https://handbrake.fr/) |
 | USB capture (UVC): Elgato Cam Link, AVMatrix, ATEM Mini, webcams | yes | if Photo Booth / Camera sees it, CueDeck will |
 | Blackmagic DeckLink / UltraStudio | no | own driver, not visible as a camera |
-</details>
 
-<details>
-<summary>Keyboard</summary>
+### Keyboard
 
 Remap in Settings → Keyboard shortcuts.
 
@@ -137,10 +130,8 @@ Remap in Settings → Keyboard shortcuts.
 | `B` | Blackout / key visual |
 | `T` / `R` | Timer start-pause / reset |
 | `Cmd+,` | Settings |
-</details>
 
-<details>
-<summary>Build from source</summary>
+### Build from source
 
 ```bash
 git clone https://github.com/ttpa3dhuk/CueDeck.git
@@ -153,7 +144,6 @@ npm run package:win   # Windows zip
 ```
 
 Electron + TypeScript.
-</details>
 
 Found a bug? [Open an issue](https://github.com/ttpa3dhuk/CueDeck/issues/new/choose) or write to the support bot [@CueDeckSupport_Bot](https://t.me/CueDeckSupport_Bot) in Telegram. Help → Report a problem saves a zip with logs you can attach.
 
