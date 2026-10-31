@@ -17,7 +17,7 @@ function argHint(c: RemoteCommand): string {
     case 'duration':
       return t('минуты: <code>5</code>, <code>0.5</code>; мин:сек <code>1:30</code>; <code>90s</code>, <code>1h</code>')
     case 'milliseconds':
-      return t('миллисекунды: от 100 до 2000')
+      return t('миллисекунды: от 100 до 400')
     case 'index':
       return t('номер с единицы')
     case 'number':
@@ -113,6 +113,7 @@ ${REMOTE_COMMANDS.filter((c) => c.group === g).map((c) => row(c, base, s.oscPort
 </style></head>
 <body><main>
 <h1>${t('CueDeck — внешнее управление')}</h1>
+${s.networkAuth ? `<p>${t('Ключ нужен для HTTP с другого компьютера. При включённой защите OSC работает только на этом компьютере.')}<br>${t('Ключ передаётся заголовком <code>Authorization: Bearer КЛЮЧ</code> или параметром <code>?key=КЛЮЧ</code>.')}</p>` : ''}
 <p class="sub">${t('Команды работают, в каком бы окне ни был фокус.')} ${
     s.lan
       ? t('Открыто для сети: {hosts}.', { hosts: lan.map((h) => `<code>${esc(h)}</code>`).join(', ') || t('сетевых адресов не найдено') })
@@ -132,7 +133,7 @@ ${REMOTE_COMMANDS.filter((c) => c.group === g).map((c) => row(c, base, s.oscPort
   </ol></div>
   <div><h3>Bitfocus Companion</h3><ol>
     <li>${t('Подключение <b>Generic HTTP Requests</b> → действие GET → тот же URL.')}</li>
-    <li>${t('Или <b>Generic OSC</b>: хост <code>127.0.0.1</code>{lan}, порт <code>{port}</code>, адрес из колонки OSC.', { lan: s.lan ? t(' (или IP этого компьютера)') : '', port: s.oscPort })}</li>
+    <li>${t('Или <b>Generic OSC</b>: хост <code>127.0.0.1</code>{lan}, порт <code>{port}</code>, адрес из колонки OSC.', { lan: s.lan && !s.networkAuth ? t(' (или IP этого компьютера)') : '', port: s.oscPort })}</li>
     <li>${t('Показать на кнопке: <code>{base}/api/state</code> (JSON: <code>timer.text</code>, <code>program.remaining</code>, <code>video.remainingText</code>…) или просто текст — <code>/api/timer/text</code>, <code>/api/program/text</code> («3/12»), <code>/api/program/remaining</code>, <code>/api/video/remaining</code>.', { base: esc(base) })}</li>
   </ol></div>
 </div>

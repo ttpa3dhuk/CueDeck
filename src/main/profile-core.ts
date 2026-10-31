@@ -1,3 +1,4 @@
+import { timerFont } from '../shared/timer-font.js'
 /**
  * Профили площадки — ядро без Electron (тесты: tests/profiles.test.ts).
  *
@@ -61,7 +62,7 @@ export const PROFILE_GROUPS: readonly ProfileGroup[] = [
 export const GROUP_KEYS: Record<ProfileGroup, readonly (keyof VenueProfileSettings)[]> = {
   screens: ['layout', 'audienceWindowed', 'audienceAlwaysOnTop', 'outputMonitorsEnabled'],
   audio: ['audioMain', 'audioPreview'],
-  prompter: ['timerPosition', 'timerScale', 'timerFree', 'timerColor', 'timerWarnColors', 'speakerToolbarScale', 'speakerLayout', 'speakerMsgLayout'],
+  prompter: ['timerPosition', 'timerScale', 'timerFree', 'timerFont', 'timerColor', 'timerWarnColors', 'speakerToolbarScale', 'speakerLayout', 'speakerMsgLayout'],
   timer: ['timerMode', 'timerTickEnabled', 'timerGongEnabled', 'timerLoop'],
   presets: ['timerPresets', 'speakerMsgPresets'],
   take: ['videoTakeMode', 'slideTakeMode', 'autoAdvance'],
@@ -149,6 +150,7 @@ export function sanitizeSettings(raw: unknown): VenueProfileSettings {
     timerPosition: oneOf(s.timerPosition, TIMER_POSITIONS, 'top-right'),
     timerScale: num(s.timerScale, 0.3, 4, 1),
     timerFree: point(s.timerFree, { x: 0.85, y: 0.12 }),
+    timerFont: timerFont(s.timerFont),
     timerColor: color,
     timerWarnColors: bool(s.timerWarnColors, true),
     timerTickEnabled: bool(s.timerTickEnabled, false),

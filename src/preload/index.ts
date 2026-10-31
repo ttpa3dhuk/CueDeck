@@ -5,6 +5,13 @@ import type { StreamSettings } from '../shared/types'
 // Роль окна — метка строк журнала, которые шлёт этот рендерер.
 const ROLE = new URLSearchParams(location.search).get('role') ?? 'unknown'
 
+ipcRenderer.on('program-mirror:port', (event, metadata) => {
+  window.postMessage({ type: 'cuedeck-program-port', metadata }, '*', event.ports)
+})
+ipcRenderer.on('program-mirror:reset', (_event, metadata) => {
+  window.postMessage({ type: 'cuedeck-program-reset', metadata }, '*')
+})
+
 // One direct media port per renderer; replaced after a receiver-helper restart.
 let omtInputPort: MessagePort | undefined
 const omtFrameListeners = new Set<(packet: import('../shared/omt-input').OmtInputPacket) => void>()
@@ -32,6 +39,11 @@ if (gpuApi) gpuApi.setSharedTextureReceiver(async ({ importedSharedTexture }, me
 })
 
 const api: PresenterApi = {
+  programMirror: {
+    available: () => ipcRenderer.invoke('program-mirror:available'),
+    forced: () => ipcRenderer.invoke('program-mirror:forced'),
+    register: source => ipcRenderer.send('program-mirror:register', source),
+  },
   state: {
     get: () => ipcRenderer.invoke('state:get'),
     onPatch: (cb) => {
@@ -77,6 +89,7 @@ const api: PresenterApi = {
     setSlideTakeMode: (mode) => ipcRenderer.invoke('preview:set-slide-take-mode', mode),
     video: {
       toggle: () => ipcRenderer.invoke('preview:video:toggle'),
+      pause: () => ipcRenderer.invoke('preview:video:pause'),
       seek: (sec) => ipcRenderer.invoke('preview:video:seek', sec),
       seekBy: (deltaSec) => ipcRenderer.invoke('preview:video:seek-by', deltaSec),
       setDuration: (sec) => ipcRenderer.invoke('preview:video:set-duration', sec),
@@ -97,6 +110,7 @@ const api: PresenterApi = {
     setPosition: (pos) => ipcRenderer.invoke('timer:set-position', pos),
     setScale: (scale) => ipcRenderer.invoke('timer:set-scale', scale),
     setFree: (x, y) => ipcRenderer.invoke('timer:set-free', x, y),
+    setFont: (font) => ipcRenderer.invoke('timer:set-font', font),
     setColor: (color) => ipcRenderer.invoke('timer:set-color', color),
     setWarnColors: (on) => ipcRenderer.invoke('timer:set-warn-colors', on),
     setTickSound: (enabled) => ipcRenderer.invoke('timer:set-tick-sound', enabled),
@@ -131,10 +145,20 @@ const api: PresenterApi = {
     setMuted: (muted) => ipcRenderer.invoke('video:set-muted', muted),
     setLoop: (enabled) => ipcRenderer.invoke('video:set-loop', Boolean(enabled)),
     toggleMuted: () => ipcRenderer.invoke('video:toggle-muted'),
+    stepFrame: (deck, direction, identity) => ipcRenderer.invoke('video:step-frame', { deck, direction, identity }),
+    timecode: (deck) => ipcRenderer.invoke('video:timecode', deck),
+    setRange: (deck, edge) => ipcRenderer.invoke('video:set-range', { deck, edge }),
   },
   audio: {
     setOutput: (deviceId) => ipcRenderer.invoke('audio:set-output', deviceId),
     setPreviewOutput: (deviceId) => ipcRenderer.invoke('audio:set-preview-output', deviceId),
+  },
+  testScreen: {
+    setEnabled: (enabled) => ipcRenderer.invoke('test-screen:set-enabled', enabled),
+    info: (role) => ipcRenderer.invoke('test-screen:info', role),
+  },
+  audienceOutput: {
+    setEnabled: (enabled) => ipcRenderer.invoke('audience-output:set-enabled', enabled),
   },
   displays: {
     list: () => ipcRenderer.invoke('displays:list'),
@@ -177,6 +201,7 @@ const api: PresenterApi = {
     importFile: () => ipcRenderer.invoke('profiles:import'),
   },
   remote: {
+    copyAccessKey: () => ipcRenderer.invoke('remote:copy-access-key'),
     configure: (settings) => ipcRenderer.invoke('remote:configure', settings),
     openHelp: () => ipcRenderer.invoke('remote:open-help'),
     saveCompanionPage: () => ipcRenderer.invoke('remote:save-companion-page'),
@@ -203,6 +228,7 @@ const api: PresenterApi = {
     setFolders: (ids, folderId) => ipcRenderer.invoke('playlist:folders-assign', { ids, folderId }),
     setFolderCollapsed: (id, collapsed) => ipcRenderer.invoke('playlist:folder-collapse', { id, collapsed }),
     remove: (id) => ipcRenderer.invoke('playlist:remove', id),
+    duplicate: (id) => ipcRenderer.invoke('playlist:duplicate', id),
     reorder: (ids) => ipcRenderer.invoke('playlist:reorder', ids),
     update: (id, payload) => ipcRenderer.invoke('playlist:update', { id, ...payload }),
     activate: (id) => ipcRenderer.invoke('playlist:activate', id),
@@ -230,6 +256,12 @@ const api: PresenterApi = {
     consolidate: () => ipcRenderer.invoke('project:consolidate'),
   },
   menu: {
+    onQuickSetting: (cb) => {
+      const listener = (_event: Electron.IpcRendererEvent, action: string, value: unknown) => cb(action, value)
+      ipcRenderer.on('menu:quick-setting', listener)
+      return () => ipcRenderer.removeListener('menu:quick-setting', listener)
+    },
+    setAudioOutputs: outputs => ipcRenderer.invoke('menu:audio-outputs', outputs),
     onOpenPdf: (cb) => {
       const listener = () => cb()
       ipcRenderer.on('menu:open-pdf', listener)
@@ -385,6 +417,7 @@ const api: PresenterApi = {
     log: (level, message, data) => ipcRenderer.send('diag:log', ROLE, level, message, data),
     mark: () => ipcRenderer.invoke('diag:mark'),
     info: () => ipcRenderer.invoke('diag:info'),
+    removeMaterial: (token, index) => ipcRenderer.invoke('diag:remove-material', token, index),
     chooseMaterials: () => ipcRenderer.invoke('diag:choose-materials'),
     buildReport: (comment, token, markerN) => ipcRenderer.invoke('diag:build-report', comment, token, markerN),
     openRecovery: () => ipcRenderer.invoke('diag:open-recovery'),

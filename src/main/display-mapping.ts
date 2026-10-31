@@ -1,5 +1,7 @@
+import { timerFont } from '../shared/timer-font.js'
 import { DEFAULT_TIMER_ADJUSTMENTS, timerAdjustments } from '../shared/timer-controls.js'
 import { sanitizeSlideFadeMs } from '../shared/slide-transition.js'
+import { sanitizeStoredVideoRange } from '../shared/video-range.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { DEFAULT_TAKE_FADE_MS, sanitizeTakeFadeMs } from '../shared/take-transition.js'
 import Store from 'electron-store'
@@ -46,6 +48,7 @@ interface PersistedShape {
   timerPosition: TimerPosition
   timerScale: number
   timerFree: { x: number; y: number }
+  timerFont: string
   timerColor: string | null
   timerWarnColors: boolean
   speakerToolbarScale: number
@@ -116,7 +119,8 @@ const STORE_DEFAULTS: PersistedShape = {
   timerPosition: 'top-right',
   timerScale: 1,
   timerFree: { x: 0.85, y: 0.12 },
-  timerColor: null,
+  timerFont: 'system',
+    timerColor: null,
   timerWarnColors: true,
   speakerToolbarScale: 1,
   speakerLayout: { sidebarPct: 37, nextPct: null },
@@ -264,6 +268,9 @@ export function setTimerFree(pos: { x: number; y: number }): void {
   store().set('timerFree', pos)
 }
 
+export function getTimerFont(): string { return timerFont(store().get('timerFont')) }
+export function setTimerFont(value: string): void { store().set('timerFont', timerFont(value)) }
+
 const HEX = /^#[0-9a-f]{6}$/i
 
 export function getTimerColor(): string | null {
@@ -360,6 +367,7 @@ export function getPlaylist(): PlaylistEntry[] {
   const raw = store().get('playlist') as unknown[]
   return raw.map((e) => {
     const v = e as Record<string, unknown>
+    const storedRange = v.kind === 'video' ? sanitizeStoredVideoRange(v.inSec, v.outSec) : null
     return {
       id: String(v.id),
       kind: (v.kind as PlaylistEntry['kind']) ?? 'pdf',
@@ -376,6 +384,7 @@ export function getPlaylist(): PlaylistEntry[] {
       ...(typeof v.slideFadeMs === 'number' ? { slideFadeMs: sanitizeSlideFadeMs(v.slideFadeMs) } : {}),
       ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
       ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),
+      ...(storedRange ? { inSec: storedRange.inSec, outSec: storedRange.outSec } : {}),
     }
   })
 }
@@ -596,6 +605,7 @@ export function getRemoteSettings(): RemoteSettings {
     httpPort: validPort(raw.httpPort, DEFAULT_REMOTE_SETTINGS.httpPort),
     oscPort: validPort(raw.oscPort, DEFAULT_REMOTE_SETTINGS.oscPort),
     lan: raw.lan === true,
+    networkAuth: raw.networkAuth === true,
     companionPush: raw.companionPush !== false,
     companionHost: validHost(raw.companionHost) ?? DEFAULT_REMOTE_SETTINGS.companionHost,
   }

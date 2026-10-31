@@ -2,12 +2,32 @@ import { describe, it, expect } from 'vitest'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders, sanitizePlaylistFolders } from '../src/shared/playlist-folders'
+import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders, sanitizePlaylistFolders, duplicatePlaylistEntry } from '../src/shared/playlist-folders'
 import { loadProjectFile, saveProjectFile } from '../src/main/project'
 import type { PlaylistEntry } from '../src/shared/types'
 const entry = (id: string, folderId?: string): PlaylistEntry => ({ id, folderId, kind: 'pdf', filePath: `/media/${id}.pdf`, fileName: `${id}.pdf`, displayName: '', speakerName: '', durationMs: 1000 })
 const folders = [{ id: 'a', name: 'Андрей', collapsed: true }, { id: 'b', name: 'Мария' }]
 describe('organizational folders', () => {
+  it('duplicates a list after its source with independent nested items and identical settings', () => {
+    const original: PlaylistEntry = {
+      ...entry('1', 'a'), kind: 'list', filePath: '', fileName: 'Photos', displayName: 'Break',
+      speakerName: 'After lunch', durationMs: 45000, photoSec: 7, listMode: 'shuffle',
+      fadeMs: 350, loop: true,
+      items: [{ path: '/media/photo.png', fileName: 'photo.png', kind: 'image' }],
+    }
+    const input = [entry('before'), original, entry('after', 'a')]
+    const result = duplicatePlaylistEntry(input, '1', 'copy')
+    expect(result.map((item) => item.id)).toEqual(['before', '1', 'copy', 'after'])
+    expect(result[2]).toEqual({ ...original, id: 'copy' })
+    expect(result[2]).not.toBe(original)
+    expect(result[2].items).not.toBe(original.items)
+    expect(result[2].items?.[0]).not.toBe(original.items?.[0])
+    result[2].items![0].fileName = 'changed.png'
+    expect(original.items?.[0].fileName).toBe('photo.png')
+    expect(input.map((item) => item.id)).toEqual(['before', '1', 'after'])
+    expect(duplicatePlaylistEntry(input, 'missing', 'copy')).toBe(input)
+    expect(duplicatePlaylistEntry(input, '1', 'after')).toBe(input)
+  })
   it('groups at the first member, retaining ungrouped entries and all media', () => {
     const input = [entry('1', 'a'), entry('2'), entry('3', 'b'), entry('4', 'a'), entry('5', 'b')]
     const normalized = normalizeFolderPlaylist(input, folders)

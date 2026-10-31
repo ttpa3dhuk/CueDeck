@@ -14778,7 +14778,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "Fade duration (100–2000 ms)"
+							"notes": "Fade duration (100–400 ms)"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -14791,7 +14791,7 @@
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
 												"url": {
-													"value": "take/fade-ms/500",
+													"value": "take/fade-ms/300",
 													"isExpression": false
 												},
 												"header": {

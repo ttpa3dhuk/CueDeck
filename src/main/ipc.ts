@@ -1,3 +1,4 @@
+import { timerFont } from '../shared/timer-font.js'
 import { timerAdjustments } from '../shared/timer-controls.js'
 import { materialTakeTimer, sanitizeMaterialSettings, validMaterialDuration } from '../shared/material-settings.js'
 import { setMaterialSettings } from './display-mapping.js'
@@ -9,9 +10,26 @@ import { audienceTimerConfig, createAudienceTimer } from '../shared/audience-tim
 import { createAudienceTimerCommands } from './audience-timer.js'
 import { getAudienceTimer, setAudienceTimer } from './display-mapping.js'
 import { createClickerShortcutManager } from './clicker-shortcuts.js'
-import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders } from '../shared/playlist-folders.js'
+import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders, duplicatePlaylistEntry } from '../shared/playlist-folders.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { sanitizeTakeFadeMs, type TakeTransition } from '../shared/take-transition.js'
+import {
+  clampVideoPosition,
+  endVideo,
+  entryVideoRange,
+  isVideoAtStart,
+  normalizeVideoRange,
+  planVideoTake,
+  reusedVideoDuration,
+  playVideoFrom,
+  seekVideoTo,
+  videoRangeEnd,
+  videoRangeStart,
+} from '../shared/video-range.js'
+import { frameTimelines } from './frame-timeline.js'
+import { VideoInOutController } from './video-inout.js'
+import { VideoBoundaryScheduler } from './video-boundary.js'
+import { registerVideoInOutIpc } from './video-inout-ipc.js'
 import { app, dialog, globalShortcut, ipcMain, screen, shell } from 'electron'
 import { homedir } from 'node:os'
 import { access, copyFile, mkdir, readFile, rm, stat } from 'node:fs/promises'
@@ -51,6 +69,7 @@ import {
   setTimerPosition,
   setTimerScale,
   setTimerFree,
+  setTimerFont,
   setTimerColor,
   validTimerColor,
   setTimerWarnColors,
@@ -212,6 +231,7 @@ function setFontIssues(filePath: string, fonts: string[]): void {
 
 /** Read a file's identity + page count + sidecar notes. Shared by both decks. */
 async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; cacheSourcePath?: string; cacheProjectPath?: string | null; reportFontIssues?: boolean } = {}): Promise<InspectedFile> {
+  if (store.get().testScreen.automatic) store.patch({ testScreen: { ...store.get().testScreen, automatic: false } })
   const kind = kindOf(filePath)
   if (!kind) throw new Error(t('Неподдерживаемый формат файла'))
 
@@ -409,6 +429,14 @@ function openErrorMessage(err: unknown, filePath: string): string {
   return t('Файл не найден: {name} — материал переехал. Нажми «Указать файл…» на карточке', { name: basename(filePath) })
 }
 
+/** Abort an ffprobe run only when no deck still points at that file. */
+function cancelFrameProbeIfUnused(path: string | null): void {
+  if (!path) return
+  const state = store.get()
+  if (state.pdfPath === path || state.preview.path === path) return
+  frameTimelines.cancel(path)
+}
+
 async function openFile(
   filePath: string,
   opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; startOnTake?: boolean; transition?: TakeTransition } = {},
@@ -416,6 +444,7 @@ async function openFile(
   // Любая загрузка в эфир мимо проигрывателя снимает список с эфира — иначе
   // его таймер продолжил бы подменять картинку под уже другим материалом.
   if (!opts.fromList) stopListPlayback()
+  const previousFramePath = store.get().fileKind === 'video' ? store.get().pdfPath : null
   try {
     const info = await inspectFile(filePath)
     const playlistId = opts.playlistId ?? null
@@ -430,6 +459,19 @@ async function openFile(
     // Цикл — свойство записи плейлиста: заряжаем эфир её настройкой. Файл,
     // открытый мимо плейлиста, всегда стартует без цикла.
     const entry = playlistId ? store.get().playlist.find((e) => e.id === playlistId) : undefined
+    // A duplicate/direct activation of the same path+sha reuses the decoder and
+    // its already-known duration; resetting it to 0 left the renderer unable to
+    // report metadata again (same <source> does not always emit loadedmetadata).
+    const beforeProgram = store.get()
+    const reusedDuration = info.kind === 'video'
+      ? reusedVideoDuration(
+          { path: beforeProgram.pdfPath, sha1: beforeProgram.pdfSha1, kind: beforeProgram.fileKind, video: beforeProgram.video },
+          filePath, info.sha1, info.kind,
+        )
+      : 0
+    // Applied range snapshot. Editing this entry's In/Out later updates the
+    // clock immediately too (same entry id), not only on the next TAKE.
+    const entryRange = info.kind === 'video' ? entryVideoRange(entry, reusedDuration) : null
 
     store.patch({
       // У списка `loop` — про всю пачку, а не про отдельный ролик внутри неё:
@@ -447,10 +489,11 @@ async function openFile(
       // Reset the playback clock for every file load; keep audience-mute preference.
       video: {
         playing: false,
-        anchorSec: 0,
+        anchorSec: entryRange?.inSec ?? 0,
         anchorAt: null,
-        durationSec: 0,
+        durationSec: reusedDuration,
         muted: store.get().video.muted,
+        range: entryRange,
       },
       ...(info.kind === 'pptx' ? initialSlideVideo(info.kind, info.slideMedia, 1, store.get().video.muted) : {}),
     })
@@ -458,6 +501,7 @@ async function openFile(
       ? materialTakeTimer(opts.durationMs, info.kind, store.get().timerMode, opts.startOnTake === true && store.get().materialSettings.autoStartTimer, Date.now())
       : timerPatch)
 
+    if (previousFramePath && previousFramePath !== filePath) cancelFrameProbeIfUnused(previousFramePath)
     setLastPdfPath(filePath)
     setCurrentPlaylistId(playlistId)
     if (typeof opts.durationMs === 'number') setLastDurationMs(opts.durationMs)
@@ -480,8 +524,16 @@ async function loadPreview(
   filePath: string,
   opts: { playlistId?: string | null } = {},
 ): Promise<OpenPdfResult> {
+  const previousFramePath = store.get().preview.kind === 'video' ? store.get().preview.path : null
   try {
     const info = await inspectFile(filePath)
+    const playlistId = opts.playlistId ?? null
+    const entry = playlistId ? store.get().playlist.find((e) => e.id === playlistId) : undefined
+    const beforePreview = store.get().preview
+    const reusedDuration = info.kind === 'video'
+      ? reusedVideoDuration(beforePreview, filePath, info.sha1, info.kind)
+      : 0
+    const entryRange = info.kind === 'video' ? entryVideoRange(entry, reusedDuration) : null
     store.patchPreview({
       recoveryTake: false,
       path: filePath,
@@ -490,10 +542,18 @@ async function loadPreview(
       totalSlides: info.totalSlides,
       currentSlide: 1,
       notes: info.notes,
-      playlistId: opts.playlistId ?? null,
+      playlistId,
       slideMedia: info.slideMedia,
-      video: { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: true },
+      video: {
+        playing: false,
+        anchorSec: entryRange?.inSec ?? 0,
+        anchorAt: null,
+        durationSec: reusedDuration,
+        muted: true,
+        range: entryRange,
+      },
     })
+    if (previousFramePath && previousFramePath !== filePath) cancelFrameProbeIfUnused(previousFramePath)
     return {
       ok: true,
       path: filePath,
@@ -545,8 +605,13 @@ async function programNext(): Promise<void> {
   // неигравший ролик (позиция 0, после автоперехода плейлиста) первый клик
   // «далее» запускает; играющий/отмотанный — прежняя перемотка +5с кликера.
   if (state.fileKind === 'video') {
-    if (!state.video.playing && store.videoPositionSec() < 0.5) {
-      store.patchVideo({ playing: true, anchorAt: Date.now() })
+    const position = store.videoPositionSec()
+    if (!state.video.playing && isVideoAtStart(position, state.video.range, state.video.durationSec)) {
+      store.patchVideo({
+        playing: true,
+        anchorSec: videoRangeStart(state.video.range, state.video.durationSec),
+        anchorAt: Date.now(),
+      })
     } else {
       programSeekBy(5)
     }
@@ -587,9 +652,7 @@ function programPrev(): void {
 function programSeekBy(deltaSec: number): void {
   const v = store.get().video
   const delta = Number.isFinite(deltaSec) ? deltaSec : 0
-  let pos = Math.max(0, store.videoPositionSec() + delta)
-  if (v.durationSec > 0) pos = Math.min(pos, v.durationSec)
-  store.patchVideo({ anchorSec: pos, anchorAt: v.playing ? Date.now() : null })
+  store.patchVideo(seekVideoTo(v, store.videoPositionSec() + delta))
 }
 
 /**
@@ -621,6 +684,10 @@ function persistPlaylist(): void {
   setPlaylist(store.get().playlist)
   setPlaylistFolders(store.get().playlistFolders)
 }
+
+const videoInOut = new VideoInOutController(store, frameTimelines, persistPlaylist)
+const videoBoundary = new VideoBoundaryScheduler(store)
+videoBoundary.start()
 
 /** Правка таймера в эфире становится длительностью именно этой записи. */
 function persistProgramDuration(durationMs: number): void {
@@ -895,7 +962,9 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('preview:clear', () => {
+    const path = store.get().preview.kind === 'video' ? store.get().preview.path : null
     store.patch({ preview: initialDeckState() })
+    cancelFrameProbeIfUnused(path)
   })
 
   // Promote the staged preview deck onto the audience feed. Taking a playlist
@@ -930,30 +999,36 @@ export function registerIpcHandlers(): void {
       return
     }
 
+    const previewEntry = p.playlistId
+      ? state.playlist.find((e) => e.id === p.playlistId)
+      : undefined
     const recovery = recoveryTakeFrame(p, store.previewVideoPositionSec())
     const takeSlide = recovery?.slide ?? (
       (p.kind === 'pdf' || p.kind === 'pptx') && state.slideTakeMode === 'from-start'
         ? 1 : p.currentSlide)
     const sourceVideo = initialSlideVideo(p.kind, p.slideMedia, takeSlide, state.video.muted)
-    // New program video: always autoplayed on take; mode only picks start point.
-    // PPTX uses the playback mode authored in its media timing.
+    const takeDuration = p.kind === 'video'
+      ? (p.video.durationSec > 0
+          ? p.video.durationSec
+          : reusedVideoDuration(
+              { path: state.pdfPath, sha1: state.pdfSha1, kind: state.fileKind, video: state.video },
+              p.path, p.sha1, p.kind,
+            ))
+      : 0
+    // New program video: mode picks In, resume position or hold-first. The
+    // range is snapshotted into the program clock here; later In/Out edits on
+    // this same entry apply immediately by id. PPTX uses its authored timing.
     let video: import('./state.js').VideoState
     if (recovery) {
       video = recovery.video
     } else if (p.kind === 'video') {
-      const mode = state.videoTakeMode
-      // «Стоп на первом кадре»: ролик уходит в эфир замороженным на нулевой
-      // позиции — первый кадр работает заставкой, а запускает его кликер
-      // спикера первым «далее» (та же механика, что у видео на слайде).
-      const hold = mode === 'hold-first'
-      const startSec = mode === 'play-resume' ? store.previewVideoPositionSec() : 0
-      video = {
-        playing: !hold,
-        anchorSec: hold ? 0 : startSec,
-        anchorAt: hold ? null : Date.now(),
-        durationSec: p.video.durationSec,
+      video = planVideoTake({
+        mode: state.videoTakeMode,
+        previewPositionSec: store.previewVideoPositionSec(),
+        durationSec: takeDuration,
+        range: entryVideoRange(previewEntry, takeDuration),
         muted: state.video.muted,
-      }
+      })
     } else {
       video = sourceVideo.video
     }
@@ -978,7 +1053,14 @@ export function registerIpcHandlers(): void {
       slideMedia: state.slideMedia,
       video:
         state.fileKind === 'video'
-          ? { playing: false, anchorSec: oldProgramPos, anchorAt: null, durationSec: state.video.durationSec, muted: true }
+          ? {
+              playing: false,
+              anchorSec: oldProgramPos,
+              anchorAt: null,
+              durationSec: state.video.durationSec,
+              muted: true,
+              range: state.video.range ?? null,
+            }
           : { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: true },
     }
 
@@ -998,18 +1080,15 @@ export function registerIpcHandlers(): void {
       video,
       // Цикл берём у выдаваемой записи: ролик-заставка должен уйти в эфир
       // зациклённым сразу, без второго действия оператора.
-      videoLoop: recovery ? false : p.kind === 'pptx' ? sourceVideo.videoLoop : Boolean(
-        p.playlistId ? state.playlist.find((e) => e.id === p.playlistId)?.loop : false,
-      ),
+      videoLoop: recovery ? false : p.kind === 'pptx' ? sourceVideo.videoLoop : Boolean(previewEntry?.loop),
       preview: newPreview,
     })
     setLastPdfPath(p.path)
     setCurrentPlaylistId(p.playlistId)
 
-    const entry = p.playlistId ? state.playlist.find((e) => e.id === p.playlistId) : undefined
-    if (entry && !recovery) {
-      store.patchTimer(materialTakeTimer(entry.durationMs, p.kind, state.timerMode, state.materialSettings.autoStartTimer, Date.now()))
-      setLastDurationMs(entry.durationMs)
+    if (previewEntry && !recovery) {
+      store.patchTimer(materialTakeTimer(previewEntry.durationMs, p.kind, state.timerMode, state.materialSettings.autoStartTimer, Date.now()))
+      setLastDurationMs(previewEntry.durationMs)
     }
   })
 
@@ -1032,49 +1111,56 @@ export function registerIpcHandlers(): void {
 
   // Preview video transport — mirrors the program clock helpers on preview.video.
   // Preview audio is always muted (the operator monitors it silently).
+  ipcMain.handle('preview:video:pause', () => {
+    if (!store.get().preview.video.playing) return
+    store.patchPreviewVideo({ playing: false, anchorSec: store.previewVideoPositionSec(), anchorAt: null })
+  })
   ipcMain.handle('preview:video:toggle', () => {
     const v = store.get().preview.video
     if (v.playing) {
       store.patchPreviewVideo({ playing: false, anchorSec: store.previewVideoPositionSec(), anchorAt: null })
     } else {
-      store.patchPreviewVideo({ playing: true, anchorSec: store.previewVideoPositionSec(), anchorAt: Date.now() })
+      store.patchPreviewVideo(playVideoFrom(v, store.previewVideoPositionSec()))
     }
   })
 
   ipcMain.handle('preview:video:seek', (_e, sec: number) => {
     const v = store.get().preview.video
-    let pos = Number.isFinite(sec) ? Math.max(0, sec) : 0
-    if (v.durationSec > 0) pos = Math.min(pos, v.durationSec)
-    store.patchPreviewVideo({ anchorSec: pos, anchorAt: v.playing ? Date.now() : null })
+    store.patchPreviewVideo(seekVideoTo(v, Number.isFinite(sec) ? sec : 0))
   })
 
   ipcMain.handle('preview:video:seek-by', (_e, deltaSec: number) => {
     const v = store.get().preview.video
     const delta = Number.isFinite(deltaSec) ? deltaSec : 0
-    let pos = Math.max(0, store.previewVideoPositionSec() + delta)
-    if (v.durationSec > 0) pos = Math.min(pos, v.durationSec)
-    store.patchPreviewVideo({ anchorSec: pos, anchorAt: v.playing ? Date.now() : null })
+    store.patchPreviewVideo(seekVideoTo(v, store.previewVideoPositionSec() + delta))
   })
 
   ipcMain.handle('preview:video:set-duration', (_e, sec: number) => {
     if (!Number.isFinite(sec) || sec <= 0) return
-    if (store.get().preview.video.durationSec === sec) return
-    store.patchPreviewVideo({ durationSec: sec })
+    const v = store.get().preview.video
+    if (v.durationSec === sec) return
+    const range = normalizeVideoRange(v.range, sec)
+    const currentPosition = store.previewVideoPositionSec()
+    const position = clampVideoPosition(currentPosition, range, sec)
+    const patch: Partial<import('./state.js').VideoState> = { durationSec: sec, range }
+    if (position !== currentPosition) {
+      patch.anchorSec = position
+      patch.anchorAt = v.playing ? Date.now() : null
+    }
+    store.patchPreviewVideo(patch)
   })
 
   ipcMain.handle('preview:video:ended', () => {
     const state = store.get()
     const v = state.preview.video
+    const bounds = normalizeVideoRange(v.range, v.durationSec)
+    if (bounds && (!v.playing || store.previewVideoPositionSec() < bounds.outSec - 1e-6)) return
     // Превью показывает то же поведение, что будет в эфире: зациклённая запись
     // и в превью крутится по кругу — иначе значок включён, а ролик встал.
     const entry = state.preview.playlistId
       ? state.playlist.find((e) => e.id === state.preview.playlistId)
       : undefined
-    if (entry?.loop) {
-      store.patchPreviewVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
-      return
-    }
-    store.patchPreviewVideo({ playing: false, anchorSec: v.durationSec || v.anchorSec, anchorAt: null })
+    store.patchPreviewVideo(endVideo(v, Boolean(entry?.loop)))
   })
 
   ipcMain.handle('note:update', (_e, payload: { slide: number; text: string }) => {
@@ -1166,6 +1252,11 @@ export function registerIpcHandlers(): void {
   })
 
   // Цвет цифр таймера на суфлёре: '#rrggbb' или null (стандартный зелёный).
+  ipcMain.handle('timer:set-font', (_e, value: unknown) => {
+    const font = timerFont(value)
+    store.patch({ timerFont: font })
+    setTimerFont(font)
+  })
   ipcMain.handle('timer:set-color', (_e, color: unknown) => {
     const c = validTimerColor(color)
     store.patch({ timerColor: c })
@@ -1275,7 +1366,7 @@ export function registerIpcHandlers(): void {
     const v = store.get().video
     if (v.playing) return
     // re-anchor at the frozen position so playback resumes from where it paused
-    store.patchVideo({ playing: true, anchorSec: store.videoPositionSec(), anchorAt: Date.now() })
+    store.patchVideo(playVideoFrom(v, store.videoPositionSec()))
   })
 
   ipcMain.handle('video:pause', () => {
@@ -1289,39 +1380,45 @@ export function registerIpcHandlers(): void {
     if (v.playing) {
       store.patchVideo({ playing: false, anchorSec: store.videoPositionSec(), anchorAt: null })
     } else {
-      store.patchVideo({ playing: true, anchorSec: store.videoPositionSec(), anchorAt: Date.now() })
+      store.patchVideo(playVideoFrom(v, store.videoPositionSec()))
     }
   })
 
   ipcMain.handle('video:seek', (_e, sec: number) => {
     const v = store.get().video
-    let pos = Number.isFinite(sec) ? Math.max(0, sec) : 0
-    if (v.durationSec > 0) pos = Math.min(pos, v.durationSec)
-    store.patchVideo({ anchorSec: pos, anchorAt: v.playing ? Date.now() : null })
+    store.patchVideo(seekVideoTo(v, Number.isFinite(sec) ? sec : 0))
   })
 
   ipcMain.handle('video:seek-by', (_e, deltaSec: number) => programSeekBy(deltaSec))
 
   ipcMain.handle('video:set-duration', (_e, sec: number) => {
     if (!Number.isFinite(sec) || sec <= 0) return
-    if (store.get().video.durationSec === sec) return
-    store.patchVideo({ durationSec: sec })
+    const v = store.get().video
+    if (v.durationSec === sec) return
+    const range = normalizeVideoRange(v.range, sec)
+    const currentPosition = store.videoPositionSec()
+    const position = clampVideoPosition(currentPosition, range, sec)
+    const patch: Partial<import('./state.js').VideoState> = { durationSec: sec, range }
+    if (position !== currentPosition) {
+      patch.anchorSec = position
+      patch.anchorAt = v.playing ? Date.now() : null
+    }
+    store.patchVideo(patch)
   })
 
-  // Fired by the operator window when its <video> reaches the end.
+  // Real EOF from the operator (the main Out deadline uses endVideo directly).
+  // Loop wraps to In; otherwise freeze on Out, not on the file duration.
   ipcMain.handle('video:ended', () => {
     if (isListPlaying()) {
       void stepList(1)
       return
     }
     const v = store.get().video
-    // Цикл: ролик-заставка крутится, пока спикер на сцене — вместо паузы на
-    // последнем кадре перезапускаем часы с нуля, и все окна следуют за ними.
-    if (store.get().videoLoop) {
-      store.patchVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
-      return
-    }
-    store.patchVideo({ playing: false, anchorSec: v.durationSec || v.anchorSec, anchorAt: null })
+    const bounds = normalizeVideoRange(v.range, v.durationSec)
+    // Ignore a duplicate/stale native ended that arrives after the deadline has
+    // already paused at Out or wrapped to In.
+    if (bounds && (!v.playing || store.videoPositionSec() < bounds.outSec - 1e-6)) return
+    store.patchVideo(endVideo(v, store.get().videoLoop))
   })
 
   ipcMain.handle('video:set-loop', (_e, enabled: boolean) => {
@@ -1341,8 +1438,13 @@ export function registerIpcHandlers(): void {
     // Включили цикл на уже доигравшем ролике — стартуем его сразу, иначе
     // пришлось бы жать play руками, а это делается ради заставки в эфире.
     const v = store.get().video
-    if (value && !v.playing && v.durationSec > 0 && v.anchorSec >= v.durationSec - 0.3) {
-      store.patchVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
+    if (value && !v.playing && v.durationSec > 0 &&
+        store.videoPositionSec() >= videoRangeEnd(v.range, v.durationSec) - 0.05) {
+      store.patchVideo({
+        playing: true,
+        anchorSec: videoRangeStart(v.range, v.durationSec),
+        anchorAt: Date.now(),
+      })
     }
   })
 
@@ -1353,6 +1455,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('video:toggle-muted', () => {
     store.patchVideo({ muted: !store.get().video.muted })
   })
+
+  registerVideoInOutIpc(ipcMain, videoInOut)
 
   ipcMain.handle('audio:set-output', (_e, deviceId: string | null) => {
     const id = deviceId ? String(deviceId) : null
@@ -1723,6 +1827,17 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('playlist:remove', (_e, id: string) => {
     const playlist = store.get().playlist
     removePlaylistEntries(playlist.filter((entry) => entry.id !== id), playlist.filter((entry) => entry.id === id))
+  })
+
+  ipcMain.handle('playlist:duplicate', (_e, id: string): PlaylistEntry | null => {
+    const state = store.get()
+    const newId = randomUUID()
+    const playlist = duplicatePlaylistEntry(state.playlist, id, newId)
+    if (playlist === state.playlist) return null
+    store.patch({ playlist })
+    persistPlaylist()
+    void refreshMissingFiles()
+    return playlist.find((entry) => entry.id === newId) ?? null
   })
 
   ipcMain.handle('playlist:reorder', (_e, ids: string[]) => {
@@ -2112,6 +2227,7 @@ export function registerIpcHandlers(): void {
       if (res.canceled || res.filePaths.length === 0) return { ok: false }
       const path = res.filePaths[0]
       try {
+        if (store.get().testScreen.automatic) store.patch({ testScreen: { ...store.get().testScreen, automatic: false } })
         const loaded = await loadProjectFile(path)
         store.patch({
           playlist: loaded.playlist,

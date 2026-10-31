@@ -1,3 +1,4 @@
+import { syncTimerFontSelect } from './timer-font-ui'
 import { getState, subscribe } from '../shared/bus'
 import { AudienceTimerView } from '../shared/audience-timer-view'
 import { AudienceTimerBackground } from './audience-timer-background'
@@ -15,7 +16,13 @@ export function setupAudienceTimerUi(openSettings: () => void, error: (message: 
   let dragging: number | null = null
   const background = new AudienceTimerBackground($<HTMLCanvasElement>('at-program-frame'), $('at-stage'))
   new AudienceTimerView($('audience-timer-preview'), $('current-slide'),
-    () => ({ timer: getState().audienceTimer, covered: getState().blackout }))
+    () => {
+      const panel = $('current-slide')
+      const scale = Math.min(panel.clientWidth / background.size.width, panel.clientHeight / background.size.height)
+      const width = background.size.width * scale, height = background.size.height * scale
+      return { timer: getState().audienceTimer, covered: getState().blackout,
+        viewport: { x: (panel.clientWidth - width) / 2, y: (panel.clientHeight - height) / 2, width, height } }
+    })
   const mockup = new AudienceTimerView($('at-preview'), $('at-stage'), () => ({
     timer: { ...getState().audienceTimer, ...draft, visible: true },
   }))
@@ -62,7 +69,10 @@ export function setupAudienceTimerUi(openSettings: () => void, error: (message: 
     edit({ backgroundOpacity: Number($<HTMLInputElement>('at-opacity').value) / 100 })
     $('at-opacity-value').textContent = `${Math.round(draft.backgroundOpacity * 100)}%`
   }
-  $('at-font').onchange = () => edit({ font: $<HTMLSelectElement>('at-font').value as AudienceTimerConfig['font'] })
+  $('at-font').onchange = () => {
+    edit({ font: $<HTMLSelectElement>('at-font').value })
+    syncTimerFontSelect('at-font', draft.font)
+  }
   $('at-warn-colors').onchange = () => edit({ warnColors: $<HTMLInputElement>('at-warn-colors').checked })
 
   const value = (id: string, next: string): void => {
@@ -121,7 +131,7 @@ export function setupAudienceTimerUi(openSettings: () => void, error: (message: 
     value('at-background', backgroundSwatch)
     value('at-opacity', String(Math.round(draft.backgroundOpacity * 100)))
     $('at-opacity-value').textContent = `${Math.round(draft.backgroundOpacity * 100)}%`
-    value('at-font', draft.font)
+    syncTimerFontSelect('at-font', draft.font)
     $<HTMLInputElement>('at-transparent').checked = draft.backgroundColor === null
     $<HTMLInputElement>('at-warn-colors').checked = draft.warnColors
     mockup.render()

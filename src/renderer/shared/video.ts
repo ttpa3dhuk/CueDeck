@@ -1,4 +1,7 @@
 import type { AppState, FileKind, Layout, Role, SlideMedia, SlideMediaRect, VideoState } from '../../preload/api'
+import { syncProgramMirror } from './program-mirror'
+import { FADE_MAX_MS } from '../../shared/take-transition'
+import { clampVideoPosition, normalizeVideoRange, RANGE_EPSILON } from '../../shared/video-range'
 
 export const MEDIA_SCHEME = 'cuedeck-media'
 
@@ -38,6 +41,7 @@ export async function crossfadeToImage(
   src: string,
   fadeMs: number,
 ): Promise<void> {
+  fadeMs = Number.isFinite(fadeMs) ? Math.max(0, Math.min(FADE_MAX_MS, fadeMs)) : 0
   const prev = img.getAttribute('src')
   const canFade = fadeMs > 0 && Boolean(prev) && !img.classList.contains('hidden') && under
 
@@ -138,12 +142,28 @@ export function placeSlideOverlay(
 }
 
 /** Position (seconds) the shared logical clock currently points at. */
+/**
+ * A retained <video> can keep its metadata when main resets the deck duration
+ * to 0 for a duplicate/same-source activation. Report that real element
+ * duration instead of waiting for an event the reused source may never emit.
+ */
+export function knownElementDuration(
+  video: Pick<HTMLVideoElement, 'duration' | 'readyState' | 'getAttribute'>,
+  expectedSrc: string,
+  stateDuration: number,
+): number | null {
+  if (stateDuration > 0) return null
+  if (video.getAttribute('src') !== expectedSrc) return null
+  if (video.readyState < 1) return null
+  if (!Number.isFinite(video.duration) || video.duration <= 0) return null
+  return video.duration
+}
+
 export function videoPosition(v: VideoState): number {
-  if (v.playing && v.anchorAt != null) {
-    const pos = v.anchorSec + (Date.now() - v.anchorAt) / 1000
-    return v.durationSec > 0 ? Math.min(pos, v.durationSec) : pos
-  }
-  return v.anchorSec
+  const raw = v.playing && v.anchorAt != null
+    ? v.anchorSec + (Date.now() - v.anchorAt) / 1000
+    : v.anchorSec
+  return clampVideoPosition(raw, v.range, v.durationSec)
 }
 
 /**
@@ -163,7 +183,7 @@ export function audioRole(layout: Layout, streaming = false): Role {
  * un-blackout brings the sound back at the live position).
  */
 export function shouldMute(state: AppState, role: Role): boolean {
-  return role !== audioRole(state.layout, programCaptured(state)) || state.video.muted || state.blackout
+  return role !== audioRole(state.layout, programCaptured(state)) || state.video.muted || state.blackout || state.testScreen?.manual === true
 }
 
 /**
@@ -175,11 +195,16 @@ export function programCaptured(state: AppState): boolean {
 }
 
 const DEFAULT_DRIFT_SEC = 0.4
+/** Last explicit-seek token applied to each element (frame steps are sub-0.4 s). */
+const appliedSeekSeq = new WeakMap<HTMLVideoElement, number>()
+/** Source URL last reconciled; a new file must seek even when its token repeats. */
+const appliedSource = new WeakMap<HTMLVideoElement, string>()
 
 /**
  * Reconcile a <video> element with the shared clock: correct large drift with a
  * seek, and match the play/pause state. Small drifts are left alone so we don't
- * fight the element's native playback.
+ * fight the element's native playback, EXCEPT after an explicit seek (new
+ * `seekSeq`), where even one frame must reach the element.
  */
 export function syncVideoElement(
   video: HTMLVideoElement,
@@ -187,13 +212,43 @@ export function syncVideoElement(
   driftSec: number = DEFAULT_DRIFT_SEC,
 ): void {
   const target = videoPosition(v)
-  if (Number.isFinite(target) && Math.abs(video.currentTime - target) > driftSec) {
-    try {
-      video.currentTime = target
-    } catch {
-      /* element not ready yet — next tick will catch it */
+  if (syncProgramMirror(video, v)) return
+  const seq = v.seekSeq ?? 0
+  const lastSeq = appliedSeekSeq.get(video)
+  const source = video.currentSrc || video.src || ''
+  const sourceChanged = appliedSource.get(video) !== source
+  // A fresh element or a new source (same reused <video>) must land the clock
+  // even if the target is only one frame away. After that, drift threshold wins.
+  const forced = sourceChanged || (lastSeq !== undefined && lastSeq !== seq)
+  // Retargeting an unfinished seek can repeatedly discard the decoder's work.
+  // Keep play/pause responsive; reconcile the latest clock on the next tick
+  // after the browser completes this seek (including manual seeks and loops).
+  if (!video.seeking && Number.isFinite(target)) {
+    const drift = Math.abs(video.currentTime - target)
+    if (forced || drift > driftSec) {
+      try {
+        video.currentTime = target
+        // Mark the token/source now: a browser seek is already committed to this
+        // target. If it is slow, the next explicit seek gets a new token and retries.
+        appliedSeekSeq.set(video, seq)
+        appliedSource.set(video, source)
+      } catch {
+        /* element not ready yet — next tick will catch it */
+      }
+    } else {
+      appliedSeekSeq.set(video, seq)
+      appliedSource.set(video, source)
     }
   }
+
+  const bounds = normalizeVideoRange(v.range, v.durationSec)
+  // The audience/speaker windows cannot mutate the main clock. Freeze their
+  // element on Out; the operator tick asks main to pause or wrap in a moment.
+  if (bounds && v.playing && target >= bounds.outSec - RANGE_EPSILON) {
+    if (!video.paused) video.pause()
+    return
+  }
+
   if (v.playing) {
     if (video.paused) video.play().catch(() => undefined)
   } else if (!video.paused) {

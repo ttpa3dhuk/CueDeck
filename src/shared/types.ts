@@ -1,4 +1,4 @@
-import type { TakeTransition } from './take-transition.js'
+import { FADE_MAX_MS, type TakeTransition } from './take-transition.js'
 import type { ReportMarkerContext } from './report-recovery.js'
 /**
  * Single source of truth for the state types shared by the main process and
@@ -63,7 +63,7 @@ export type FileKind = 'pdf' | 'image' | 'pptx' | 'video' | 'live' | 'list'
  */
 export type ListMode = 'loop' | 'shuffle' | 'once'
 
-export const LIST_FADE_MAX_MS = 2000
+export const LIST_FADE_MAX_MS = FADE_MAX_MS
 
 export interface ListItem {
   path: string
@@ -78,15 +78,71 @@ export type UiTheme = 'dark' | 'light'
 export type MonitorRole = 'speaker' | 'audience'
 
 /**
- * What happens to a video clip when it is taken from preview to program:
- * always autoplay, either from 0 or resuming at the preview scrub position.
- */
-/**
- * Что делать с роликом при выдаче в эфир. `hold-first` — встать на первом
- * кадре и ждать: первый кадр часто сам по себе заставка, а запускают ролик
- * кликером, как видео на слайде презентации.
+ * Что делать с роликом при выдаче в эфир. `play-start` — играть с In,
+ * `play-resume` — с позиции превью (в границах), `hold-first` — встать на In
+ * и ждать: первый кадр часто сам по себе заставка, а запускают ролик кликером,
+ * как видео на слайде презентации.
  */
 export type VideoTakeMode = 'play-start' | 'play-resume' | 'hold-first'
+
+/**
+ * Selected In/Out range of a standalone video, in seconds of the SOURCE media.
+ * Frame accuracy is not implied: values come from the actual playhead or from
+ * ffprobe frame timestamps, never from a fixed FPS assumption.
+ */
+export interface VideoRange {
+  inSec: number
+  outSec: number
+}
+
+/** Which deck a range/frame command applies to. */
+export type VideoDeck = 'program' | 'preview'
+
+export type FrameStepReason =
+  | 'not-video'
+  | 'unavailable'
+  | 'timeout'
+  | 'cancelled'
+  | 'too-large'
+  | 'no-video'
+  | 'failed'
+  | 'no-frame'
+  | 'stale'
+  | 'edge'
+
+export interface FrameStepResult {
+  ok: boolean
+  position?: number
+  reason?: FrameStepReason
+}
+
+/** Actual decoded-frame timecode labels for one deck; `--` means unknown. */
+export interface FrameTimecode {
+  current: string
+  total: string
+  in: string | null
+  out: string | null
+  identity: FrameStepIdentity
+}
+
+/** Identity captured at keypress, so a late arrow cannot hit a new card. */
+export interface FrameStepIdentity {
+  entryId: string | null
+  path: string | null
+  sha1: string | null
+}
+
+export type VideoRangeEdge = 'in' | 'out' | 'reset'
+
+export type VideoRangeError = 'not-video' | 'no-entry' | 'list-unsupported' | 'no-duration' | 'invalid-range'
+
+export interface VideoRangeUpdateResult {
+  ok: boolean
+  range?: VideoRange | null
+  /** New bounds are applied immediately to every deck on this entry id. */
+  applied?: 'immediate'
+  code?: VideoRangeError
+}
 
 /**
  * С какого слайда презентация уходит в эфир по TAKE: с первого или с того,
@@ -109,6 +165,18 @@ export interface VideoState {
   anchorAt: number | null
   durationSec: number
   muted: boolean
+  /**
+   * Applied In/Out snapshot. Absent/null = full source (old projects and loose
+   * files). The snapshot is updated immediately when the matching playlist
+   * entry is edited (same entry id in program and/or preview).
+   */
+  range?: VideoRange | null
+  /**
+   * Monotonic token for explicit seeks. `syncVideoElement` uses it to force a
+   * seek even when the target differs by less than one drift threshold — one
+   * frame step is much smaller than the usual 0.4 s correction.
+   */
+  seekSeq?: number
 }
 
 /** Прямоугольник видео-плейсхолдера в долях слайда; может выходить за его границы. */
@@ -178,7 +246,7 @@ export interface PlaylistEntry {
   listMode?: ListMode
   /**
    * Плавный переход между фотографиями, мс. 0 — резкая смена. Ограничен сверху
-   * 2000 мс и половиной паузы между кадрами: затемнение длиннее самого показа
+   * 400 мс и половиной паузы между кадрами: затемнение длиннее самого показа
    * превращает слайдшоу в мигание.
    */
   fadeMs?: number
@@ -190,6 +258,15 @@ export interface PlaylistEntry {
    * глобально, — иначе забытая галка зациклила бы следующий ролик.
    */
   loop?: boolean
+  /**
+   * Границы показа ролика этой записи, секунды исходника. Обе заданы вместе
+   * (одна без другой = полный ролик). Только kind='video': у списка границы
+   * были бы общими для всей пачки, а у видео внутри PPTX своей записи нет.
+   * Файл не меняется — границы живут в проекте/плейлисте и применяются сразу
+   * к декам, где открыта эта же запись (по id, не по пути).
+   */
+  inSec?: number
+  outSec?: number
 }
 
 /**
@@ -224,6 +301,9 @@ export interface ProjectTransferStatus {
 }
 
 export interface AppState {
+  /** Session-only local audience visibility; capture and playback keep running. */
+  audienceOutputEnabled: boolean
+  testScreen: import('./test-screen.js').TestScreenState
   pdfPath: string | null
   pdfSha1: string | null
   fileKind: FileKind | null
@@ -248,6 +328,7 @@ export interface AppState {
    */
   timerFree: { x: number; y: number }
   /** Свой цвет цифр таймера на суфлёре (#rrggbb); null — стандартный зелёный. */
+  timerFont: string
   timerColor: string | null
   /** Жёлтый/красный в конце отсчёта поверх своего цвета (по умолчанию да). */
   timerWarnColors: boolean
@@ -459,6 +540,8 @@ export interface RemoteSettings {
   httpPort: number
   oscPort: number
   lan: boolean
+  /** Device-local opt-in; old settings/profiles omit it. Never contains the key. */
+  networkAuth?: boolean
   /** Отправлять состояние (таймер, слайды, ролик) в Bitfocus Companion — кнопки его показывают. */
   companionPush: boolean
   /** Где Companion: `хост:порт` его веб-интерфейса (по умолчанию тот же компьютер). */
@@ -468,6 +551,7 @@ export interface RemoteSettings {
 export type RemoteListenerState = 'off' | 'on' | 'error'
 
 export interface RemoteStatus extends RemoteSettings {
+  networkAuthError?: string | null
   http: RemoteListenerState
   osc: RemoteListenerState
   httpError: string | null
@@ -483,6 +567,7 @@ export const DEFAULT_REMOTE_SETTINGS: RemoteSettings = {
   httpPort: 9420,
   oscPort: 9421,
   lan: false,
+  networkAuth: false,
   companionPush: true,
   companionHost: '127.0.0.1:8000',
 }
@@ -722,6 +807,7 @@ export interface VenueProfileSettings {
   timerPosition: TimerPosition
   timerScale: number
   timerFree: { x: number; y: number }
+  timerFont: string
   timerColor: string | null
   timerWarnColors: boolean
   timerTickEnabled: boolean

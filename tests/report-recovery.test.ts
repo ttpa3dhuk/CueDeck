@@ -171,7 +171,7 @@ it('preserves the selected presentation fade but never accepts its out-of-range 
   expect((await readRecoveryProject(f.projectPath)).project.playlist[0].slideFadeMs).toBe(350)
   const parsed = JSON.parse(await readFile(f.projectPath, 'utf8')); parsed.playlist[0].slideFadeMs = 50_000
   await writeFile(f.projectPath, JSON.stringify(parsed))
-  expect((await readRecoveryProject(f.projectPath)).project.playlist[0].slideFadeMs).toBe(500)
+  expect((await readRecoveryProject(f.projectPath)).project.playlist[0].slideFadeMs).toBe(400)
 })
 
 it('rejects an attached material with no path and duplicate program roles', async () => {

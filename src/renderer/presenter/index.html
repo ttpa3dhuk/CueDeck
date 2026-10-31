@@ -34,6 +34,7 @@
               <button id="kv-clear" class="toolbar-icon" title="Удерживай 2 секунды, чтобы убрать заставку" aria-label="Удерживай 2 секунды, чтобы убрать заставку" disabled><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7"/></svg></button>
             </div>
             <button id="blackout-toggle" class="op-only" title="Blackout (B)">⬛</button>
+            <button id="audience-output-toggle" class="op-only audience-output-toggle" type="button" aria-pressed="true">Зал вкл</button>
           </div>
         </div>
         <div class="topbar-row timer-controls op-only">
@@ -134,7 +135,7 @@
             Список пуст. Жми «+ Добавить», чтобы загрузить PDF спикеров.
           </div>
         </aside>
-        <section id="current-slide" class="current-slide">
+        <section id="current-slide" class="current-slide" data-frame-player="program" tabindex="-1">
           <div id="audience-timer-preview" class="op-only hidden"></div>
           <div class="deck-label program op-only">
             <span>● ЭФИР</span>
@@ -151,7 +152,6 @@
           <video id="current-live" class="slide-video hidden" playsinline></video>
           <div id="current-live-status" class="live-status hidden"></div>
           <div id="current-live-info" class="live-info op-only hidden" title="Что реально отдаёт захват: разрешение и измеренная частота кадров"></div>
-          <div id="current-meter" class="audio-meter op-only hidden" title="Уровень звука, приходящего с внешнего входа"><i></i></div>
           <video id="media-overlay" class="media-overlay hidden" playsinline></video>
           <div id="video-error" class="video-error hidden">
             <div class="ve-icon">🎞️</div>
@@ -172,13 +172,13 @@
             <span class="bo-hint">Зрительский экран затемнён · оператор продолжает готовить превью</span>
           </div>
         </section>
-        <section id="preview-slide" class="preview-slide op-only">
+        <section id="preview-slide" class="preview-slide op-only" data-frame-player="preview" tabindex="-1">
           <div class="deck-label preview">
             <span>○ ПРЕВЬЮ</span>
             <select id="video-take-mode" class="video-take-mode hidden" title="Что делать с видео при выдаче в эфир">
-              <option value="play-start">▶ играть с начала</option>
+              <option value="play-start">▶ играть с начала диапазона</option>
               <option value="play-resume">▶ играть с этой точки</option>
-              <option value="hold-first">⏸ стоп на первом кадре</option>
+              <option value="hold-first">⏸ стоп на начале диапазона</option>
             </select>
             <select id="slide-take-mode" class="video-take-mode hidden" title="С какого слайда выдавать презентацию в эфир">
               <option value="from-start">▶ с первого слайда</option>
@@ -194,7 +194,7 @@
               <div class="fade-controls">
                 <button id="fade-btn" class="take-btn" title="Плавно выдать превью в эфир" disabled>Fade</button>
                 <div class="fade-duration" title="Правая кнопка мыши — изменить длительность Fade">
-                  <input id="take-fade-ms" type="number" min="100" max="2000" step="50" value="300" placeholder="100" readonly tabindex="-1" aria-label="Длительность Fade в миллисекундах" />
+                  <input id="take-fade-ms" type="number" min="100" max="400" step="50" value="300" placeholder="100" readonly tabindex="-1" aria-label="Длительность Fade в миллисекундах" />
                   <span>мс</span>
                 </div>
               </div>
@@ -221,10 +221,15 @@
           </div>
         </section>
         <section id="preview-playback" class="media-playback op-only">
-          <div id="preview-video-controls" class="video-controls preview-controls hidden">
+          <div id="preview-video-controls" class="video-controls preview-controls hidden" data-frame-player="preview" tabindex="-1">
             <button id="preview-video-play" title="Play / Pause превью">▶</button>
             <button id="preview-video-restart" title="В начало">⏮</button>
-            <input id="preview-video-scrub" class="video-scrub" type="range" min="0" max="100" step="0.1" value="0" />
+            <div id="preview-timeline" class="video-timeline" data-deck="preview">
+              <div class="timeline-range hidden"></div>
+              <span class="timeline-marker in hidden" aria-hidden="true"></span>
+              <span class="timeline-marker out hidden" aria-hidden="true"></span>
+              <input id="preview-video-scrub" class="video-scrub" type="range" min="0" max="100" step="any" value="0" title="Правый клик — In/Out, I/O — поставить. Стрелки при фокусе плеера — шаг на кадр" />
+            </div>
             <span id="preview-video-time" class="video-time">00:00 / 00:00</span>
             <button id="preview-loop-btn" class="loop-btn" title="Зациклить этот ролик: доиграв, начинается заново. Настройка сохраняется у записи плейлиста"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button>
           </div>
@@ -236,14 +241,20 @@
           </div>
         </section>
         <section id="program-playback" class="media-playback op-only">
-          <div id="video-controls" class="video-controls op-only hidden">
+          <div id="video-controls" class="video-controls op-only hidden" data-frame-player="program" tabindex="-1">
             <button id="video-play" title="Play / Pause (Space)">▶</button>
             <button id="video-restart" title="В начало">⏮</button>
-            <input id="video-scrub" class="video-scrub" type="range" min="0" max="100" step="0.1" value="0" />
+            <div id="program-timeline" class="video-timeline" data-deck="program">
+              <div class="timeline-range hidden"></div>
+              <span class="timeline-marker in hidden" aria-hidden="true"></span>
+              <span class="timeline-marker out hidden" aria-hidden="true"></span>
+              <input id="video-scrub" class="video-scrub" type="range" min="0" max="100" step="any" value="0" title="Правый клик — In/Out, I/O — поставить. Стрелки при фокусе плеера — шаг на кадр" />
+            </div>
             <span id="video-time" class="video-time">00:00 / 00:00</span>
             <button id="video-loop-btn" class="loop-btn" title="Зациклить ЭТОТ ролик: доиграл — начинается заново. Настройка запоминается у записи плейлиста и уезжает в проект"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button>
             <button id="video-mute" title="Звук зала вкл/выкл">🔊</button>
           </div>
+          <div id="current-meter" class="audio-meter op-only hidden" title="Уровень звука, приходящего с внешнего входа"><i></i></div>
         </section>
         <section id="output-monitors" class="output-monitors op-only hidden">
           <div id="monitor-speaker" class="monitor hidden" title="Живой снимок экрана суфлёра: таймер, заметки, сообщение спикеру">
@@ -333,6 +344,7 @@
           <button id="project-transfer-reveal" class="hidden" title="Показать готовый проект в папке">Показать</button>
         </div>
         <div class="bottombar-right">
+          <button id="test-screen-active" class="test-screen-active hidden" title="Убрать тестовый экран и вернуть текущий материал"></button>
           <button id="settings-btn" class="icon-btn" title="Настройки: экраны, звук, клавиши, тема и язык, LibreOffice, внешнее управление, MIDI (Cmd+,)" aria-label="Настройки">⚙️</button>
           <button id="help-btn" class="icon-btn" title="Справка по клавишам (?)" aria-label="Справка">?</button>
         </div>
@@ -365,8 +377,8 @@
           <label class="list-sec">Секунд на фото
             <input id="list-photo-sec" type="number" min="1" max="600" step="1" value="8" />
           </label>
-          <label class="list-sec" title="Плавный переход между фотографиями. 0 — резкая смена. Не длиннее 2000 мс и половины паузы между кадрами">FADE, мс
-            <input id="list-fade-ms" type="number" min="0" max="2000" step="100" value="0" />
+          <label class="list-sec" title="Плавный переход между фотографиями. 0 — резкая смена. Не длиннее 400 мс и половины паузы между кадрами">FADE, мс
+            <input id="list-fade-ms" type="number" min="0" max="400" step="100" value="0" />
           </label>
           <button id="list-add-files">+ Добавить файлы…</button>
         </div>
@@ -455,40 +467,46 @@
         <div class="help-table-wrap">
         <table class="help-table">
           <tbody>
-            <tr class="help-section"><td colspan="2">Эфир (program) — кликер спикера</td></tr>
-            <tr><td><kbd>→</kbd> <kbd>Space</kbd> <kbd>PgDn</kbd></td><td>Следующий слайд в эфире (кликер: вперёд)</td></tr>
-            <tr><td><kbd>←</kbd> <kbd>PgUp</kbd></td><td>Предыдущий слайд в эфире (кликер: назад)</td></tr>
-            <tr class="help-section"><td colspan="2">Превью (off-air) и выдача в эфир</td></tr>
+            <tr class="help-section"><td colspan="2">Эфир — кликер спикера</td></tr>
+            <tr><td><kbd>→</kbd> <kbd>Space</kbd> <kbd>PgDn</kbd></td><td>Следующий слайд в эфире</td></tr>
+            <tr><td><kbd>←</kbd> <kbd>PgUp</kbd></td><td>Предыдущий слайд в эфире</td></tr>
+            <tr class="help-section"><td colspan="2">Превью и выдача в эфир</td></tr>
             <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Превью: предыдущий / следующий слайд</td></tr>
-            <tr><td><kbd>Tab</kbd> <kbd>Enter</kbd></td><td>ЭФИР (take) — выдать превью в эфир</td></tr>
+            <tr><td><kbd>Tab</kbd> <kbd>Enter</kbd></td><td>ЭФИР — выдать превью в эфир</td></tr>
             <tr><td>Клик / двойной клик по спикеру</td><td>Загрузить в превью / сразу в эфир</td></tr>
-            <tr><td colspan="2" style="color:var(--muted);font-size:12px;">Клавиши можно переназначить — ⚙️ Настройки → Горячие клавиши</td></tr>
-            <tr class="help-section"><td colspan="2">Таймер</td></tr>
+            <tr><td colspan="2" style="color:var;font-size:12px;">Клавиши можно переназначить — ⚙️ Настройки → Горячие клавиши</td></tr>
+            <tr class="help-section"><td colspan="2">Таймер суфлёра</td></tr>
             <tr><td><kbd>T</kbd></td><td>Старт / Пауза таймера</td></tr>
             <tr><td><kbd>R</kbd> <kbd>Shift</kbd>+<kbd>T</kbd></td><td>Сбросить таймер</td></tr>
             <tr><td><kbd>Shift</kbd> <kbd>1</kbd> / <kbd>3</kbd> / <kbd>5</kbd></td><td>+1 / +3 / +5 минут</td></tr>
             <tr><td><kbd>Ctrl</kbd> <kbd>1</kbd> / <kbd>3</kbd> / <kbd>5</kbd></td><td>−1 / −3 / −5 минут</td></tr>
+            <tr data-hotkey="speakerTimerStart"><td></td><td>Старт</td></tr>
+            <tr data-hotkey="speakerTimerStop"><td></td><td>Стоп</td></tr>
+            <tr class="help-section"><td colspan="2">Таймер зала</td></tr>
+            <tr data-hotkey="audienceTimerStart"><td></td><td>Старт</td></tr>
+            <tr data-hotkey="audienceTimerStop"><td></td><td>Стоп</td></tr>
+            <tr data-hotkey="audienceTimerReset"><td></td><td>Сброс</td></tr>
             <tr class="help-section"><td colspan="2">Видео</td></tr>
-            <tr><td><kbd>Space</kbd></td><td>Play / Pause (когда открыто видео)</td></tr>
-            <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Перемотка ±5 сек (когда открыто видео)</td></tr>
+            <tr><td><kbd>Space</kbd></td><td>Play / Pause</td></tr>
+            <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Перемотка ±5 сек</td></tr>
             <tr><td><kbd>M</kbd></td><td>Звук зала вкл / выкл</td></tr>
             <tr class="help-section"><td colspan="2">Экраны</td></tr>
-            <tr><td><kbd>B</kbd> <kbd>.</kbd></td><td>Blackout — затемнить проектор (кликер: blank)</td></tr>
+            <tr><td><kbd>B</kbd> <kbd>.</kbd></td><td>Blackout — затемнить проектор</td></tr>
+            <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>D</kbd></td><td>Вернуться к оператору</td></tr>
             <tr class="help-section"><td colspan="2">Файлы и проект</td></tr>
-            <tr><td><kbd>⌘</kbd> <kbd>O</kbd></td><td>Открыть PDF / PPTX…</td></tr>
+            <tr><td><kbd>⌘</kbd> <kbd>O</kbd></td><td>Добавить файлы в плейлист…</td></tr>
             <tr><td><kbd>⌘</kbd> <kbd>N</kbd></td><td>Новый проект</td></tr>
             <tr><td><kbd>⌘</kbd> <kbd>S</kbd></td><td>Сохранить проект</td></tr>
             <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>S</kbd></td><td>Сохранить как…</td></tr>
             <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>O</kbd></td><td>Открыть проект…</td></tr>
             <tr class="help-section"><td colspan="2">Прочее</td></tr>
-            <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>D</kbd></td><td>Вернуться к оператору (закрыть окна зала и суфлёра)</td></tr>
             <tr><td><kbd>⌘</kbd> <kbd>,</kbd></td><td>Настройки</td></tr>
             <tr><td><kbd>?</kbd></td><td>Эта справка</td></tr>
-            <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>M</kbd></td><td>⚑ Отметить момент в журнале («здесь что-то не то») — после шоу Help → Сообщить о проблеме</td></tr>
+            <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>M</kbd></td><td>⚑ Отметить момент в журнале — после шоу Help → Сообщить о проблеме</td></tr>
           </tbody>
         </table>
         </div>
-        <p class="help-note">Клавиши B и T работают на любой раскладке (рус / eng).</p>
+        <p class="help-note">Клавиши B и T работают на любой раскладке.</p>
         <p class="help-note"><span>Нашёл баг? Напиши в Telegram:</span> <a id="help-support-link" href="#">@CueDeckSupport_Bot</a></p>
         <p id="donate-note" class="help-note hidden">
           CueDeck выручает на шоу? <a id="donate-link" href="#">☕ Поддержать проект</a>
@@ -502,7 +520,10 @@
 
     <div id="settings-modal" class="modal hidden">
       <div class="modal-content settings-modal-content">
-        <h2>Настройки</h2>
+        <div class="settings-modal-heading">
+          <h2>Настройки</h2>
+          <button id="settings-dismiss" type="button" title="Закрыть" aria-label="Закрыть">✕</button>
+        </div>
         <div class="settings-layout">
           <nav class="settings-nav">
             <button data-section="profiles">Профили площадки</button>
@@ -572,8 +593,9 @@
               <div id="audience-always-on-top-section" class="windowed-section hidden">
                 <label class="windowed-label">
                   <input id="audience-always-on-top-toggle" type="checkbox" />
-                  <span>Аудитория всегда поверх окон <span class="windowed-hint">(выключи, чтобы показывать другие приложения поверх зала)</span></span>
+                  <span>Аудитория всегда поверх окон <span id="audience-always-on-top-hint" class="windowed-hint">(выключи, чтобы показывать другие приложения поверх зала)</span></span>
                 </label>
+                <p id="audience-menu-warning" class="audio-hint compact hidden">На macOS при выключенном закреплении системная строка меню может быть видна поверх зала. Для чистого экрана зала оставь закрепление включённым.</p>
               </div>
               <div id="output-monitors-section" class="windowed-section">
                 <label class="windowed-label">
@@ -587,6 +609,10 @@
                   <span>Спрашивать режим при запуске <span class="windowed-hint">(диалог выбора раскладки)</span></span>
                 </label>
               </div>
+              <fieldset class="test-screen-settings">
+                <legend>Тестовый экран</legend>
+                <button id="test-screen-toggle" aria-pressed="false">Показать тестовый экран</button>
+              </fieldset>
               <div class="modal-actions">
                 <button id="setup-cancel">Отмена</button>
                 <button id="setup-apply" class="primary">Применить</button>
@@ -645,6 +671,11 @@
                 <label class="windowed-label"><input id="timer-warn-colors" type="checkbox" /> <span>Жёлтый и красный в конце отсчёта <span class="windowed-hint">(поверх своего цвета)</span></span></label>
               </div>
               <div class="remote-row">
+                <label>Шрифт <select id="timer-font"><option value="system">Системный</option><option value="mono">Моноширинный</option><option value="serif">С засечками</option></select></label>
+              </div>
+              <div class="timer-font-actions"><button id="timer-font-add">Добавить шрифты…</button><button id="timer-font-refresh" title="Обновить список шрифтов" aria-label="Обновить список шрифтов">⟳</button></div>
+              <p id="timer-font-status" class="audio-hint compact timer-font-status"></p>
+              <div class="remote-row">
                 <span class="live-field-label">Размер</span>
                 <div class="group">
                   <input id="timer-scale-input" type="range" min="30" max="400" step="1" value="100" aria-label="Размер" />
@@ -676,18 +707,24 @@
                   </div>
                 </div>
                 <div class="audience-timer-fields">
-                  <label><span>Режим на макете</span> <select id="at-mode"><option value="countdown">Таймер</option><option value="stopwatch">Секундомер</option><option value="clock">Часы</option></select></label>
-                  <div class="audience-timer-position-fields">
-                    <label>X, % <input id="at-x" type="number" min="0" max="100" step="0.1" value="85" /></label>
-                    <label>Y, % <input id="at-y" type="number" min="0" max="100" step="0.1" value="88" /></label>
+                  <div class="audience-timer-field-column">
+                    <label><span>Режим на макете</span> <select id="at-mode"><option value="countdown">Таймер</option><option value="stopwatch">Секундомер</option><option value="clock">Часы</option></select></label>
+                    <div class="audience-timer-position-fields">
+                      <label>X, % <input id="at-x" type="number" min="0" max="100" step="0.1" value="85" /></label>
+                      <label>Y, % <input id="at-y" type="number" min="0" max="100" step="0.1" value="88" /></label>
+                    </div>
+                    <label><span>Размер</span> <output id="at-scale-value">100%</output><input id="at-scale" type="range" min="30" max="300" step="5" value="100" /></label>
+                    <label><span>Шрифт</span> <select id="at-font"><option value="system">Системный</option><option value="mono">Моноширинный</option><option value="serif">С засечками</option></select></label>
+                    <div class="timer-font-actions"><button id="at-font-add">Добавить шрифты…</button><button id="at-font-refresh" title="Обновить список шрифтов" aria-label="Обновить список шрифтов">⟳</button></div>
+                    <p id="at-font-status" class="audio-hint compact timer-font-status"></p>
                   </div>
-                  <label><span>Размер</span> <output id="at-scale-value">100%</output><input id="at-scale" type="range" min="30" max="300" step="5" value="100" /></label>
-                  <label><span>Цвет цифр</span> <input id="at-color" type="color" value="#ffffff" /></label>
-                  <label><span>Цвет подложки</span> <input id="at-background" type="color" value="#000000" /></label>
-                  <label class="timer-checkbox"><input id="at-transparent" type="checkbox" /> <span>Без подложки</span></label>
-                  <label><span>Непрозрачность подложки</span> <output id="at-opacity-value">80%</output><input id="at-opacity" type="range" min="0" max="100" step="1" value="80" /></label>
-                  <label><span>Шрифт</span> <select id="at-font"><option value="system">Системный</option><option value="mono">Моноширинный</option><option value="serif">С засечками</option></select></label>
-                  <label class="timer-checkbox"><input id="at-warn-colors" type="checkbox" /> <span>Жёлтый и красный в конце отсчёта</span></label>
+                  <div class="audience-timer-field-column">
+                    <label><span>Цвет цифр</span> <input id="at-color" type="color" value="#ffffff" /></label>
+                    <label><span>Цвет подложки</span> <input id="at-background" type="color" value="#000000" /></label>
+                    <label class="timer-checkbox"><input id="at-transparent" type="checkbox" /> <span>Без подложки</span></label>
+                    <label><span>Непрозрачность подложки</span> <output id="at-opacity-value">80%</output><input id="at-opacity" type="range" min="0" max="100" step="1" value="80" /></label>
+                    <label class="timer-checkbox"><input id="at-warn-colors" type="checkbox" /> <span>Жёлтый и красный в конце отсчёта</span></label>
+                  </div>
                 </div>
               </div>
             </section>
@@ -785,6 +822,15 @@
           <span>Из сети <span class="windowed-hint">(Companion на другом компьютере)</span></span>
         </label>
       </div>
+      <div class="remote-row">
+        <label class="windowed-label">
+          <input id="remote-network-auth" type="checkbox" />
+          <span>Защитить управление из сети</span>
+        </label>
+        <button id="remote-copy-key">Скопировать ключ</button>
+        <span id="remote-key-status" class="windowed-hint"></span>
+      </div>
+      <p class="audio-hint">Ключ нужен для HTTP с другого компьютера. При включённой защите OSC работает только на этом компьютере.</p>
       <div class="remote-row">
         <label class="windowed-label">
           <input id="remote-companion" type="checkbox" />
@@ -894,14 +940,15 @@
     <div id="report-modal" class="modal hidden">
       <div class="modal-content report-modal-content">
         <div class="report-heading"><h2>Сообщить о проблеме</h2><button id="report-dismiss" title="Закрыть" aria-label="Закрыть">✕</button></div>
-        <p class="audio-hint">Отчёт сохраняется в ZIP на рабочем столе: журналы, настройки и скриншоты окон. На скриншотах могут быть видны слайды и заметки. Исходные файлы добавляются только по твоему выбору. Автоматической отправки нет.</p>
+        <p class="audio-hint">Отчёт сохраняется в ZIP на рабочем столе.</p>
+        <p class="audio-hint">На скриншотах могут быть видны слайды и заметки.</p>
         <label class="report-label" for="report-comment">Что делал, что ожидал, что получил</label>
         <textarea id="report-comment" rows="5" placeholder="Например: нажал TAKE на втором спикере, зал остался на первом слайде предыдущего."></textarea>
         <p id="report-markers" class="audio-hint compact hidden"></p>
         <label class="report-label" for="report-recovery-marker">Момент для воспроизведения</label>
         <select id="report-recovery-marker"><option value="">Состояние при сборке отчёта</option></select>
         <button id="report-materials-choose">Выбрать материалы для отчёта</button>
-        <p class="audio-hint">Выбери презентацию или другие файлы, на которых возникла ошибка. До 128 МиБ суммарно. Оригинальная презентация может содержать заметки и встроенное видео.</p>
+        <p class="audio-hint">Выбери презентацию или другие файлы, на которых возникла ошибка. До 128 МБ суммарно.</p>
         <ul id="report-materials-list" style="max-height: 140px; overflow: auto"></ul>
         <p id="report-materials-size" class="audio-hint"></p>
         <label><input id="report-materials-include" type="checkbox" disabled> Приложить выбранные материалы к отчёту</label>
@@ -1005,6 +1052,12 @@
           <button id="lo-modal-close">Закрыть</button>
         </div>
       </div>
+    </div>
+
+    <div id="timeline-menu" class="timeline-menu hidden" role="menu">
+      <button type="button" role="menuitem" data-range-action="in">Поставить In</button>
+      <button type="button" role="menuitem" data-range-action="out">Поставить Out</button>
+      <button type="button" role="menuitem" data-range-action="reset">Сбросить границы</button>
     </div>
 
     <script type="module" src="./main.ts"></script>

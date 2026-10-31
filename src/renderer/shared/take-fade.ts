@@ -1,4 +1,4 @@
-import type { TakeTransition } from '../../shared/take-transition'
+import { FADE_MAX_MS, type TakeTransition } from '../../shared/take-transition'
 import { paddingBox } from './element-box'
 
 type Source = HTMLCanvasElement | HTMLImageElement | HTMLVideoElement
@@ -13,7 +13,8 @@ export class TakeFade {
   private timeout: ReturnType<typeof setTimeout> | null = null
   private clips: HTMLVideoElement[] = []
 
-  constructor(private host: HTMLElement, private sources: Source[]) {}
+  constructor(private host: HTMLElement, private sources: Source[] | (() => Source[]),
+    private retainVideo?: (video: HTMLVideoElement) => HTMLVideoElement | null) {}
 
   begin(event: TakeTransition | null, oldVideoInPreview = false): void {
     // Slide cuts still need a readiness barrier: load() clears the outgoing
@@ -31,7 +32,7 @@ export class TakeFade {
     ctx.fillStyle = '#000'
     ctx.fillRect(0, 0, rect.width, rect.height)
     const moving: Array<{ clip: HTMLVideoElement; rect: DOMRect; fit: string }> = []
-    for (const source of this.sources) {
+    for (const source of typeof this.sources === 'function' ? this.sources() : this.sources) {
       if (getComputedStyle(source).display === 'none') continue
       const bounds = source.getBoundingClientRect()
       if (!bounds.width || !bounds.height) continue
@@ -40,12 +41,14 @@ export class TakeFade {
         // The two media decks swap on TAKE. The old file is now served by preview.
         // Clones are always silent, so they never add a second audio route.
         if (!source.srcObject && !oldVideoInPreview && event.scope !== 'slide') continue
-        const clip = document.createElement('video')
+        const retained = this.retainVideo?.(source)
+        const clip = retained ?? document.createElement('video')
         clip.muted = true
         clip.playsInline = true
         clip.loop = source.loop
         clip.style.clipPath = getComputedStyle(source).clipPath
-        if (source.srcObject) clip.srcObject = source.srcObject
+        if (retained) { /* Keep the existing decoder and its buffered position. */ }
+        else if (source.srcObject) clip.srcObject = source.srcObject
         else {
           clip.src = event.scope === 'slide' ? source.src : source.src.replace('://stream/program?', '://stream/preview?')
             .replace('://stream/slide/program/', '://stream/slide/preview/')
@@ -93,11 +96,20 @@ export class TakeFade {
       if (signal.aborted || this.frame !== frame) return
     }
     if (signal.aborted || this.frame !== frame || this.animation) return
-    if (event.durationMs <= 0) { this.cancel(); return }
+    const durationMs = Number.isFinite(event.durationMs) ? Math.max(0, Math.min(FADE_MAX_MS, event.durationMs)) : 0
+    if (durationMs <= 0) { this.cancel(); return }
     if (this.timeout) clearTimeout(this.timeout)
     this.timeout = null
-    this.animation = frame.animate([{ opacity: 1 }, { opacity: 0 }], {
-      duration: event.durationMs, easing: 'linear', fill: 'forwards',
+    // Keep the decoder alive briefly after its last visible frame. Releasing it
+    // on the opacity boundary can stall the compositor on Windows/D3D11.
+    // The visible transition still takes exactly durationMs.
+    const holdMs = 200
+    this.animation = frame.animate([
+      { opacity: 1, offset: 0 },
+      { opacity: 0, offset: durationMs / (durationMs + holdMs) },
+      { opacity: 0, offset: 1 },
+    ], {
+      duration: durationMs + holdMs, easing: 'linear', fill: 'forwards',
     })
     try { await this.animation.finished } catch { return }
     if (this.frame === frame) this.cancel()

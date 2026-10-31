@@ -1,3 +1,4 @@
+import { attachAudienceCloseGuard } from './audience-close-guard.js'
 import { BrowserWindow, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
@@ -13,6 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PRELOAD = resolve(__dirname, '../preload/index.cjs')
 
 const DEV_TILE = process.env.PRESENTER_DEV_TILE === '1'
+const readyWindows = new WeakSet<BrowserWindow>()
 
 // Output surfaces on macOS stay on the desktop. Native fullscreen creates a
 // Space and can blank the operator's display when displays share Spaces.
@@ -20,6 +22,7 @@ const DEV_TILE = process.env.PRESENTER_DEV_TILE === '1'
 // Windows audience outputs also stay on the desktop: Chromium shrinks native
 // fullscreen by 1px when another window on that monitor becomes active.
 const desktopDisplayWindows = new WeakSet<BrowserWindow>()
+const layoutClosingWindows = new WeakSet<BrowserWindow>()
 
 function isOutputFullscreen(win: BrowserWindow): boolean {
   return desktopDisplayWindows.has(win) || win.isFullScreen()
@@ -126,6 +129,9 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
       backgroundThrottling: false,
     },
   })
+  if (role === 'audience' && windowed) {
+    attachAudienceCloseGuard(win, () => activeWindows.get('audience') === win && !layoutClosingWindows.has(win))
+  }
   if (desktopDisplayWindow) {
     desktopDisplayWindows.add(win)
     const targetDisplayId = screen.getDisplayMatching(bounds).id
@@ -149,6 +155,7 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
 
   win.once('ready-to-show', () => {
     if (win.isDestroyed()) return
+    readyWindows.add(win)
     if (fillDisplay) {
       win.setBounds(bounds)
       if (macDisplayWindow) {
@@ -162,12 +169,18 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
         if (role === 'audience') win.setAlwaysOnTop(audienceAlwaysOnTop)
       }
     }
+    if (role === 'audience' && !store.get().audienceOutputEnabled) return
     if (role !== 'operator') win.showInactive()
     else win.show()
     if (role === 'operator') win.focus()
   })
 
   store.registerWindow(role, win)
+  if (role === 'audience') win.once('closed', () => {
+    if (activeWindows.get('audience') === win && !layoutClosingWindows.has(win)) {
+      store.patch({ audienceOutputEnabled: false })
+    }
+  })
   if (role === 'operator') operatorWindowHook?.(win)
   return win
 }
@@ -199,7 +212,7 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
   for (const [role, win] of activeWindows) {
     if (!desiredRoles.has(role)) {
       store.unregisterWindow(role)
-      if (!win.isDestroyed()) win.close()
+      if (!win.isDestroyed()) { layoutClosingWindows.add(win); win.close() }
       activeWindows.delete(role)
     }
   }
@@ -225,6 +238,7 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
           // 'leave-full-screen'. Пересоздаём окно на целевом экране — тот же
           // путь, что при старте, работает детерминированно.
           store.unregisterWindow(role)
+          layoutClosingWindows.add(existing)
           existing.destroy()
           activeWindows.set(role, createWindow(role, displayMap[role], fullscreen, windowed, audienceAlwaysOnTop))
         } else if (!isOutputFullscreen(existing)) {
@@ -265,6 +279,26 @@ export function getActiveWindows(): Map<Role, BrowserWindow> {
 
 export function getOperatorWindow(): BrowserWindow | undefined {
   return activeWindows.get('operator')
+}
+
+/** Release only the physical screen; retain the program renderer and clocks. */
+export function setAudienceOutputEnabled(enabled: boolean): void {
+  const state = store.get()
+  if (state.layout === 'solo') return
+  store.patch({ audienceOutputEnabled: enabled })
+  let audience = activeWindows.get('audience')
+  if (enabled && (!audience || audience.isDestroyed())) {
+    applyLayout(state.layout, state.displayMap, state.audienceWindowed, state.audienceAlwaysOnTop)
+    audience = activeWindows.get('audience')
+  }
+  if (!audience || audience.isDestroyed()) return
+  if (!enabled) {
+    audience.hide()
+    const operator = getOperatorWindow()
+    if (operator && !operator.isDestroyed()) operator.focus()
+  } else if (readyWindows.has(audience)) {
+    audience.showInactive()
+  }
 }
 
 /**

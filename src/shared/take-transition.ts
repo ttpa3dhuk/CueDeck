@@ -1,5 +1,6 @@
 export const DEFAULT_TAKE_FADE_MS = 300
-export const TAKE_FADE_MAX_MS = 2000
+export const FADE_MAX_MS = 400
+export const TAKE_FADE_MAX_MS = FADE_MAX_MS
 
 export function sanitizeTakeFadeMs(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value)

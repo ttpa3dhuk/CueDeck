@@ -14,8 +14,11 @@
     "companion:build": "vite-node companion/build.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package:mac": "node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --mac --publish=never && node scripts/rename-mac.cjs",
-    "package:win": "node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --win --config.electronVersion=44.7.2 --publish=never",
+    "test:release-qa": "python3 -m unittest discover -s scripts/release-qa -p 'test_*.py'",
+    "prepare:ffprobe": "node scripts/prepare-ffprobe.cjs --target=all",
+    "verify:ffprobe": "node scripts/prepare-ffprobe.cjs --verify-only --target=all",
+    "package:mac": "node scripts/prepare-ffprobe.cjs --target=darwin-arm64,darwin-x64 && node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --mac --publish=never && node scripts/rename-mac.cjs",
+    "package:win": "node scripts/prepare-ffprobe.cjs --target=win32-x64 && node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --win --config.electronVersion=44.7.2 --publish=never",
     "package:all": "npm run package:mac && npm run package:win",
     "fetch:omt": "node scripts/fetch-omt.cjs"
   },
@@ -69,6 +72,10 @@
       },
       "extraResources": [
         {
+          "from": "vendor/ffprobe/${os}-${arch}",
+          "to": "ffprobe"
+        },
+        {
           "from": "build/ru.lproj",
           "to": "ru.lproj"
         },
@@ -76,6 +83,9 @@
           "from": "vendor/omt/mac",
           "to": "omt"
         }
+      ],
+      "binaries": [
+        "Contents/Resources/ffprobe/ffprobe"
       ],
       "hardenedRuntime": false,
       "gatekeeperAssess": false
@@ -96,6 +106,10 @@
         }
       ],
       "extraResources": [
+        {
+          "from": "vendor/ffprobe/${os}-${arch}",
+          "to": "ffprobe"
+        },
         {
           "from": "vendor/omt/win",
           "to": "omt"

@@ -5,7 +5,7 @@ import { t } from '../shared/i18n.js'
 import type { ReportMaterials } from '../shared/types.js'
 
 // The existing ZIP writer holds its inputs and compressed output in memory.
-export const REPORT_MATERIAL_LIMIT = 128 * 1024 * 1024
+export const REPORT_MATERIAL_LIMIT = 128 * 1000 * 1000
 interface SelectedFile { path: string; name: string; bytes: number; modified: number }
 
 /** Only files explicitly selected through the native picker can be attached. */
@@ -24,12 +24,23 @@ export class ReportMaterialSelection {
       const info = await stat(path)
       if (!info.isFile()) throw new Error(t('Выберите файлы, а не папки.'))
       bytes += info.size
-      if (bytes > REPORT_MATERIAL_LIMIT) throw new Error(t('Материалы больше 128 МиБ. Выберите меньше файлов или отправьте большой файл отдельно.'))
+      if (bytes > REPORT_MATERIAL_LIMIT) throw new Error(t('Материалы больше 128 МБ. Выберите меньше файлов или отправьте большой файл отдельно.'))
       files.push({ path, name: basename(path), bytes: info.size, modified: info.mtimeMs })
     }
     const token = randomUUID()
     this.selection = { token, files }
     return { token, files: files.map(({ name, bytes }) => ({ name, bytes })), bytes }
+  }
+
+  remove(token: string, index: number): ReportMaterials {
+    const selected = this.selection
+    if (!selected || selected.token !== token || !Number.isInteger(index) || index < 0 || index >= selected.files.length) {
+      throw new Error(t('Выберите материалы для отчёта заново.'))
+    }
+    const files = selected.files.filter((_file, i) => i !== index)
+    const nextToken = randomUUID()
+    this.selection = { token: nextToken, files }
+    return { token: nextToken, files: files.map(({ name, bytes }) => ({ name, bytes })), bytes: files.reduce((sum, file) => sum + file.bytes, 0) }
   }
 
   async read(token: string): Promise<{ name: string; data: Buffer }[]> {

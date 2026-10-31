@@ -1,10 +1,11 @@
 import type { AppState } from './types.js'
 import { initialSlideVideo } from './slide-video.js'
+import { FADE_MAX_MS } from './take-transition.js'
 
-/** Zero preserves a cut; enabled presentation fades are 100–500 ms. */
+/** Zero preserves a cut; enabled presentation fades are 100–400 ms. */
 export function sanitizeSlideFadeMs(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? Math.max(100, Math.min(500, Math.round(value))) : 0
+    ? Math.max(100, Math.min(FADE_MAX_MS, Math.round(value))) : 0
 }
 
 export function slideNavigationPatch(

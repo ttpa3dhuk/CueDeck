@@ -90,6 +90,17 @@ function extOf(name: string): string {
   return name.toLowerCase().split('.').pop() ?? ''
 }
 
+/** ZIP paths use '/', but extracted names must also be safe on Windows. */
+function mediaFileName(entry: string): string {
+  const file = entry.split('/').pop()!
+  // Backslashes can escape the media directory; ':' can address an NTFS stream.
+  // Validate before extraction, keeping ordinary names and the cache format intact.
+  if (!file || file === '.' || file === '..' || /[\\:\0]/.test(file)) {
+    throw new Error('pptx: unsafe embedded media filename')
+  }
+  return file
+}
+
 // ── Минимальный zip-reader/writer ────────────────────────────────────────────
 // Без зависимостей: читаем central directory, распаковываем нужные записи
 // (node:zlib), а копию собираем raw-копированием сжатых данных — сотни МБ не
@@ -821,7 +832,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
     autoPlay: v.autoPlay,
     loop: v.loop,
     ...(v.crop ? { crop: v.crop } : {}),
-    file: v.mediaEntry.split('/').pop()!,
+    file: mediaFileName(v.mediaEntry),
   }))
 
   if (strip.size === 0 && stepsBySlide.size === 0) return { zip: null, slideMedia, videos, pageNotes, fonts }
@@ -979,7 +990,7 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
       await mkdir(dir, { recursive: true })
       const byName = new Map(entries.map((e) => [e.name, e]))
       for (const v of t.videos) {
-        const file = v.mediaEntry.split('/').pop()!
+        const file = mediaFileName(v.mediaEntry)
         await writeFile(join(dir, file), readEntry(data, byName.get(v.mediaEntry)!))
       }
     }

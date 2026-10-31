@@ -11,7 +11,7 @@
  * (enumerateDevices), и id устройства у каждого компьютера свой. Поэтому
  * main возвращает окну оператора имена выходов, а оно ищет их у себя.
  */
-import { app, dialog, ipcMain, screen } from 'electron'
+import { app, dialog, ipcMain, screen, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
@@ -57,6 +57,7 @@ function captureSettings(labels: { main: string | null; preview: string | null }
     timerPosition: s.timerPosition,
     timerScale: s.timerScale,
     timerFree: { ...s.timerFree },
+    timerFont: s.timerFont,
     timerColor: s.timerColor,
     timerWarnColors: s.timerWarnColors,
     timerTickEnabled: s.timerTickEnabled,
@@ -72,7 +73,8 @@ function captureSettings(labels: { main: string | null; preview: string | null }
     autoAdvance: s.autoAdvance,
     clickerGlobal: s.clickerGlobal,
     clickerGlobalArrows: s.clickerGlobalArrows,
-    remote: getRemoteSettings(),
+    // Security is local to this machine; venue profiles must not enable/disable it.
+    remote: (({ networkAuth: _auth, ...remote }) => remote)(getRemoteSettings()),
     midiInputs: getMidiInputs(),
   }
 }
@@ -102,6 +104,7 @@ async function applySettings(p: VenueProfileSettings, groups: readonly ProfileGr
     await call('timer:set-free', p.timerFree.x, p.timerFree.y)
     await call('timer:set-position', p.timerPosition)
     await call('timer:set-scale', p.timerScale)
+    await call('timer:set-font', p.timerFont)
     await call('timer:set-color', p.timerColor)
     await call('timer:set-warn-colors', p.timerWarnColors)
     await call('prompter:set-toolbar-scale', p.speakerToolbarScale)
@@ -137,6 +140,17 @@ async function applySettings(p: VenueProfileSettings, groups: readonly ProfileGr
   const displayMap = saved && saved.layout === p.layout ? saved.displayMap : autoAssignDisplays(p.layout, displays)
   await call('layout:set', { layout: p.layout, displayMap, audienceWindowed: p.audienceWindowed, audienceAlwaysOnTop: p.audienceAlwaysOnTop })
   return true
+}
+
+/**
+ * Профиль меняет настройки всего приложения (сеть, клавиши, раскладку) — как и
+ * «Настройки», применять его может только окно оператора. Внутренний вызов
+ * remote:configure из applySettings идёт с сентинелом REMOTE_EVENT и под это
+ * правило не попадает.
+ */
+function isOperatorEvent(e: IpcMainInvokeEvent): boolean {
+  const wc = getOperatorWindow()?.webContents
+  return !!wc && e.sender === wc && e.senderFrame === wc.mainFrame
 }
 
 export function registerProfileIpc(): void {
@@ -194,7 +208,8 @@ export function registerProfileIpc(): void {
    * Применить профиль. groups — что вгрузить (галки у оператора): ставится
    * пересечение с тем, что в профиле есть. Не передали — весь профиль.
    */
-  ipcMain.handle('profiles:apply', async (_e, id: unknown, rawGroups?: unknown): Promise<ProfileApplyResult> => {
+  ipcMain.handle('profiles:apply', async (e, id: unknown, rawGroups?: unknown): Promise<ProfileApplyResult> => {
+    if (!isOperatorEvent(e)) return { ok: false, error: t('Профиль можно применить только в окне оператора.') }
     const p = list().find((x) => x.id === id)
     if (!p) return { ok: false, error: t('Профиль не найден') }
     const wanted = rawGroups === undefined ? p.groups : sanitizeGroups(rawGroups)

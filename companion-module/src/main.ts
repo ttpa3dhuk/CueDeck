@@ -1,7 +1,7 @@
 import { InstanceBase, InstanceStatus, type SomeCompanionConfigField } from '@companion-module/base'
 import { UpdateActions, type ActionsSchema } from './actions.js'
 import { commandUrl, type Command } from './commands.js'
-import { DEFAULT_CONFIG, GetConfigFields, type Lang, type ModuleConfig } from './config.js'
+import { DEFAULT_CONFIG, GetConfigFields, type Lang, type ModuleConfig, type ModuleSecrets } from './config.js'
 import { UpdateFeedbacks, type FeedbacksSchema } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
 import {
@@ -17,7 +17,7 @@ import { UpgradeScripts } from './upgrades.js'
 
 export type ModuleSchema = {
 	config: ModuleConfig
-	secrets: undefined
+	secrets: ModuleSecrets
 	actions: ActionsSchema
 	feedbacks: FeedbacksSchema
 	variables: Record<string, VarValue>
@@ -44,6 +44,7 @@ const FAILS_TO_OFFLINE = 3
 
 export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	config: ModuleConfig = { ...DEFAULT_CONFIG }
+	private accessKey = ''
 	/** Последнее состояние CueDeck; null — связи нет. */
 	state: CueDeckState | null = null
 
@@ -61,8 +62,9 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		super(internal)
 	}
 
-	async init(config: ModuleConfig): Promise<void> {
+	async init(config: ModuleConfig, _isFirstInit: boolean, secrets: ModuleSecrets): Promise<void> {
 		this.applyConfig(config)
+		this.applySecrets(secrets)
 		this.updateActions()
 		this.updateFeedbacks()
 		this.updatePresets()
@@ -74,9 +76,10 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		this.stop()
 	}
 
-	async configUpdated(config: ModuleConfig): Promise<void> {
+	async configUpdated(config: ModuleConfig, secrets: ModuleSecrets): Promise<void> {
 		const prevLang = this.presetLang()
 		this.applyConfig(config)
+		this.applySecrets(secrets)
 		if (this.presetLang() !== prevLang) this.updatePresets()
 		this.start()
 	}
@@ -117,10 +120,14 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	async sendCommand(c: Command): Promise<void> {
 		const url = this.baseUrl() + commandUrl(c)
 		try {
-			const res = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
-			const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
-			if (!res.ok || body?.ok === false) {
-				this.log('warn', `CueDeck: ${c.path} — ${body?.error ?? `HTTP ${res.status}`}`)
+			const res = await fetch(url, { headers: this.authHeaders(), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+			if (res.status === 401) {
+				this.log('warn', `CueDeck: ${c.path} — ${this.authHint()}`)
+			} else {
+				const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null
+				if (!res.ok || body?.ok === false) {
+					this.log('warn', `CueDeck: ${c.path} — ${body?.error ?? `HTTP ${res.status}`}`)
+				}
 			}
 		} catch (err) {
 			this.log('warn', `CueDeck: ${c.path} не отправлено — ${this.describe(err)}`)
@@ -138,6 +145,24 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 			// Старые конфиги с 'en' / 'ru' остаются как есть; всё незнакомое — auto.
 			lang: config.lang === 'ru' || config.lang === 'en' ? config.lang : 'auto',
 		}
+	}
+
+	private applySecrets(secrets: ModuleSecrets | null | undefined): void {
+		this.accessKey = typeof secrets?.key === 'string' ? secrets.key : ''
+	}
+
+	private authHeaders(): Record<string, string> | undefined {
+		if (!this.accessKey) return undefined
+		if (!/^[0-9a-f]{64}$/.test(this.accessKey)) {
+			throw new Error(
+				'Некорректный ключ CueDeck: скопируй его заново из настроек / Invalid CueDeck key: copy it again from Settings',
+			)
+		}
+		return { Authorization: `Bearer ${this.accessKey}` }
+	}
+
+	private authHint(): string {
+		return 'HTTP 401: скопируй ключ из CueDeck → Настройки → Внешнее управление и вставь в подключение Companion / Copy the key from CueDeck Settings → External control into this Companion connection'
 	}
 
 	private baseUrl(): string {
@@ -175,8 +200,12 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		let next = POLL_MS
 		const seq = ++this.reqSeq
 		try {
-			const res = await fetch(`${this.baseUrl()}/api/state`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+			const res = await fetch(`${this.baseUrl()}/api/state`, {
+				headers: this.authHeaders(),
+				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+			})
 			if (gen !== this.generation) return
+			if (res.status === 401) throw new Error(this.authHint())
 			if (res.status === 403) {
 				throw new Error('CueDeck принимает команды только со своего компьютера — включи там «Из сети»')
 			}

@@ -236,3 +236,54 @@ describe('список (пачка фото и роликов)', () => {
     expect(loaded.playlist[0].loop).toBe(true)
   })
 })
+
+describe('In/Out range persistence', () => {
+  it('roundtrips independent ranges for duplicate same-file entries', async () => {
+    const path = join(dir, 'inout.pdpres')
+    const playlist = [
+      entry({ id: 'a', kind: 'video', filePath: '/same.mp4', fileName: 'same.mp4', inSec: 2, outSec: 8 }),
+      entry({ id: 'b', kind: 'video', filePath: '/same.mp4', fileName: 'same.mp4' }),
+    ]
+    await saveProjectFile(path, { playlist, keyVisualPath: null })
+    const loaded = await loadProjectFile(path)
+    expect(loaded.playlist[0]).toMatchObject({ id: 'a', inSec: 2, outSec: 8 })
+    expect(loaded.playlist[1].inSec).toBeUndefined()
+    expect(loaded.playlist[1].outSec).toBeUndefined()
+  })
+
+  it('old projects without fields load as full range', async () => {
+    const path = join(dir, 'legacy.pdpres')
+    await writeFile(path, JSON.stringify({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      playlist: [{
+        id: 'old', kind: 'video', filePath: '/old.mp4', fileName: 'old.mp4',
+        displayName: '', speakerName: '', durationMs: 0,
+      }],
+      keyVisualPath: null,
+    }), 'utf-8')
+    const loaded = await loadProjectFile(path)
+    expect(loaded.playlist[0].inSec).toBeUndefined()
+    expect(loaded.playlist[0].outSec).toBeUndefined()
+  })
+
+  it('drops non-finite/inverted legacy bounds and ignores them on non-video entries', async () => {
+    const path = join(dir, 'bad.pdpres')
+    await writeFile(path, JSON.stringify({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      playlist: [
+        { id: 'a', kind: 'video', filePath: '/a.mp4', fileName: 'a.mp4', inSec: 10, outSec: 5 },
+        { id: 'b', kind: 'video', filePath: '/b.mp4', fileName: 'b.mp4', inSec: 'x', outSec: 5 },
+        { id: 'c', kind: 'pdf', filePath: '/c.pdf', fileName: 'c.pdf', inSec: 1, outSec: 5 },
+      ],
+      keyVisualPath: null,
+    }), 'utf-8')
+    const loaded = await loadProjectFile(path)
+    expect(loaded.playlist[0].inSec).toBeUndefined()
+    expect(loaded.playlist[1].outSec).toBeUndefined()
+    expect(loaded.playlist[2].inSec).toBeUndefined()
+  })
+})

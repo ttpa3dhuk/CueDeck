@@ -11,6 +11,9 @@ export type ModuleConfig = {
 	lang: LangSetting
 }
 
+/** Companion хранит это поле отдельно от обычной конфигурации подключения. */
+export type ModuleSecrets = { key?: string }
+
 // По умолчанию кнопки на языке CueDeck («auto»); пока он не ответил — английский.
 // Подключения, где язык выбран руками (en / ru), остаются как были.
 export const DEFAULT_CONFIG: ModuleConfig = { host: '127.0.0.1', port: 9420, lang: 'auto' }
@@ -44,6 +47,16 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			min: 1,
 			max: 65535,
 			default: DEFAULT_CONFIG.port,
+		},
+		{
+			type: 'secret-text',
+			id: 'key',
+			label: 'CueDeck access key / Ключ доступа CueDeck',
+			width: 12,
+			default: '',
+			tooltip:
+				'If CueDeck asks for a key, copy it from Settings → External control and paste it here. ' +
+				'Если CueDeck запрашивает ключ, скопируй его из Настройки → Внешнее управление и вставь сюда.',
 		},
 		{
 			type: 'dropdown',

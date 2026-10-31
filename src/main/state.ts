@@ -1,3 +1,4 @@
+import { DEFAULT_TEST_SCREEN, hasTestScreenContent } from '../shared/test-screen.js'
 import { DEFAULT_TIMER_ADJUSTMENTS } from '../shared/timer-controls.js'
 import { DEFAULT_TAKE_FADE_MS } from '../shared/take-transition.js'
 import { BrowserWindow } from 'electron'
@@ -37,7 +38,7 @@ export { DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS } from '../shared/ty
 const DEFAULT_DURATION_MS = 30 * 60 * 1000
 
 export function initialVideoState(): VideoState {
-  return { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: false }
+  return { playing: false, anchorSec: 0, anchorAt: null, durationSec: 0, muted: false, range: null, seekSeq: 0 }
 }
 
 export function initialDeckState(): DeckState {
@@ -57,6 +58,8 @@ export function initialDeckState(): DeckState {
 
 export function initialState(): AppState {
   return {
+    audienceOutputEnabled: true,
+    testScreen: { ...DEFAULT_TEST_SCREEN },
     pdfPath: null,
     pdfSha1: null,
     fileKind: null,
@@ -73,6 +76,7 @@ export function initialState(): AppState {
     timerPosition: 'top-right',
     timerScale: 1,
     timerFree: { x: 0.85, y: 0.12 },
+    timerFont: 'system',
     timerColor: null,
     timerWarnColors: true,
     speakerToolbarScale: 1,
@@ -200,6 +204,11 @@ export class StateStore {
     this.windows.delete(role)
   }
 
+  registeredWindow(role: WindowKey): BrowserWindow | undefined {
+    const win = this.windows.get(role)
+    return win && !win.isDestroyed() ? win : undefined
+  }
+
   patch(partial: Partial<AppState>): void {
     // Legacy remote/profile fields mirror the hall timer after the controls moved there.
     if (partial.audienceTimer) {
@@ -207,6 +216,12 @@ export class StateStore {
         timerGongEnabled: partial.audienceTimer.gongEnabled, timerLoop: partial.audienceTimer.loop }
     }
 
+    // Once material has appeared, clearing it or recreating a window must never
+    // resurrect the startup logo. Apply this gate in the same broadcast as content.
+    const merged = { ...this.state, ...partial }
+    if (merged.testScreen.automatic && hasTestScreenContent(merged)) {
+      partial = { ...partial, testScreen: { ...merged.testScreen, automatic: false } }
+    }
     this.state = { ...this.state, ...partial }
     for (const win of this.windows.values()) {
       if (!win.isDestroyed()) {
@@ -226,7 +241,12 @@ export class StateStore {
   }
 
   patchVideo(video: Partial<VideoState>): void {
-    this.patch({ video: { ...this.state.video, ...video } })
+    const current = this.state.video
+    const next = { ...current, ...video }
+    // An explicit position write must reach every window even when it is only
+    // one frame away from the current element time (drift correction ignores it).
+    if (Object.hasOwn(video, 'anchorSec')) next.seekSeq = (current.seekSeq ?? 0) + 1
+    this.patch({ video: next })
   }
 
   patchPreview(deck: Partial<DeckState>): void {
@@ -234,7 +254,10 @@ export class StateStore {
   }
 
   patchPreviewVideo(video: Partial<VideoState>): void {
-    this.patchPreview({ video: { ...this.state.preview.video, ...video } })
+    const current = this.state.preview.video
+    const next = { ...current, ...video }
+    if (Object.hasOwn(video, 'anchorSec')) next.seekSeq = (current.seekSeq ?? 0) + 1
+    this.patchPreview({ video: next })
   }
 
   /** Position the logical playback clock currently points at, in seconds. */

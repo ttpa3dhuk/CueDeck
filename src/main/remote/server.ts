@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 // Готовая страница Companion едет внутри приложения — клиенту не нужен репозиторий
@@ -19,6 +19,9 @@ import { neighbour, programHasVideo, rawUrlToUtf8, resolveRemote, type RemoteArg
 import { helpPage } from './help-page.js'
 import { parseOscPacket } from './osc.js'
 import { getLang, t } from '../../shared/i18n.js'
+import { getOperatorWindow } from '../windows.js'
+import { remoteAccessKey } from './access-key.js'
+import { isLoopback, LOCAL_HOSTS, remoteHttpAccess } from './access.js'
 
 /**
  * Внешнее управление: HTTP и OSC слушают в main-процессе, поэтому
@@ -79,8 +82,9 @@ interface ExecResult {
   ignored?: boolean
 }
 
-function execute(source: string, segments: string[], extra: RemoteArg[]): Promise<ExecResult> {
+function execute(source: string, segments: string[], extra: RemoteArg[], allowed: () => boolean = () => true): Promise<ExecResult> {
   const run = async (): Promise<ExecResult> => {
+    if (!allowed()) return { ok: false, error: t('Доступ к команде закрыт. Проверьте настройки подключения.') }
     const r = resolveRemote(segments, extra, store.get())
     if (!r.ok) {
       log.warn(`remote ${source} ${segments.join('/')}: ${r.error}`)
@@ -245,7 +249,7 @@ const TEXT_ENDPOINTS: Record<string, () => string> = {
 // ── HTTP ─────────────────────────────────────────────────────────────────────
 
 function send(res: http.ServerResponse, code: number, type: string, body: string): void {
-  res.writeHead(code, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-store' })
+  res.writeHead(code, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' })
   res.end(body)
 }
 
@@ -253,8 +257,6 @@ const json = (res: http.ServerResponse, code: number, obj: unknown): void =>
   send(res, code, 'application/json', JSON.stringify(obj))
 
 /** В режиме «только этот компьютер» чужой Host — это DNS-rebinding из браузера. */
-const LOCAL_HOSTS = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i
-
 async function onHttp(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   const settings = current
   if (!settings.lan && !LOCAL_HOSTS.test(req.headers.host ?? '')) {
@@ -270,6 +272,13 @@ async function onHttp(req: http.IncomingMessage, res: http.ServerResponse): Prom
     url = new URL(rawUrlToUtf8(req.url ?? '/'), 'http://x')
   } catch {
     json(res, 400, { ok: false, error: t('кривой адрес') })
+    return
+  }
+  const access = (): 401 | 403 | null => remoteHttpAccess(current.networkAuth === true, accessKey, req.socket.remoteAddress, req.headers, url)
+  const denied = access()
+  if (denied) {
+    if (denied === 401) res.setHeader('WWW-Authenticate', 'Bearer realm="CueDeck"')
+    json(res, denied, { ok: false, error: denied === 401 ? t('Нужен ключ доступа из настроек CueDeck.') : t('Доступ к команде закрыт. Проверьте настройки подключения.') })
     return
   }
   const path = url.pathname.replace(/\/+$/, '') || '/'
@@ -296,6 +305,13 @@ async function onHttp(req: http.IncomingMessage, res: http.ServerResponse): Prom
     return
   }
 
+  // HEAD may inspect the read-only endpoints above, but must never run a command.
+  if (req.method === 'HEAD') {
+    res.setHeader('Allow', 'GET, POST')
+    json(res, 405, { ok: false, error: t('только GET или POST') })
+    return
+  }
+
   let segments: string[]
   try {
     segments = path.slice(5).split('/').filter(Boolean).map(decodeURIComponent)
@@ -304,7 +320,8 @@ async function onHttp(req: http.IncomingMessage, res: http.ServerResponse): Prom
     return
   }
   const value = url.searchParams.get('value')
-  const r = await execute('http', segments, value !== null ? [value] : [])
+  const r = await execute('http', segments, value !== null ? [value] : [],
+    () => current.enabled && (current.lan || isLoopback(req.socket.remoteAddress)) && access() === null)
   json(res, r.ok ? 200 : 400, r)
 }
 
@@ -313,6 +330,9 @@ async function onHttp(req: http.IncomingMessage, res: http.ServerResponse): Prom
 const OSC_PREFIX = /^\/cuedeck(?=\/|$)/i
 
 function onOsc(msg: Buffer, from: dgram.RemoteInfo): void {
+  const allowed = (): boolean =>
+    current.enabled && (current.lan || isLoopback(from.address)) && (!current.networkAuth || isLoopback(from.address))
+  if (!allowed()) return
   let messages
   try {
     messages = parseOscPacket(msg)
@@ -323,13 +343,15 @@ function onOsc(msg: Buffer, from: dgram.RemoteInfo): void {
   for (const m of messages) {
     // Префикс /cuedeck необязателен: `/timer/start` тоже понимаем.
     const segments = m.address.replace(OSC_PREFIX, '').split('/').filter(Boolean)
-    void execute('osc', segments, m.args)
+    void execute('osc', segments, m.args, allowed)
   }
 }
 
 // ── Жизненный цикл ───────────────────────────────────────────────────────────
 
 let current: RemoteSettings = { ...DEFAULT_REMOTE_SETTINGS }
+let accessKey: string | null = null
+let configureQueue: Promise<unknown> = Promise.resolve()
 let status: RemoteStatus = offStatus(current)
 let httpServers: http.Server[] = []
 let oscSocket: dgram.Socket | null = null
@@ -420,9 +442,14 @@ async function stopAll(): Promise<void> {
 }
 
 async function apply(next: RemoteSettings): Promise<RemoteStatus> {
-  await stopAll()
   current = next
+  await stopAll()
   const st = offStatus(next)
+  st.networkAuthError = null
+  if (next.networkAuth) {
+    try { accessKey = await remoteAccessKey() }
+    catch { accessKey = null; st.networkAuthError = t('Не удалось открыть ключ доступа. Защищённый доступ из сети закрыт.') }
+  }
   if (next.enabled) {
     // IPv4 обязателен; ::1 — вдогонку: иначе клиенты, у которых «localhost»
     // резолвится в IPv6, получали бы «соединение отклонено».
@@ -440,7 +467,7 @@ async function apply(next: RemoteSettings): Promise<RemoteStatus> {
       st.httpError = humanError(err as NodeJS.ErrnoException, next.httpPort)
     }
     try {
-      oscSocket = await listenOsc(v4, next.oscPort)
+      oscSocket = await listenOsc(next.networkAuth ? '127.0.0.1' : v4, next.oscPort)
       st.osc = 'on'
     } catch (err) {
       st.osc = 'error'
@@ -480,6 +507,7 @@ function sanitize(v: Partial<RemoteSettings>): RemoteSettings {
     httpPort: port(v.httpPort, current.httpPort),
     oscPort: port(v.oscPort, current.oscPort),
     lan: v.lan === true,
+    networkAuth: typeof v.networkAuth === 'boolean' ? v.networkAuth : current.networkAuth === true,
     companionPush: v.companionPush !== false,
     companionHost: validHost(v.companionHost) ?? current.companionHost,
   }
@@ -487,18 +515,43 @@ function sanitize(v: Partial<RemoteSettings>): RemoteSettings {
 
 /** Поднять слушатели по сохранённым настройкам — вызывать после регистрации ipc. */
 export async function initRemote(): Promise<void> {
-  await apply(getRemoteSettingsSafe())
+  const operation = configureQueue.then(() => apply(getRemoteSettingsSafe()))
+  configureQueue = operation.catch(() => undefined)
+  await operation
 }
 
 export function registerRemoteIpc(): void {
-  ipcMain.handle('remote:configure', async (_e, v: Partial<RemoteSettings>) => {
-    const next = sanitize(v ?? {})
-    if (next.httpPort === next.oscPort) {
-      // Один номер для TCP и UDP технически можно, но путает людей при настройке.
-      return { ok: false, error: t('порты HTTP и OSC должны различаться') }
-    }
-    setRemoteSettings(next)
-    return { ok: true, status: await apply(next) }
+  const isOperator = (e: IpcMainInvokeEvent): boolean => {
+    const wc = getOperatorWindow()?.webContents
+    return !!wc && e.sender === wc && e.senderFrame === wc.mainFrame
+  }
+  ipcMain.handle('remote:copy-access-key', async e => {
+    if (!isOperator(e)) return { ok: false, error: t('Доступ к команде закрыт. Проверьте настройки подключения.') }
+    try { await clipboard.writeText(await remoteAccessKey()); return { ok: true } }
+    catch { return { ok: false, error: t('Не удалось скопировать ключ доступа. Повторите попытку.') } }
+  })
+  ipcMain.handle('remote:configure', (e, v: Partial<RemoteSettings>) => {
+    const operation = configureQueue.then(async () => {
+      if (e !== REMOTE_EVENT && !isOperator(e)) {
+        return { ok: false, error: t('Доступ к команде закрыт. Проверьте настройки подключения.') }
+      }
+      const next = sanitize(v ?? {})
+      if (next.networkAuth !== (current.networkAuth === true) && !isOperator(e)) {
+        return { ok: false, error: t('Доступ к команде закрыт. Проверьте настройки подключения.') }
+      }
+      if (next.networkAuth) {
+        try { await remoteAccessKey() }
+        catch { return { ok: false, error: t('Не удалось открыть ключ доступа. Защищённый доступ из сети закрыт.') } }
+      }
+      if (next.httpPort === next.oscPort) {
+        // Один номер для TCP и UDP технически можно, но путает людей при настройке.
+        return { ok: false, error: t('порты HTTP и OSC должны различаться') }
+      }
+      setRemoteSettings(next)
+      return { ok: true, status: await apply(next) }
+    })
+    configureQueue = operation.catch(() => undefined)
+    return operation
   })
   ipcMain.handle('remote:save-companion-page', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender) ?? undefined

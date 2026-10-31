@@ -1,12 +1,8 @@
+import { timerFontCss } from '../../shared/timer-font'
 import './audience-timer.css'
 import type { AudienceTimerState } from '../../shared/audience-timer'
 import { timerView } from './timer'
 
-const FONTS = {
-  system: 'system-ui, sans-serif',
-  mono: 'ui-monospace, "Cascadia Mono", Consolas, monospace',
-  serif: 'Georgia, "Times New Roman", serif',
-}
 /** Same overlay for the actual output, operator preview and settings mockup. */
 export class AudienceTimerView {
   private signature = ''
@@ -52,7 +48,7 @@ export class AudienceTimerView {
   constructor(
     private element: HTMLElement,
     private container: HTMLElement,
-    private state: () => { timer: AudienceTimerState; covered?: boolean },
+    private state: () => { timer: AudienceTimerState; covered?: boolean; viewport?: { x: number; y: number; width: number; height: number } },
   ) {
     element.classList.add('audience-timer')
     new ResizeObserver(() => this.render()).observe(container)
@@ -60,12 +56,13 @@ export class AudienceTimerView {
     this.render()
   }
   render(): void {
-    const { timer, covered } = this.state()
+    const { timer, covered, viewport } = this.state()
     const visible = timer.visible && !covered
-    const width = this.container.clientWidth
-    const height = this.container.clientHeight
+    const width = viewport?.width ?? this.container.clientWidth
+    const height = viewport?.height ?? this.container.clientHeight
+    const x = viewport?.x ?? 0, y = viewport?.y ?? 0
     const view = timerView(timer, timer.mode)
-    const signature = JSON.stringify([visible, view.text, view.color, width, height,
+    const signature = JSON.stringify([visible, view.text, view.color, width, height, x, y,
       timer.position, timer.scale, timer.color, timer.backgroundColor, timer.backgroundOpacity, timer.font, timer.warnColors])
     if (signature === this.signature) return
     this.signature = signature
@@ -73,7 +70,7 @@ export class AudienceTimerView {
     this.setVisible(visible)
     if (!visible || !width || !height) return
     element.textContent = view.text
-    element.style.fontFamily = FONTS[timer.font]
+    element.style.fontFamily = timerFontCss(timer.font)
     element.style.fontSize = `${Math.min(height * 0.12 * timer.scale, width / (view.text.length * 0.68 + 0.8))}px`
     element.style.color = timer.warnColors && view.color === 'red' ? '#ff5f57'
       : timer.warnColors && view.color === 'yellow' ? '#ffd166' : timer.color
@@ -82,7 +79,7 @@ export class AudienceTimerView {
     // Keep the whole timer visible even at an edge or after a resolution change.
     const halfWidth = Math.min(width / 2, element.offsetWidth / 2)
     const halfHeight = Math.min(height / 2, element.offsetHeight / 2)
-    element.style.left = `${Math.min(width - halfWidth, Math.max(halfWidth, width * timer.position.x))}px`
-    element.style.top = `${Math.min(height - halfHeight, Math.max(halfHeight, height * timer.position.y))}px`
+    element.style.left = `${x + Math.min(width - halfWidth, Math.max(halfWidth, width * timer.position.x))}px`
+    element.style.top = `${y + Math.min(height - halfHeight, Math.max(halfHeight, height * timer.position.y))}px`
   }
 }

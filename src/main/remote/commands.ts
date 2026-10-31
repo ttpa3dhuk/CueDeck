@@ -1,5 +1,6 @@
 import type { AppState, TimerMode, TimerPosition } from '../../shared/types.js'
 import { t } from '../../shared/i18n.js'
+import { FADE_MAX_MS } from '../../shared/take-transition.js'
 
 /**
  * Таблица команд внешнего управления — без Electron, покрыта
@@ -291,12 +292,12 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     path: 'take/fade-ms',
     arg: 'milliseconds',
     group: 'Эфир',
-    title: 'Длительность Fade (100–2000 мс)',
-    example: '500',
+    title: 'Длительность Fade (100–400 мс)',
+    example: '300',
     build: (a) => {
       const n = typeof a === 'number' ? a : typeof a === 'string' ? Number(a.trim()) : NaN
-      return Number.isInteger(n) && n >= 100 && n <= 2000
-        ? [call('preview:set-fade-ms', n)] : t('нужны целые миллисекунды от 100 до 2000')
+      return Number.isInteger(n) && n >= 100 && n <= FADE_MAX_MS
+        ? [call('preview:set-fade-ms', n)] : t('нужны целые миллисекунды от 100 до 400')
     },
   },
   {

@@ -99,3 +99,7 @@ canvas, .slide-image, .slide-video {
   pointer-events: none;
   z-index: 6;
 }
+
+/* The calibration card replaces content, but the audience timer stays on top.
+   Keep the normal timer/keyvisual order when the test card is hidden. */
+body:has(> .test-screen-view:not([hidden])) #audience-timer { z-index: 101; }

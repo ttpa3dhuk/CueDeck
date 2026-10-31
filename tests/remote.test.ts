@@ -458,11 +458,11 @@ describe('новые команды пульта', () => {
   })
 
   it('длительность Fade одинакова для HTTP и числового OSC, ошибки не доходят до IPC', () => {
-    for (const ms of [100, 500, 2000]) {
+    for (const ms of [100, 300, 400]) {
       expect(run(`take/fade-ms/${ms}`)).toEqual(run('take/fade-ms', [ms]))
       expect(run('take/fade-ms', [ms])).toMatchObject({ ok: true, calls: [{ channel: 'preview:set-fade-ms', args: [ms] }] })
     }
-    for (const ms of [0, 99, 2001, 500.5, Infinity, 'abc']) expect(run('take/fade-ms', [ms])).toMatchObject({ ok: false })
+    for (const ms of [0, 99, 401, 500, 2000, 300.5, Infinity, 'abc']) expect(run('take/fade-ms', [ms])).toMatchObject({ ok: false })
   })
 
   it('режимы выдачи принимают только известные значения', () => {

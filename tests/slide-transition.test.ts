@@ -10,7 +10,7 @@ import { loadProjectFile, saveProjectFile } from '../src/main/project'
 describe('per-presentation slide fade', () => {
   it('keeps cuts by default and bounds enabled durations', () => {
     expect([undefined, null, 0, -1, Infinity, '300'].map(sanitizeSlideFadeMs)).toEqual([0, 0, 0, 0, 0, 0])
-    expect([1, 100, 299.8, 500, 2000].map(sanitizeSlideFadeMs)).toEqual([100, 100, 300, 500, 500])
+    expect([1, 100, 299.8, 500, 2000].map(sanitizeSlideFadeMs)).toEqual([100, 100, 300, 400, 400])
   })
   it('changes slide, transition and source video policy atomically without changing speaker clocks', () => {
     const store = new StateStore()

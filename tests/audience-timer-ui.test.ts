@@ -16,6 +16,7 @@ function mount() {
   const elements = new Map<string, any>()
   const element = (id: string) => {
     if (!elements.has(id)) elements.set(id, { value: '', checked: false, textContent: '', disabled: false,
+      options: [], add(option: any) { this.options.push(option) },
       classList: { toggle() {} }, setAttribute() {}, blur() {}, focus() {}, style: {},
       setPointerCapture() {}, releasePointerCapture() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 500, height: 300 }) })
     return elements.get(id)
@@ -24,6 +25,7 @@ function mount() {
     data.state.audienceTimer = { ...data.state.audienceTimer, ...config }
     data.listener()
   })
+  vi.stubGlobal('Option', class { constructor(public text: string, public value: string) {} })
   vi.stubGlobal('document', { getElementById: element, activeElement: null })
   vi.stubGlobal('window', { setInterval, api: { audienceTimer: { configure } } })
   const begin = setupAudienceTimerUi(vi.fn(), vi.fn())
@@ -62,4 +64,24 @@ it('nudges by output pixels, handles Shift, and prevents navigation keys from re
   expect(event.stopPropagation).toHaveBeenCalledOnce()
   element('at-preview').onkeydown({ ...event, key: 'ArrowDown', shiftKey: true })
   expect(data.state.audienceTimer.position.y).toBeCloseTo(.9)
+})
+
+
+it('keeps a named font when reopening and changing appearance without starting the timer', () => {
+  const { element, begin } = mount()
+  element('at-font').value = 'PT Sans'; element('at-font').onchange()
+  begin()
+  expect(element('at-font').value).toBe('PT Sans')
+  expect(data.previews[1]().timer.font).toBe('PT Sans')
+  expect(data.state.audienceTimer).toMatchObject({ font: 'PT Sans', visible: false, running: false })
+})
+
+it('places the PGM timer inside the fitted output frame rather than the whole tall panel', () => {
+  const { element } = mount()
+  element('current-slide').clientWidth = 600
+  element('current-slide').clientHeight = 800
+  expect(data.previews[0]().viewport).toEqual({ x: 0, y: 250, width: 600, height: 300 })
+  element('current-slide').clientWidth = 1200
+  element('current-slide').clientHeight = 400
+  expect(data.previews[0]().viewport).toEqual({ x: 200, y: 0, width: 800, height: 400 })
 })

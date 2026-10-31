@@ -1,3 +1,4 @@
+import { setupTestScreen } from '../shared/test-screen-controller'
 import type { AppState } from '../../preload/api'
 import { getState } from '../shared/bus'
 import { isVideoPath, slideMediaAt, slideOverlayGeometry, slideVideoSrc } from '../shared/video'
@@ -14,6 +15,9 @@ export class AudienceTimerBackground {
   private keyUrl: string | null = null
 
   constructor(private canvas: HTMLCanvasElement, private stage: HTMLElement) {
+    // Same live scene as the real output, beneath the local editable timer.
+    // The program canvas only contains media and cannot paint this DOM overlay.
+    setupTestScreen(stage, 'audience', { zIndex: 0 })
     new ResizeObserver(() => this.render()).observe(stage)
     window.setInterval(() => this.render(), 100)
   }
@@ -59,10 +63,6 @@ export class AudienceTimerBackground {
   }
 
   render(): void {
-    if (!this.stage.getClientRects().length) {
-      if (this.keyPicture instanceof HTMLVideoElement) this.keyPicture.pause()
-      return
-    }
     if (!this.sizing && Date.now() - this.lastSize > 500) {
       this.sizing = true
       void window.api.monitor.audienceSize().then(size => {
@@ -71,6 +71,10 @@ export class AudienceTimerBackground {
           this.stage.style.aspectRatio = `${size.width} / ${size.height}`
         }
       }).catch(() => undefined).finally(() => { this.sizing = false; this.lastSize = Date.now() })
+    }
+    if (!this.stage.getClientRects().length) {
+      if (this.keyPicture instanceof HTMLVideoElement) this.keyPicture.pause()
+      return
     }
     const width = this.stage.clientWidth, height = this.stage.clientHeight
     if (!width || !height) return

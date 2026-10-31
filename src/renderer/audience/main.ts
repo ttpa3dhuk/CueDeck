@@ -1,3 +1,6 @@
+import { rejectAudioOnlyVideo } from '../shared/video-content'
+import { configureProgramMirror, loadProgramVideo, releaseProgramVideo, programVideoCanvas, programVideoReady } from '../shared/program-mirror'
+import { setupTestScreen } from '../shared/test-screen-controller'
 import { ProgramTimerAudio } from '../shared/program-timer-audio'
 import { TakeFade } from '../shared/take-fade'
 import { SlidePaintTracker, overlayFrameReady } from '../shared/slide-paint'
@@ -32,21 +35,60 @@ document.title = WINDOW_TITLES.audience
 
 const canvas = document.getElementById('slide-canvas') as HTMLCanvasElement
 const slideImage = document.getElementById('slide-image') as HTMLImageElement
-const slideVideo = document.getElementById('slide-video') as HTMLVideoElement
+let slideVideo = document.getElementById('slide-video') as HTMLVideoElement
 const liveVideo = document.getElementById('live-video') as HTMLVideoElement
 const liveStatus = document.getElementById('live-status') as HTMLDivElement
-const mediaOverlay = document.getElementById('media-overlay') as HTMLVideoElement
+let mediaOverlay = document.getElementById('media-overlay') as HTMLVideoElement
 const blackout = document.getElementById('blackout') as HTMLDivElement
 const kvImage = document.getElementById('keyvisual') as HTMLImageElement
 const kvVideo = document.getElementById('keyvisual-video') as HTMLVideoElement
 const slideImageUnder = document.getElementById('slide-image-under') as HTMLImageElement
 
-const takeFade = new TakeFade(document.body, [slideImageUnder, canvas, slideImage, slideVideo, liveVideo, mediaOverlay])
+const takeFade = new TakeFade(document.body, () => [slideImageUnder, canvas, slideImage, slideVideo, programVideoCanvas(slideVideo), liveVideo, mediaOverlay, programVideoCanvas(mediaOverlay)], retainAudienceVideo)
+
+function retainAudienceVideo(video: HTMLVideoElement): HTMLVideoElement | null {
+  if (video !== slideVideo && video !== mediaOverlay) return null
+  const replacement = video.cloneNode(false) as HTMLVideoElement
+  replacement.removeAttribute('src')
+  releaseProgramVideo(video)
+  programVideoCanvas(video).remove()
+  video.replaceWith(replacement)
+  video.removeAttribute('id')
+  if (video === slideVideo) {
+    slideVideo = replacement
+    lastFilePath = null
+    lastSinkId = undefined
+  } else {
+    mediaOverlay = replacement
+    overlaySrc = null
+    overlaySlide = -1
+    overlaySinkId = undefined
+  }
+  bindAudienceVideo(replacement)
+  return video
+}
+
+function bindAudienceVideo(video: HTMLVideoElement): void {
+  rejectAudioOnlyVideo(video, () => {
+    if (video === slideVideo || video === mediaOverlay) void window.api.video.pause()
+  })
+  video.addEventListener('error', () => {
+    if (!video.getAttribute('src')) return
+    if (video === slideVideo && getState().fileKind === 'video') {
+      window.api.diag.log('error', 'Program video failed', mediaErrorInfo(video))
+      video.classList.add('hidden')
+    } else if (video === mediaOverlay) {
+      window.api.diag.log('error', 'Slide video failed', mediaErrorInfo(video))
+      overlayFailedSrc = overlaySrc
+      unloadMediaOverlay()
+    }
+  })
+}
 const slidePaint = new SlidePaintTracker()
 
 function programFrameReady(): boolean {
   const s = getState()
-  if (s.fileKind === 'video') return slideVideo.readyState >= 2 && !slideVideo.seeking
+  if (s.fileKind === 'video') return programVideoReady(slideVideo)
   if (s.fileKind === 'live') return liveVideo.readyState >= 2
   if (s.fileKind === 'image') return slideImage.complete && slideImage.naturalWidth > 0
   if (!docLoaded || slidePaint.pending || lastRenderedSlide !== s.currentSlide) return false
@@ -54,7 +96,7 @@ function programFrameReady(): boolean {
   if (!media || !s.pdfSha1) return true
   const expected = slideVideoSrc('program', media.file, s.pdfSha1)
   return overlayFailedSrc === expected || (overlaySlide === s.currentSlide &&
-    overlayFrameReady(expected, overlaySrc, overlayFailedSrc, mediaOverlay.readyState, mediaOverlay.seeking))
+    overlayFrameReady(expected, overlaySrc, overlayFailedSrc, programVideoReady(mediaOverlay) ? 2 : 0, false))
 }
 
 let programLoadGeneration = 0
@@ -139,6 +181,7 @@ function applyLive(state: AppState): void {
 }
 
 function unloadVideo(): void {
+  releaseProgramVideo(slideVideo)
   if (slideVideo.src) {
     slideVideo.pause()
     slideVideo.removeAttribute('src')
@@ -158,6 +201,7 @@ let overlaySinkId: string | null | undefined = undefined
 let overlayFailedSrc: string | null = null
 
 function unloadMediaOverlay(): void {
+  releaseProgramVideo(mediaOverlay)
   if (mediaOverlay.src) {
     mediaOverlay.pause()
     mediaOverlay.removeAttribute('src')
@@ -187,8 +231,7 @@ function updateMediaOverlay(state: AppState): void {
   overlaySlide = state.currentSlide
   if (overlaySrc !== src) {
     overlaySrc = src
-    mediaOverlay.src = src
-    mediaOverlay.load()
+    loadProgramVideo(mediaOverlay, src)
   }
   mediaOverlay.muted = shouldMute(state, 'audience')
   if (state.audioOutputId !== overlaySinkId) {
@@ -229,8 +272,7 @@ async function loadFile(): Promise<void> {
     slideImage.removeAttribute('src')
     slideVideo.classList.remove('hidden')
     slideVideo.muted = shouldMute(state, 'audience')
-    slideVideo.src = videoSrc(state.pdfSha1 ?? '', 'program')
-    slideVideo.load()
+    loadProgramVideo(slideVideo, videoSrc(state.pdfSha1 ?? '', 'program'))
     lastSinkId = state.audioOutputId
     applySinkId(slideVideo, state.audioOutputId)
     syncVideoElement(slideVideo, state.video)
@@ -389,25 +431,15 @@ async function applyState(state: AppState): Promise<void> {
 
 async function bootstrap(): Promise<void> {
   await initBus()
+  await configureProgramMirror('audience', getState)
+  setupTestScreen(document.body, 'audience')
   const programTimerAudio = new ProgramTimerAudio('audience')
   setInterval(() => programTimerAudio.update(getState()), 100)
   new AudienceTimerView(document.getElementById('audience-timer')!, document.body,
     () => ({ timer: getState().audienceTimer, covered: getState().blackout }))
 
-  // Unsupported codec → keep the projector black instead of showing a broken element.
-  slideVideo.addEventListener('error', () => {
-    if (getState().fileKind === 'video' && slideVideo.getAttribute('src')) {
-      window.api.diag.log('error', `видео не воспроизвелось: ${getState().pdfPath}`, mediaErrorInfo(slideVideo))
-      slideVideo.classList.add('hidden')
-    }
-  })
-  // Слайд-видео не воспроизвелось → зал остаётся с постером из PDF.
-  mediaOverlay.addEventListener('error', () => {
-    if (!mediaOverlay.getAttribute('src')) return
-    window.api.diag.log('error', `слайд-видео не воспроизвелось: ${overlaySrc}`, mediaErrorInfo(mediaOverlay))
-    overlayFailedSrc = overlaySrc
-    unloadMediaOverlay()
-  })
+  bindAudienceVideo(slideVideo)
+  bindAudienceVideo(mediaOverlay)
 
   subscribe((state, patch) => {
     if (patch && Object.hasOwn(patch, 'takeTransition')) {

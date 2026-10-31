@@ -30,6 +30,13 @@ import type {
   UiTheme,
   VenueProfile,
   VideoTakeMode,
+  VideoDeck,
+  VideoRange,
+  VideoRangeEdge,
+  VideoRangeUpdateResult,
+  FrameStepResult,
+  FrameStepIdentity,
+  FrameTimecode,
 } from '../shared/types.js'
 import type { LiveSource } from '../shared/live.js'
 
@@ -73,11 +80,23 @@ export type {
   UiTheme,
   VideoState,
   VideoTakeMode,
+  VideoDeck,
+  VideoRange,
+  VideoRangeEdge,
+  VideoRangeUpdateResult,
+  FrameStepResult,
+  FrameStepIdentity,
+  FrameTimecode,
 } from '../shared/types.js'
 
 export type Unsubscribe = () => void
 
 export interface PresenterApi {
+  programMirror: {
+    available(): Promise<boolean>
+    forced(): Promise<boolean>
+    register(source: string | null): void
+  }
   state: {
     get(): Promise<AppState>
     onPatch(cb: (patch: Partial<AppState>) => void): Unsubscribe
@@ -122,6 +141,7 @@ export interface PresenterApi {
     setSlideTakeMode(mode: SlideTakeMode): Promise<void>
     video: {
       toggle(): Promise<void>
+      pause(): Promise<void>
       seek(sec: number): Promise<void>
       seekBy(deltaSec: number): Promise<void>
       setDuration(sec: number): Promise<void>
@@ -144,6 +164,7 @@ export interface PresenterApi {
     /** Свободное положение таймера на суфлёре: центр в долях экрана (0..1). */
     setFree(x: number, y: number): Promise<void>
     /** Свой цвет цифр на суфлёре (#rrggbb) или null — стандартный. */
+    setFont(font: string): Promise<void>
     setColor(color: string | null): Promise<void>
     /** Жёлтый/красный в конце отсчёта поверх своего цвета. */
     setWarnColors(on: boolean): Promise<void>
@@ -167,6 +188,9 @@ export interface PresenterApi {
   blackout: {
     toggle(): Promise<void>
   }
+  audienceOutput: {
+    setEnabled(enabled: boolean): Promise<void>
+  }
   speakerMessage: {
     /** Положение (центр в долях экрана; null — сверху по центру) и масштаб плашки. */
     setLayout(layout: { pos: { x: number; y: number } | null; scale: number }): Promise<void>
@@ -187,11 +211,21 @@ export interface PresenterApi {
     /** Зациклить эфирный ролик (видео-заставка крутится, пока спикер на сцене). */
     setLoop(enabled: boolean): Promise<void>
     toggleMuted(): Promise<void>
+    /** One actual frame via ffprobe timestamps; honestly fails when unavailable. */
+    stepFrame(deck: VideoDeck, direction: -1 | 1, identity?: FrameStepIdentity): Promise<FrameStepResult>
+    /** MM:SS:FF labels from the same bounded decoded-frame cache; -- = unknown. */
+    timecode(deck: VideoDeck): Promise<FrameTimecode | null>
+    /** Edit In/Out on the deck's playlist entry; matching program/preview apply immediately. */
+    setRange(deck: VideoDeck, edge: VideoRangeEdge): Promise<VideoRangeUpdateResult>
   }
   audio: {
     setOutput(deviceId: string | null): Promise<void>
     /** Предпрослушка в наушники (SOLO/PFL); null = выключить. */
     setPreviewOutput(deviceId: string | null): Promise<void>
+  }
+  testScreen: {
+    setEnabled(enabled: boolean): Promise<void>
+    info(role: 'audience' | 'speaker'): Promise<import('../shared/test-screen').TestScreenInfo>
   }
   displays: {
     list(): Promise<DisplayInfo[]>
@@ -206,7 +240,7 @@ export interface PresenterApi {
     audienceSize(): Promise<{ width: number; height: number }>
     /** Мониторы выходов под эфиром: вкл/выкл (персистится). */
     setEnabled(value: boolean): Promise<void>
-    /** JPEG-кадры окон суфлёра/зала (~2 fps); приходят только оператору. */
+    /** JPEG-кадры окон суфлёра/зала (до 5 fps); приходят только оператору. */
     onFrame(cb: (frame: { role: MonitorRole; dataUrl: string }) => void): Unsubscribe
   }
   ui: {
@@ -248,6 +282,7 @@ export interface PresenterApi {
   }
   /** Внешнее управление: Stream Deck / Companion / OSC (main/remote/). */
   remote: {
+    copyAccessKey(): Promise<{ ok: boolean; error?: string }>
     /** Сохранить настройки и перезапустить слушатели; статус приходит и в state.remote. */
     configure(settings: RemoteSettings): Promise<{ ok: true; status: RemoteStatus } | { ok: false; error: string }>
     /** Справочная страница со списком команд — в браузере по умолчанию. */
@@ -282,6 +317,8 @@ export interface PresenterApi {
     setFolders(ids: string[], folderId: string | null): Promise<void>
     setFolderCollapsed(id: string, collapsed: boolean): Promise<void>
     remove(id: string): Promise<void>
+    /** Copy a playlist record after its source without duplicating media or changing decks. */
+    duplicate(id: string): Promise<PlaylistEntry | null>
     reorder(ids: string[]): Promise<void>
     update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number; liveFit?: LiveFit; loop?: boolean; slideFadeMs?: number }): Promise<void>
     /** Load entry into the off-air preview deck (safe; does not touch the audience feed). */
@@ -327,6 +364,8 @@ export interface PresenterApi {
     }>
   }
   menu: {
+    onQuickSetting(cb: (action: string, value: unknown) => void): Unsubscribe
+    setAudioOutputs(outputs: { id: string; label: string }[]): Promise<void>
     onOpenPdf(cb: () => void): Unsubscribe
     onOpenDisplaySetup(cb: () => void): Unsubscribe
     /** Меню → «Настройки…» (внешнее управление, MIDI). */
@@ -437,6 +476,7 @@ export interface PresenterApi {
     mark(): Promise<number | null>
     info(): Promise<DiagInfo>
     /** Собрать zip на рабочий стол. Комментарий оператора уходит в report.txt. */
+    removeMaterial(token: string, index: number): Promise<ReportMaterials>
     chooseMaterials(): Promise<{ selection: ReportMaterials | null; error?: string }>
     buildReport(comment: string, materialToken?: string, markerN?: number): Promise<ReportResult>
     openRecovery(): Promise<{ ok: boolean; error?: string; cancelled?: boolean; missing?: number }>

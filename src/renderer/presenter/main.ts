@@ -1,9 +1,13 @@
+import { rejectAudioOnlyVideo } from '../shared/video-content'
+import { configureProgramMirror, loadProgramVideo, releaseProgramVideo, programVideoCanvas, programVideoReady, programClockOwner } from '../shared/program-mirror'
+import { setupTestScreen } from '../shared/test-screen-controller'
+import { testScreenVisible } from '../../shared/test-screen'
 import { ProgramTimerAudio } from '../shared/program-timer-audio'
 import { TakeFade } from '../shared/take-fade'
 import { paddingBox } from '../shared/element-box'
 import { SlidePaintTracker, overlayFrameReady } from '../shared/slide-paint'
 import { safeDisplayLayout } from '../../shared/display-safety'
-import { sanitizeTakeFadeMs } from '../../shared/take-transition'
+import { FADE_MAX_MS, sanitizeTakeFadeMs } from '../../shared/take-transition'
 import { nextPlaylistFolderName } from '../../shared/playlist-folders'
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
@@ -13,6 +17,7 @@ import {
   crossfadeToImage,
   formatClock,
   isVideoPath,
+  knownElementDuration,
   placeSlideOverlay,
   shouldMute,
   slideMediaAt,
@@ -32,8 +37,14 @@ import { OMT_OUTPUTS } from '../../shared/types'
 import type { ListMode, OmtFps, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL, SUPPORT_URL } from '../../preload/api'
 import { initStreamUi } from './stream-ui'
+import { setupSettingsWindow } from './settings-window'
+import { timerFontCss } from '../../shared/timer-font'
+import { refreshTimerFonts, syncTimerFontSelect, setupTimerFontBrowsing } from './timer-font-ui'
 import { setupAudienceTimerUi } from './audience-timer-ui'
 import { setupHoldButton } from '../shared/hold-button'
+import { resolveFrameStepDeck, resolveRangeActionForKey } from '../shared/video-focus'
+import { videoRangeLayout } from '../../shared/video-range'
+import { formatFrameTimecode } from '../../shared/frame-timecode'
 import { initOmtInputUi, openOmtInputModal } from './omt-input-ui'
 import type {
   AppState,
@@ -47,6 +58,12 @@ import type {
   TimerMode,
   TimerPosition,
   VideoTakeMode,
+  VideoDeck,
+  VideoRange,
+  VideoRangeEdge,
+  VideoRangeUpdateResult,
+  FrameStepIdentity,
+  FrameTimecode,
 } from '../../preload/api'
 
 const role: Role = (new URL(location.href).searchParams.get('role') as Role) ?? 'operator'
@@ -142,13 +159,13 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
 }
 const currentCanvas = $<HTMLCanvasElement>('current-canvas')
 const currentImage = $<HTMLImageElement>('current-image')
-const currentVideo = $<HTMLVideoElement>('current-video')
+let currentVideo = $<HTMLVideoElement>('current-video')
 const currentLive = $<HTMLVideoElement>('current-live')
 const currentLiveStatus = $('current-live-status')
 const currentLiveInfo = $('current-live-info')
 const currentMeterEl = $('current-meter')
 const currentLiveFit = role === 'operator' ? $<HTMLSelectElement>('current-live-fit') : null
-const mediaOverlay = $<HTMLVideoElement>('media-overlay')
+let mediaOverlay = $<HTMLVideoElement>('media-overlay')
 const videoControls = role === 'operator' ? $('video-controls') : null
 const videoPlayBtn = role === 'operator' ? $<HTMLButtonElement>('video-play') : null
 const videoRestartBtn = role === 'operator' ? $<HTMLButtonElement>('video-restart') : null
@@ -156,6 +173,33 @@ const videoScrub = role === 'operator' ? $<HTMLInputElement>('video-scrub') : nu
 const videoTime = role === 'operator' ? $('video-time') : null
 const videoMuteBtn = role === 'operator' ? $<HTMLButtonElement>('video-mute') : null
 const videoError = $('video-error')
+
+interface TimelineRefs {
+  root: HTMLElement | null
+  range: HTMLElement | null
+  inMarker: HTMLElement | null
+  outMarker: HTMLElement | null
+}
+function timelineRefs(root: HTMLElement | null): TimelineRefs {
+  return {
+    root,
+    range: root?.querySelector<HTMLElement>('.timeline-range') ?? null,
+    inMarker: root?.querySelector<HTMLElement>('.timeline-marker.in') ?? null,
+    outMarker: root?.querySelector<HTMLElement>('.timeline-marker.out') ?? null,
+  }
+}
+const programTimeline = timelineRefs(role === 'operator' ? $('program-timeline') : null)
+const previewTimeline = timelineRefs(role === 'operator' ? $('preview-timeline') : null)
+const timelineMenu = role === 'operator' ? $('timeline-menu') : null
+let timelineMenuDeck: VideoDeck | null = null
+const timecodeCache: Record<VideoDeck, FrameTimecode | null> = { program: null, preview: null }
+const timecodeSeq: Record<VideoDeck, number> = { program: 0, preview: 0 }
+const timecodePending: Record<VideoDeck, { seq: number; identity: FrameStepIdentity; key: string } | null> = {
+  program: null,
+  preview: null,
+}
+const timecodeKey: Record<VideoDeck, string> = { program: '', preview: '' }
+const draggingScrub: Record<VideoDeck, boolean> = { program: false, preview: false }
 const nextCanvas = $<HTMLCanvasElement>('next-canvas')
 const nextEmpty = $('next-empty')
 const notesInput = $<HTMLTextAreaElement>('notes-input')
@@ -232,6 +276,7 @@ function disposeCurrentImage(afterMs = 0): void {
 }
 
 function unloadCurrentVideo(): void {
+  releaseProgramVideo(currentVideo)
   if (currentVideo.src) {
     currentVideo.pause()
     currentVideo.removeAttribute('src')
@@ -252,6 +297,7 @@ let overlaySinkId: string | null | undefined = undefined
 let overlayFailedSrc: string | null = null
 
 function unloadMediaOverlay(): void {
+  releaseProgramVideo(mediaOverlay)
   if (mediaOverlay.src) {
     mediaOverlay.pause()
     mediaOverlay.removeAttribute('src')
@@ -281,8 +327,7 @@ function updateMediaOverlay(state: AppState): void {
   overlaySlide = state.currentSlide
   if (overlaySrc !== src) {
     overlaySrc = src
-    mediaOverlay.src = src
-    mediaOverlay.load()
+    loadProgramVideo(mediaOverlay, src)
   }
   mediaOverlay.muted = shouldMute(state, role)
   if (state.audioOutputId !== overlaySinkId) {
@@ -554,8 +599,7 @@ async function loadCurrentFile(): Promise<void> {
     nextEmpty.classList.remove('hidden')
     currentVideo.classList.remove('hidden')
     currentVideo.muted = shouldMute(state, role)
-    currentVideo.src = videoSrc(state.pdfSha1 ?? '', 'program')
-    currentVideo.load()
+    loadProgramVideo(currentVideo, videoSrc(state.pdfSha1 ?? '', 'program'))
     lastSinkId = state.audioOutputId
     applySinkId(currentVideo, state.audioOutputId)
     await window.api.pdf.reportTotal(1)
@@ -633,6 +677,178 @@ async function renderCurrent(): Promise<void> {
   }
 }
 
+function updateTimelineRange(
+  refs: TimelineRefs,
+  range: VideoRange | null | undefined,
+  durationSec: number,
+  labels?: FrameTimecode | null,
+): void {
+  const layout = videoRangeLayout(range, durationSec)
+  refs.range?.classList.toggle('hidden', !layout)
+  refs.inMarker?.classList.toggle('hidden', !layout)
+  refs.outMarker?.classList.toggle('hidden', !layout)
+  if (!layout) return
+  if (refs.range) {
+    refs.range.style.left = `${layout.leftPct}%`
+    refs.range.style.width = `${layout.widthPct}%`
+  }
+  if (refs.inMarker) refs.inMarker.style.left = `${layout.inPct}%`
+  if (refs.outMarker) refs.outMarker.style.left = `${layout.outPct}%`
+  if (refs.root) {
+    const inSec = durationSec * layout.inPct / 100
+    const outSec = durationSec * layout.outPct / 100
+    refs.root.title = `In ${labels?.in ?? formatFrameTimecode(inSec, null)} · Out ${labels?.out ?? formatFrameTimecode(outSec, null)}`
+  }
+}
+
+function hideTimelineMenu(): void {
+  timelineMenu?.classList.add('hidden')
+  timelineMenuDeck = null
+}
+
+function openTimelineMenu(deck: VideoDeck, clientX: number, clientY: number): void {
+  if (!timelineMenu) return
+  timelineMenuDeck = deck
+  timelineMenu.classList.remove('hidden')
+  const box = timelineMenu.getBoundingClientRect()
+  const x = Math.max(6, Math.min(clientX, window.innerWidth - box.width - 6))
+  const y = Math.max(6, Math.min(clientY, window.innerHeight - box.height - 6))
+  timelineMenu.style.left = `${x}px`
+  timelineMenu.style.top = `${y}px`
+}
+
+function rangeErrorMessage(code: VideoRangeUpdateResult['code']): string {
+  switch (code) {
+    case 'not-video': return t('Границы доступны только для ролика')
+    case 'no-entry': return t('Границы сохраняются у записи плейлиста — добавь ролик в список')
+    case 'list-unsupported': return t('In/Out для роликов внутри списка не поддерживаются')
+    case 'no-duration': return t('Длительность ролика ещё неизвестна — дождись загрузки')
+    case 'invalid-range': return t('Нужно In раньше Out: выбери другую точку')
+    default: return t('Не удалось изменить границы')
+  }
+}
+
+/** After a context-menu action, hand focus back to that deck's transport. */
+function focusVideoTransport(deck: VideoDeck): void {
+  if (role !== 'operator') return
+  if (!settingsModal.classList.contains('hidden')) return
+  if (document.querySelector('.modal:not(.hidden)')) return
+  if (isTypingTarget(document.activeElement)) return
+  const controls = deck === 'program' ? videoControls : previewVideoControls
+  if (!controls || controls.classList.contains('hidden')) return
+  controls.focus({ preventScroll: true })
+}
+
+async function setTimelineRange(deck: VideoDeck, edge: VideoRangeEdge): Promise<void> {
+  try {
+    const result = await window.api.video.setRange(deck, edge)
+    if (!result.ok) {
+      showBanner(rangeErrorMessage(result.code), 6000)
+      return
+    }
+    if (edge === 'reset') {
+      showBanner(t('Границы сброшены — позиция и воспроизведение не меняются'), 5000)
+    } else {
+      showBanner(t('In/Out обновлены и сразу применены к этой записи'), 5000)
+    }
+  } catch (error) {
+    showBanner(String(error), 6000)
+  } finally {
+    focusVideoTransport(deck)
+  }
+}
+
+function sameFrameIdentity(a: FrameStepIdentity, b: FrameStepIdentity): boolean {
+  return a.entryId === b.entryId && a.path === b.path && a.sha1 === b.sha1
+}
+
+function deckClockKey(deck: VideoDeck, state: AppState): string {
+  const v = deck === 'preview' ? state.preview.video : state.video
+  return [
+    v.seekSeq ?? 0,
+    v.durationSec,
+    v.range?.inSec ?? 'null',
+    v.range?.outSec ?? 'null',
+  ].join('|')
+}
+
+function currentTimecode(deck: VideoDeck, state: AppState): FrameTimecode | null {
+  const cached = timecodeCache[deck]
+  if (!cached) return null
+  if (!sameFrameIdentity(cached.identity, frameStepIdentity(deck, state))) return null
+  if (timecodeKey[deck] !== deckClockKey(deck, state)) return null
+  return cached
+}
+
+function scrubTotalLabel(deck: VideoDeck, state: AppState): string {
+  const labels = currentTimecode(deck, state)
+  if (labels) return labels.total
+  const duration = deck === 'preview' ? state.preview.video.durationSec : state.video.durationSec
+  return formatFrameTimecode(duration > 0 ? duration : Number.NaN, null)
+}
+
+/** While dragging show the selected second with an explicit unknown frame. */
+function paintScrubDrag(deck: VideoDeck, value: number): void {
+  const state = getState()
+  if (deck === 'program') {
+    if (videoTime) videoTime.textContent = `${formatFrameTimecode(value, null)} / ${scrubTotalLabel('program', state)}`
+  } else if (previewVideoTime) {
+    previewVideoTime.textContent = `${formatFrameTimecode(value, null)} / ${scrubTotalLabel('preview', state)}`
+  }
+}
+
+function paintVideoTimecode(deck: VideoDeck, state: AppState): void {
+  if (role !== 'operator') return
+  const labels = currentTimecode(deck, state)
+  if (deck === 'program') {
+    const v = state.video
+    if (videoTime && !draggingScrub.program) {
+      videoTime.textContent = labels
+        ? `${labels.current} / ${labels.total}`
+        : `${formatFrameTimecode(videoPosition(v), null)} / ${formatFrameTimecode(v.durationSec > 0 ? v.durationSec : Number.NaN, null)}`
+    }
+    updateTimelineRange(programTimeline, v.range, v.durationSec, labels)
+    return
+  }
+  const p = state.preview
+  if (previewVideoTime && !draggingScrub.preview) {
+    previewVideoTime.textContent = labels
+      ? `${labels.current} / ${labels.total}`
+      : `${formatFrameTimecode(videoPosition(p.video), null)} / ${formatFrameTimecode(p.video.durationSec > 0 ? p.video.durationSec : Number.NaN, null)}`
+  }
+  updateTimelineRange(previewTimeline, p.video.range, p.video.durationSec, labels)
+}
+
+function requestTimecode(deck: VideoDeck, state: AppState): void {
+  if (role !== 'operator') return
+  const isVideo = deck === 'preview' ? state.preview.kind === 'video' : state.fileKind === 'video'
+  if (!isVideo) return
+  const identity = frameStepIdentity(deck, state)
+  const key = deckClockKey(deck, state)
+  const pending = timecodePending[deck]
+  if (pending && sameFrameIdentity(pending.identity, identity) && pending.key === key) return
+  if (timecodeKey[deck] !== key) timecodeCache[deck] = null
+  const seq = ++timecodeSeq[deck]
+  timecodePending[deck] = { seq, identity, key }
+  void window.api.video.timecode(deck).then((result) => {
+    const current = timecodePending[deck]
+    if (current?.seq === seq) timecodePending[deck] = null
+    if (seq !== timecodeSeq[deck]) return
+    const now = getState()
+    if (!result || !sameFrameIdentity(result.identity, frameStepIdentity(deck, now))) {
+      timecodeCache[deck] = null
+      timecodeKey[deck] = ''
+      paintVideoTimecode(deck, now)
+      return
+    }
+    timecodeCache[deck] = result
+    timecodeKey[deck] = key
+    paintVideoTimecode(deck, now)
+  }).catch(() => {
+    if (timecodePending[deck]?.seq === seq) timecodePending[deck] = null
+  })
+}
+
 // Reflects the shared video clock into the operator transport bar. Scrub/time
 // also refresh on a tick (see bootstrap) so they advance live during playback.
 function updateVideoUI(state: AppState): void {
@@ -640,7 +856,9 @@ function updateVideoUI(state: AppState): void {
   // оба ведёт один клок state.video.
   const isVideo = programHasVideo(state)
   if (videoControls) videoControls.classList.toggle('hidden', !isVideo)
-  if (!isVideo || role !== 'operator') return
+  if (role !== 'operator') return
+  paintVideoTimecode('program', state)
+  if (!isVideo) return
 
   const v = state.video
   if (videoPlayBtn) videoPlayBtn.textContent = v.playing ? '⏸' : '▶'
@@ -652,11 +870,11 @@ function updateVideoUI(state: AppState): void {
   }
   const pos = videoPosition(v)
   const dur = v.durationSec || 0
-  if (videoScrub && document.activeElement !== videoScrub) {
+  if (videoScrub && document.activeElement !== videoScrub && !draggingScrub.program) {
     videoScrub.max = String(dur > 0 ? dur : 100)
     videoScrub.value = String(dur > 0 ? Math.min(pos, dur) : pos)
   }
-  if (videoTime) videoTime.textContent = `${formatClock(pos)} / ${formatClock(dur)}`
+  requestTimecode('program', state)
 }
 
 // Mirrors the slide counter for video: shows elapsed/total in the center of the
@@ -788,6 +1006,7 @@ async function renderPreview(): Promise<void> {
 function updatePreviewUI(state: AppState): void {
   if (!isOperator) return
   const p = state.preview
+  paintVideoTimecode('preview', state)
   if (takeBtn) takeBtn.disabled = !p.path
   if (fadeBtn) fadeBtn.disabled = !p.path
   if (takeFadeInput && document.activeElement !== takeFadeInput) takeFadeInput.value = String(state.takeFadeMs)
@@ -817,11 +1036,11 @@ function updatePreviewUI(state: AppState): void {
     if (previewVideoPlay) previewVideoPlay.textContent = v.playing ? '⏸' : '▶'
     const pos = videoPosition(v)
     const dur = v.durationSec || 0
-    if (previewVideoScrub && document.activeElement !== previewVideoScrub) {
+    if (previewVideoScrub && document.activeElement !== previewVideoScrub && !draggingScrub.preview) {
       previewVideoScrub.max = String(dur > 0 ? dur : 100)
       previewVideoScrub.value = String(dur > 0 ? Math.min(pos, dur) : pos)
     }
-    if (previewVideoTime) previewVideoTime.textContent = `${formatClock(pos)} / ${formatClock(dur)}`
+    requestTimecode('preview', state)
 
     // Цикл виден и правится прямо в превью: заряжаешь ролик кликом по записи —
     // и сразу видно, зациклен он или нет, не разворачивая компактный плейлист.
@@ -849,6 +1068,8 @@ async function handlePreviewChange(state: AppState): Promise<void> {
     await loadPreviewFile()
   } else if (p.kind === 'video') {
     applyPreviewMonitoring(previewVideo, state)
+    const known = knownElementDuration(previewVideo, videoSrc(p.sha1 ?? '', 'preview'), p.video.durationSec)
+    if (known !== null) void window.api.preview.video.setDuration(known)
     syncVideoElement(previewVideo, p.video)
   } else if (p.currentSlide !== previewLastRenderedSlide) {
     await renderPreview()
@@ -1102,6 +1323,7 @@ function playlistContext(event: MouseEvent, entry: PlaylistEntry, node: HTMLLIEl
     button.onclick = () => { close(); run() }; menu.append(button)
   }
   if (withRename) action(t('Переименовать'), () => startRename(node, getState().playlist.find((item) => item.id === entry.id) ?? entry))
+  action(t('Дублировать'), () => { void window.api.playlist.duplicate(entry.id) })
   action(t('Задать время…'), () => editSelectedDuration(selectedEntries()))
   if (entry.kind === 'pdf' || entry.kind === 'pptx') action(t('Переходы между слайдами…'), () => editSlideFade(entry))
   action(t('Группировать'), () => editPlaylistFolder(undefined, selectedEntries()))
@@ -1911,6 +2133,24 @@ function applyProjectTransfer(state: AppState): void {
 
 function applyState(state: AppState): void {
   if (isOperator) {
+    const outputButton = $<HTMLButtonElement>('audience-output-toggle')
+    const outputOn = state.layout !== 'solo' && state.audienceOutputEnabled
+    outputButton.textContent = outputOn ? t('Зал вкл') : t('Зал выкл')
+    outputButton.setAttribute('aria-pressed', String(outputOn))
+    outputButton.classList.toggle('on', outputOn)
+    outputButton.disabled = state.layout === 'solo'
+    outputButton.title = outputOn ? t('Скрыть окно зала. На экране будет рабочий стол.') : t('Показать окно зала')
+    const requested = state.testScreen.manual || state.testScreen.automatic
+    const button = $('test-screen-toggle') as HTMLButtonElement
+    button.textContent = requested ? t('Убрать тестовый экран') : t('Показать тестовый экран')
+    button.setAttribute('aria-pressed', String(requested))
+    const active = $('test-screen-active')
+    active.classList.toggle('hidden', !requested)
+    active.textContent = state.blackout ? t('Тестовый экран · скрыт blackout') : t('Тестовый экран · убрать')
+    active.classList.toggle('test-screen-showing', testScreenVisible(state))
+
+  }
+  if (isOperator) {
     const list = state.listIndex >= 0 ? state.playlist.find(e => e.id === state.currentPlaylistId) : undefined
     const total = list?.items?.length ?? state.totalSlides
     const current = list ? state.listPos + 1 : state.currentSlide
@@ -2130,13 +2370,62 @@ async function projectSave(saveAs: boolean = false): Promise<void> {
   }
 }
 
-const takeFade = new TakeFade(currentCanvas.parentElement!, [
-  ...(currentImageUnder ? [currentImageUnder] : []), currentCanvas, currentImage, currentVideo, currentLive, mediaOverlay,
-])
+const takeFade = new TakeFade(currentCanvas.parentElement!, () => [
+  ...(currentImageUnder ? [currentImageUnder] : []), currentCanvas, currentImage, currentVideo, programVideoCanvas(currentVideo), currentLive, mediaOverlay, programVideoCanvas(mediaOverlay),
+], retainPresenterVideo)
+
+function retainPresenterVideo(video: HTMLVideoElement): HTMLVideoElement | null {
+  if (video !== currentVideo && video !== mediaOverlay) return null
+  const replacement = video.cloneNode(false) as HTMLVideoElement
+  replacement.removeAttribute('src')
+  releaseProgramVideo(video)
+  programVideoCanvas(video).remove()
+  video.replaceWith(replacement)
+  video.removeAttribute('id')
+  if (video === currentVideo) {
+    currentVideo = replacement
+    prevFilePath = null
+    lastSinkId = undefined
+  } else {
+    mediaOverlay = replacement
+    overlaySrc = null
+    overlaySlide = -1
+    overlaySinkId = undefined
+  }
+  bindPresenterVideo(replacement)
+  return video
+}
+
+function bindPresenterVideo(video: HTMLVideoElement): void {
+  const active = (): boolean => video === currentVideo || video === mediaOverlay
+  rejectAudioOnlyVideo(video, () => { if (active()) void window.api.video.pause() })
+  video.addEventListener('error', () => {
+    if (!video.getAttribute('src')) return
+    if (video === currentVideo && getState().fileKind === 'video') {
+      window.api.diag.log('error', 'Program video failed', mediaErrorInfo(video))
+      video.classList.add('hidden')
+      if (isOperator) videoError.classList.remove('hidden')
+    } else if (video === mediaOverlay) {
+      window.api.diag.log('error', 'Slide video failed', mediaErrorInfo(video))
+      overlayFailedSrc = overlaySrc
+      unloadMediaOverlay()
+      if (isOperator) videoError.classList.remove('hidden')
+    }
+  })
+  if (!isOperator) return
+  const current = (): boolean => programClockOwner() &&
+    ((video === currentVideo && getState().fileKind === 'video') || (video === mediaOverlay && overlayIsCurrent()))
+  video.addEventListener('loadedmetadata', () => {
+    if (current() && Number.isFinite(video.duration) && video.duration > 0) void window.api.video.setDuration(video.duration)
+  })
+  video.addEventListener('ended', () => {
+    if (current() && video.ended) void window.api.video.ended()
+  })
+}
 
 function programFrameReady(): boolean {
   const s = getState()
-  if (s.fileKind === 'video') return currentVideo.readyState >= 2 && !currentVideo.seeking
+  if (s.fileKind === 'video') return programVideoReady(currentVideo)
   if (s.fileKind === 'live') return currentLive.readyState >= 2
   if (s.fileKind === 'image') return currentImage.complete && currentImage.naturalWidth > 0
   if (!docLoaded || slidePaint.pending || lastRenderedSlide !== s.currentSlide) return false
@@ -2144,7 +2433,7 @@ function programFrameReady(): boolean {
   if (!media || !s.pdfSha1) return true
   const expected = slideVideoSrc('program', media.file, s.pdfSha1)
   return overlayFailedSrc === expected || (overlaySlide === s.currentSlide &&
-    overlayFrameReady(expected, overlaySrc, overlayFailedSrc, mediaOverlay.readyState, mediaOverlay.seeking))
+    overlayFrameReady(expected, overlaySrc, overlayFailedSrc, programVideoReady(mediaOverlay) ? 2 : 0, false))
 }
 
 let prevFilePath: string | null = null
@@ -2165,6 +2454,9 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
 
   if (state.pdfPath && state.pdfPath !== prevFilePath) {
     prevFilePath = state.pdfPath
+    // Slide numbers belong to this document. Keeping the previous document's
+    // number can suppress navigation back to that number in the new one.
+    prevSlide = state.currentSlide
     lastRenderedSlide = -1
     await loadCurrentFile()
   } else if (state.fileKind === 'video') {
@@ -2173,6 +2465,10 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
       lastSinkId = state.audioOutputId
       applySinkId(currentVideo, state.audioOutputId)
     }
+    const known = role === 'operator'
+      ? knownElementDuration(currentVideo, videoSrc(state.pdfSha1 ?? '', 'program'), state.video.durationSec)
+      : null
+    if (known !== null) void window.api.video.setDuration(known)
     syncVideoElement(currentVideo, state.video)
   } else if (state.currentSlide !== prevSlide || patch === null) {
     prevSlide = state.currentSlide
@@ -2198,8 +2494,9 @@ async function openPdf(): Promise<void> {
 }
 
 function showHelpModal(): void {
-  document.getElementById('help-modal')?.classList.remove('hidden')
+  openSettings('hotkeys')
 }
+
 function isHelpOpen(): boolean {
   const modal = document.getElementById('help-modal')
   return !!modal && !modal.classList.contains('hidden')
@@ -2212,6 +2509,40 @@ function hideHelpModal(): void {
 // ── Отчёт о проблеме (Help → Сообщить о проблеме…, main/diag.ts) ────────────
 
 let reportMaterialToken: string | undefined
+
+function renderReportMaterials(selection: import('../../shared/types').ReportMaterials): void {
+  reportMaterialToken = selection.files.length ? selection.token : undefined
+  const include = $<HTMLInputElement>('report-materials-include')
+  include.disabled = !selection.files.length
+  include.checked = !!selection.files.length
+  $('report-materials-list').replaceChildren()
+  selection.files.forEach((file, index) => {
+    const item = document.createElement('li')
+    const name = document.createElement('span')
+    name.textContent = `${file.name} (${(file.bytes / 1000000).toFixed(2)} ${t('МБ')})`
+    const remove = document.createElement('button')
+    remove.textContent = '✕'
+    remove.title = t('Удалить из отчёта')
+    remove.setAttribute('aria-label', `${t('Удалить из отчёта')}: ${file.name}`)
+    remove.addEventListener('click', async () => {
+      const save = $<HTMLButtonElement>('report-save')
+      const choose = $<HTMLButtonElement>('report-materials-choose')
+      save.disabled = choose.disabled = true
+      $('report-materials-list').querySelectorAll('button').forEach(button => { button.disabled = true })
+      try {
+        const next = await window.api.diag.removeMaterial(selection.token, index)
+        renderReportMaterials(next)
+      } catch (error) { $('report-materials-size').textContent = String(error) }
+      finally {
+        save.disabled = choose.disabled = false
+        $('report-materials-list').querySelectorAll('button').forEach(button => { button.disabled = false })
+      }
+    })
+    item.append(name, remove)
+    $('report-materials-list').append(item)
+  })
+  $('report-materials-size').textContent = selection.files.length ? t('Размер материалов: {size} МБ', { size: (selection.bytes / 1000000).toFixed(2) }) : ''
+}
 
 async function chooseReportMaterials(): Promise<void> {
   const choose = $<HTMLButtonElement>('report-materials-choose')
@@ -2228,16 +2559,7 @@ async function chooseReportMaterials(): Promise<void> {
     const result = await window.api.diag.chooseMaterials()
     if (result.error) { $('report-materials-size').textContent = result.error; return }
     if (!result.selection?.files.length) return
-    reportMaterialToken = result.selection.token
-    for (const file of result.selection.files) {
-      const item = document.createElement('li')
-      item.textContent = `${file.name} (${(file.bytes / 1048576).toFixed(2)} MiB)`
-      $('report-materials-list').append(item)
-    }
-    $('report-materials-size').textContent = t('Размер материалов: {size} МиБ', { size: (result.selection.bytes / 1048576).toFixed(2) })
-    include.disabled = false
-    // Choosing files is explicit consent; do not silently discard that selection.
-    include.checked = true
+    renderReportMaterials(result.selection)
   } catch (error) { $('report-materials-size').textContent = String(error) }
   finally { choose.disabled = false; save.disabled = false }
 }
@@ -2288,12 +2610,14 @@ async function saveReport(): Promise<void> {
   const choose = $<HTMLButtonElement>('report-materials-choose')
   const include = $<HTMLInputElement>('report-materials-include')
   choose.disabled = true
+  $('report-materials-list').querySelectorAll('button').forEach(button => { button.disabled = true })
   include.disabled = true
   const token = include.checked ? reportMaterialToken : undefined
   const selectedMarker = $<HTMLSelectElement>('report-recovery-marker').value
   const res = await window.api.diag.buildReport($<HTMLTextAreaElement>('report-comment').value, token, selectedMarker ? Number(selectedMarker) : 0)
     .catch((error) => ({ ok: false as const, error: String(error) }))
   choose.disabled = false
+  $('report-materials-list').querySelectorAll('button').forEach(button => { button.disabled = false })
   include.disabled = !reportMaterialToken
   btn.disabled = false
   if (res.ok) {
@@ -2434,9 +2758,15 @@ const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'previewPrev', label: t('Превью: предыдущий слайд'), def: 'BracketLeft' },
   { id: 'videoPlay', label: t('Видео: play / pause'), def: 'Space' },
   { id: 'mute', label: t('Видео: звук вкл / выкл'), def: 'KeyM' },
-  { id: 'timerToggle', label: t('Таймер: старт / пауза'), def: 'KeyT' },
-  { id: 'timerReset', label: t('Таймер: сброс'), def: 'KeyR' },
+  { id: 'timerToggle', label: t('Таймер суфлёра: старт / пауза'), def: 'KeyT' },
+  { id: 'timerReset', label: t('Таймер суфлёра: сброс'), def: 'KeyR' },
+  { id: 'speakerTimerStart', label: t('Таймер суфлёра: старт'), def: '' },
+  { id: 'speakerTimerStop', label: t('Таймер суфлёра: стоп'), def: '' },
+  { id: 'audienceTimerStart', label: t('Таймер зала: старт'), def: '' },
+  { id: 'audienceTimerStop', label: t('Таймер зала: стоп'), def: '' },
+  { id: 'audienceTimerReset', label: t('Таймер зала: сброс'), def: '' },
   { id: 'blackout', label: 'Blackout', def: 'KeyB' },
+  { id: 'audienceOutput', label: t('Зал: вкл / выкл'), def: '' },
 ]
 let hotkeyMap: Record<string, string> = {}
 let codeToAction: Record<string, string> = {}
@@ -2519,10 +2849,23 @@ function dispatchHotkey(action: string): void {
     case 'previewPrev': window.api.preview.prev(); break
     case 'videoPlay': hasVideo ? window.api.video.toggle() : window.api.nav.next(); break
     case 'mute': if (hasVideo) window.api.video.toggleMuted(); break
+    case 'speakerTimerStart': window.api.timer.start(); break
+    case 'speakerTimerStop': window.api.timer.pause(); break
+    case 'audienceTimerStart': window.api.audienceTimer.start(); break
+    case 'audienceTimerStop': window.api.audienceTimer.pause(); break
+    case 'audienceTimerReset': window.api.audienceTimer.reset(); break
     case 'timerToggle': toggleTimer(); break
     case 'timerReset': window.api.timer.reset(); break
     case 'blackout': window.api.blackout.toggle(); break
+    case 'audienceOutput': toggleAudienceOutput(); break
   }
+}
+
+function toggleAudienceOutput(): void {
+  const state = getState()
+  if (state.layout === 'solo') return
+  void window.api.audienceOutput.setEnabled(!state.audienceOutputEnabled)
+    .catch(err => showBanner(String(err.message)))
 }
 
 let capturingHotkey: { actionId: string; btn: HTMLButtonElement } | null = null
@@ -2576,6 +2919,72 @@ function isTypingTarget(t: EventTarget | null): boolean {
   return false
 }
 
+function focusedFrameDeck(): VideoDeck | null {
+  const el = document.activeElement
+  if (!(el instanceof Element)) return null
+  const scope = el.closest<HTMLElement>('[data-frame-player]')
+  if (scope?.dataset.framePlayer === 'program') return 'program'
+  if (scope?.dataset.framePlayer === 'preview') return 'preview'
+  return null
+}
+
+let frameStepsInFlight = 0
+let frameStepWarningShown = false
+
+function frameStepIdentity(deck: VideoDeck, state = getState()): FrameStepIdentity {
+  return deck === 'preview'
+    ? { entryId: state.preview.playlistId, path: state.preview.path, sha1: state.preview.sha1 }
+    : { entryId: state.currentPlaylistId, path: state.pdfPath, sha1: state.pdfSha1 }
+}
+
+async function stepFrameInDeck(deck: VideoDeck, direction: -1 | 1, identity: FrameStepIdentity): Promise<void> {
+  try {
+    const result = await window.api.video.stepFrame(deck, direction, identity)
+    const broken = result.reason === 'unavailable' || result.reason === 'failed' ||
+      result.reason === 'timeout' || result.reason === 'too-large'
+    if (!result.ok && broken && !frameStepWarningShown) {
+      frameStepWarningShown = true
+      showBanner(t('Покадровый шаг недоступен: встроенный ffprobe не запустился'), 9000)
+    } else if (!result.ok && result.reason === 'no-video') {
+      showBanner(t('Покадровый шаг недоступен: кодек не дал кадры'), 9000)
+    } else if (!result.ok && result.reason === 'no-frame') {
+      showBanner(t('Покадровый шаг не удался: соседний кадр не найден'), 6000)
+    }
+  } catch (error) {
+    showBanner(String(error), 6000)
+  }
+}
+
+/**
+ * Capture the identity at keypress. Main serialises the actual steps, so a
+ * burst still advances frame-by-frame; old arrows carry the old entry/path and
+ * are discarded if the operator switches cards before they run.
+ */
+function enqueueFrameStep(deck: VideoDeck, direction: -1 | 1): void {
+  if (frameStepsInFlight >= 8) return
+  frameStepsInFlight++
+  const identity = frameStepIdentity(deck)
+  void stepFrameInDeck(deck, direction, identity).finally(() => { frameStepsInFlight-- })
+}
+
+/** Click a player stage to make its arrow keys step frames; outside focus clears. */
+function setupFramePlayerFocus(): void {
+  document.querySelectorAll<HTMLElement>('[data-frame-player]').forEach((section) => {
+    section.addEventListener('pointerdown', (event) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest('input, select, textarea, button, a, [contenteditable="true"]')) return
+      section.focus({ preventScroll: true })
+    })
+  })
+  window.addEventListener('pointerdown', (event) => {
+    const target = event.target
+    if (target instanceof Element && target.closest('[data-frame-player]')) return
+    const active = document.activeElement
+    if (active instanceof HTMLElement && active.closest('[data-frame-player]')) active.blur()
+  }, true)
+}
+
 function setupKeyboard(): void {
   if (role !== 'operator') return
   loadHotkeys()
@@ -2584,8 +2993,57 @@ function setupKeyboard(): void {
   // «нажимал» её заново вместо действия кликера. Текстовые поля не трогаем.
   window.addEventListener('click', () => {
     const el = document.activeElement
-    if (el instanceof HTMLElement && el !== document.body && !isTypingTarget(el) && !el.closest('.modal')) el.blur()
+    if (!(el instanceof HTMLElement) || el === document.body) return
+    const player = el.closest<HTMLElement>('[data-frame-player]')
+    if (player) {
+      // Controls/timeline must not keep the button focused (Space would press it
+      // again), but the player surface itself becomes the frame-step focus.
+      if (el !== player) player.focus({ preventScroll: true })
+      return
+    }
+    if (!isTypingTarget(el) && !el.closest('.modal')) el.blur()
   })
+
+  // Frame stepping owns Left/Right only while a player surface has focus. The
+  // capture listener stops the event before the clicker/slide hotkey map below.
+  window.addEventListener('keydown', (event) => {
+    if (capturingHotkey || !settingsModal.classList.contains('hidden') || isTypingTarget(event.target)) return
+    const state = getState()
+    const deck = resolveFrameStepDeck({
+      code: event.code,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      altKey: event.altKey,
+      shiftKey: event.shiftKey,
+      focusedDeck: focusedFrameDeck(),
+      // PPTX slide video has no per-entry range/timestamp scope here; arrows
+      // must keep their usual slide/clicker meaning there.
+      hasProgramVideo: state.fileKind === 'video',
+      hasPreviewVideo: state.preview.kind === 'video',
+    })
+    if (deck) {
+      event.preventDefault()
+      event.stopPropagation()
+      enqueueFrameStep(deck, event.code === 'ArrowRight' ? 1 : -1)
+      return
+    }
+
+    if (event.repeat) return
+    const rangeAction = resolveRangeActionForKey({
+      code: event.code,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      altKey: event.altKey,
+      shiftKey: event.shiftKey,
+      focusedDeck: focusedFrameDeck(),
+      hasProgramVideo: state.fileKind === 'video',
+      hasPreviewVideo: state.preview.kind === 'video',
+    })
+    if (!rangeAction) return
+    event.preventDefault()
+    event.stopPropagation()
+    void setTimelineRange(rangeAction.deck, rangeAction.edge)
+  }, true)
 
   window.addEventListener('keydown', (e) => {
     // ⚑ Маркер в журнале — Ctrl/Cmd+Shift+M по физической клавише (e.code), чтобы
@@ -3027,33 +3485,60 @@ function setupOperatorControls(): void {
   videoMuteBtn!.addEventListener('click', () => window.api.video.toggleMuted())
   // Live label while dragging; commit the seek only on release to avoid
   // flooding every window with intermediate positions.
+  videoScrub!.addEventListener('pointerdown', () => { draggingScrub.program = true })
   videoScrub!.addEventListener('input', () => {
-    if (videoTime) {
-      videoTime.textContent = `${formatClock(Number(videoScrub!.value))} / ${formatClock(getState().video.durationSec)}`
-    }
+    draggingScrub.program = true
+    paintScrubDrag('program', Number(videoScrub!.value))
   })
   videoScrub!.addEventListener('change', () => {
+    draggingScrub.program = false
     window.api.video.seek(Number(videoScrub!.value))
   })
+  videoScrub!.addEventListener('pointercancel', () => { draggingScrub.program = false })
+  videoScrub!.addEventListener('blur', () => { draggingScrub.program = false })
 
-  // The operator's <video> is the authority for duration + end-of-clip.
-  currentVideo.addEventListener('loadedmetadata', () => {
-    if (Number.isFinite(currentVideo.duration) && currentVideo.duration > 0) {
-      window.api.video.setDuration(currentVideo.duration)
-    }
+  window.addEventListener('pointerup', () => {
+    draggingScrub.program = false
+    draggingScrub.preview = false
+  }, true)
+  window.addEventListener('pointercancel', () => {
+    draggingScrub.program = false
+    draggingScrub.preview = false
+  }, true)
+
+  for (const refs of [programTimeline, previewTimeline]) {
+    refs.root?.addEventListener('contextmenu', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const deck = refs.root?.dataset.deck === 'preview' ? 'preview' : 'program'
+      openTimelineMenu(deck, event.clientX, event.clientY)
+    })
+  }
+  timelineMenu?.addEventListener('click', (event) => {
+    const button = (event.target as Element | null)?.closest<HTMLButtonElement>('[data-range-action]')
+    if (!button || !timelineMenuDeck) return
+    const deck = timelineMenuDeck
+    const edge = button.dataset.rangeAction as VideoRangeEdge | undefined
+    hideTimelineMenu()
+    if (edge === 'in' || edge === 'out' || edge === 'reset') void setTimelineRange(deck, edge)
   })
-  currentVideo.addEventListener('ended', () => {
-    window.api.video.ended()
+  document.addEventListener('pointerdown', (event) => {
+    const menu = timelineMenu
+    if (!menu || menu.classList.contains('hidden')) return
+    const target = event.target
+    if (target instanceof Node && menu.contains(target)) return
+    hideTimelineMenu()
   })
-  // То же для слайд-видео из PPTX — клок общий, авторитет тот же.
-  mediaOverlay.addEventListener('loadedmetadata', () => {
-    if (overlayIsCurrent() && Number.isFinite(mediaOverlay.duration) && mediaOverlay.duration > 0) {
-      window.api.video.setDuration(mediaOverlay.duration)
-    }
+  window.addEventListener('blur', hideTimelineMenu)
+  window.addEventListener('resize', hideTimelineMenu)
+  document.addEventListener('scroll', hideTimelineMenu, true)
+  window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !timelineMenu || timelineMenu.classList.contains('hidden')) return
+    event.preventDefault()
+    event.stopPropagation()
+    hideTimelineMenu()
   })
-  mediaOverlay.addEventListener('ended', () => {
-    if (overlayIsCurrent() && mediaOverlay.ended) window.api.video.ended()
-  })
+
   $<HTMLButtonElement>('video-error-link').addEventListener('click', () => {
     window.api.external.open('https://handbrake.fr/')
   })
@@ -3099,14 +3584,17 @@ function setupOperatorControls(): void {
   previewNextBtn!.addEventListener('click', () => window.api.preview.next())
   previewVideoPlay!.addEventListener('click', () => window.api.preview.video.toggle())
   previewVideoRestart!.addEventListener('click', () => window.api.preview.video.seek(0))
+  previewVideoScrub!.addEventListener('pointerdown', () => { draggingScrub.preview = true })
   previewVideoScrub!.addEventListener('input', () => {
-    if (previewVideoTime) {
-      previewVideoTime.textContent = `${formatClock(Number(previewVideoScrub!.value))} / ${formatClock(getState().preview.video.durationSec)}`
-    }
+    draggingScrub.preview = true
+    paintScrubDrag('preview', Number(previewVideoScrub!.value))
   })
   previewVideoScrub!.addEventListener('change', () => {
+    draggingScrub.preview = false
     window.api.preview.video.seek(Number(previewVideoScrub!.value))
   })
+  previewVideoScrub!.addEventListener('pointercancel', () => { draggingScrub.preview = false })
+  previewVideoScrub!.addEventListener('blur', () => { draggingScrub.preview = false })
   // The operator's preview <video> is the authority for preview duration + end.
   previewVideo!.addEventListener('loadedmetadata', () => {
     if (Number.isFinite(previewVideo!.duration) && previewVideo!.duration > 0) {
@@ -3114,6 +3602,9 @@ function setupOperatorControls(): void {
     }
   })
   previewVideo!.addEventListener('ended', () => window.api.preview.video.ended())
+  rejectAudioOnlyVideo(previewVideo!, () => {
+    void window.api.preview.video.pause()
+  })
   previewVideo!.addEventListener('error', () => {
     if (getState().preview.kind !== 'video' || !previewVideo!.getAttribute('src')) return
     window.api.diag.log('error', `превью-видео не воспроизвелось: ${getState().preview.path}`, mediaErrorInfo(previewVideo!))
@@ -3312,7 +3803,7 @@ function setupOperatorControls(): void {
   const listFadeInput = document.getElementById('list-fade-ms') as HTMLInputElement | null
   const listModeSelect = document.getElementById('list-mode') as HTMLSelectElement | null
 
-  /** FADE не длиннее 2000 мс и половины паузы между кадрами. */
+  /** FADE не длиннее 400 мс и половины паузы между кадрами. */
   function clampFade(fadeMs: number, photoSec: number): number {
     return Math.max(0, Math.min(LIST_FADE_MAX_MS, Math.round(photoSec * 500), Math.round(fadeMs)))
   }
@@ -3404,9 +3895,43 @@ function setupOperatorControls(): void {
     else if (res.sha1Mismatch) showBanner(t('Заметки относятся к другому PDF — возможно файл изменился.'), 5000)
   })
 
-  window.api.menu.onOpenPdf(openPdf)
+  window.api.menu.onOpenPdf(() => { void window.api.playlist.add() })
   window.api.menu.onOpenDisplaySetup(() => openSettings('screens'))
   window.api.menu.onOpenSettings(() => openSettings('screens'))
+  window.api.menu.onQuickSetting(async (action, value) => {
+    const state = getState()
+    if (action === 'audio') await window.api.audio.setOutput(value as string | null)
+    else if (action === 'previewAudio') await window.api.audio.setPreviewOutput(value as string | null)
+    else if (action === 'monitor') await window.api.monitor.setEnabled(Boolean(value))
+    else if (action === 'testScreen') await window.api.testScreen.setEnabled(Boolean(value))
+    else if (action === 'audienceOutput') await window.api.audienceOutput.setEnabled(Boolean(value))
+    else if (action === 'layout' || action === 'display' || action === 'audienceWindowed') {
+      const displays = await window.api.displays.list()
+      const layout = action === 'layout' ? value as Layout : state.layout
+      const mapping = { ...state.displayMap }
+      if (action === 'display') {
+        const choice = value as { role: 'operator' | 'audience' | 'speaker'; id: number }
+        if (!displays.some(d => d.id === choice.id)) return
+        mapping[choice.role] = choice.id
+      }
+      const used = new Set(Object.values(mapping))
+      for (const role of ['operator', ...(layout !== 'solo' ? ['audience'] : []), ...(layout === 'operator-speaker-audience' ? ['speaker'] : [])] as const) {
+        if (!displays.some(d => d.id === mapping[role as keyof typeof mapping])) {
+          const display = displays.find(d => !used.has(d.id)) ?? displays[0]
+          if (!display) return
+          mapping[role as keyof typeof mapping] = display.id
+          used.add(display.id)
+        }
+      }
+      await window.api.layout.set(layout, mapping, action === 'audienceWindowed' ? Boolean(value) : state.audienceWindowed, state.audienceAlwaysOnTop)
+    }
+  })
+  const refreshMenuAudio = async () => {
+    const outputs = await navigator.mediaDevices.enumerateDevices()
+    await window.api.menu.setAudioOutputs(outputs.filter(d => d.kind === 'audiooutput').map(d => ({ id: d.deviceId, label: d.label || t('Устройство {id}…', { id: d.deviceId.slice(0, 6) }) })))
+  }
+  navigator.mediaDevices.addEventListener('devicechange', () => { void refreshMenuAudio().catch(console.error) })
+  void refreshMenuAudio().catch(console.error)
   window.api.menu.onTopologyChanged(() => {
     showBanner(t('Раскладка экранов изменилась. ⚙️ Настройки → Экраны (Cmd+,) — переназначить.'))
     if (!settingsModal.classList.contains('hidden') && !setupModal.classList.contains('hidden')) {
@@ -3456,6 +3981,7 @@ async function listAudioOutputs(): Promise<MediaDeviceInfo[]> {
       /* mic denied — show whatever labels we have */
     }
   }
+  await window.api.menu.setAudioOutputs(outs.map(d => ({ id: d.deviceId, label: d.label || t('Устройство {id}…', { id: d.deviceId.slice(0, 6) }) })))
   return outs
 }
 
@@ -3956,7 +4482,12 @@ function buildSetupModal(displays: DisplayInfo[], draft?: ScreenSetupDraft): voi
   const layoutInputs = setupModal.querySelectorAll<HTMLInputElement>('input[name="layout"]')
   const windowedToggle = $<HTMLInputElement>('audience-windowed-toggle')
   windowedToggle.checked = state.audienceWindowed
-  $<HTMLInputElement>('audience-always-on-top-toggle').checked = state.audienceAlwaysOnTop
+  const alwaysOnTopToggle = $<HTMLInputElement>('audience-always-on-top-toggle')
+  alwaysOnTopToggle.checked = state.audienceAlwaysOnTop
+  alwaysOnTopToggle.onchange = () => {
+    $('audience-menu-warning').classList.toggle('hidden', window.api.platform !== 'darwin' || alwaysOnTopToggle.checked)
+  }
+  $('audience-menu-warning').classList.toggle('hidden', window.api.platform !== 'darwin' || alwaysOnTopToggle.checked)
   const monitorsToggle = $<HTMLInputElement>('output-monitors-toggle')
   monitorsToggle.checked = state.outputMonitorsEnabled
   const askLayoutToggle = $<HTMLInputElement>('ask-layout-toggle')
@@ -4070,7 +4601,7 @@ function editSlideFade(entry: PlaylistEntry): void {
   const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.id = 'slide-fade-enabled'; enabled.checked = Boolean(entry.slideFadeMs)
   label.prepend(enabled)
   const durationLabel = document.createElement('label'); durationLabel.textContent = t('Длительность, мс')
-  const duration = document.createElement('input'); duration.type = 'number'; duration.id = 'slide-fade-duration'; duration.min = '100'; duration.max = '500'; duration.step = '10'; duration.value = String(entry.slideFadeMs || 300); duration.disabled = !enabled.checked
+  const duration = document.createElement('input'); duration.type = 'number'; duration.id = 'slide-fade-duration'; duration.min = '100'; duration.max = String(FADE_MAX_MS); duration.step = '10'; duration.value = String(entry.slideFadeMs || 300); duration.disabled = !enabled.checked
   durationLabel.append(duration)
   enabled.onchange = () => { duration.disabled = !enabled.checked }
   const hint = document.createElement('p'); hint.className = 'audio-hint'; hint.textContent = t('Настройка этой презентации. Работает при листании в эфире, включая кликер. Сохраняется в проекте.')
@@ -4090,10 +4621,12 @@ function editSlideFade(entry: PlaylistEntry): void {
 
 type SettingsSection = 'materials' | 'profiles' | 'screens' | 'prompter' | 'audience-timer' | 'clicker' | 'audio' | 'hotkeys' | 'ui' | 'lo' | 'remote' | 'omt' | 'midi'
 let settingsWired = false
+let settingsWindow: ReturnType<typeof setupSettingsWindow> | null = null
 
 let beginAudienceTimerEdit: (() => void) | undefined
 
 function showSettingsSection(name: SettingsSection): void {
+  if (name === 'audience-timer' || name === 'prompter') void refreshTimerFonts()
   if (name === 'audience-timer') beginAudienceTimerEdit?.()
   settingsModal.querySelectorAll<HTMLButtonElement>('.settings-nav button').forEach((b) => {
     b.classList.toggle('active', b.dataset.section === name)
@@ -4471,6 +5004,7 @@ function wireProfilesSection(): void {
 
 function closeSettings(): void {
   cancelHotkeyCapture()
+  settingsWindow?.onClose()
   settingsModal.classList.add('hidden')
 }
 
@@ -4546,7 +5080,15 @@ function openSettings(section: SettingsSection = 'screens'): void {
       b.addEventListener('click', () => showSettingsSection(b.dataset.section as SettingsSection))
     })
     $('settings-close').addEventListener('click', closeSettings)
+    settingsWindow = setupSettingsWindow(settingsModal, closeSettings)
     wireProfilesSection()
+    for (const id of ['timer-font', 'at-font']) setupTimerFontBrowsing($<HTMLSelectElement>(id))
+    $('timer-font').addEventListener('change', () => void window.api.timer.setFont(($('timer-font') as HTMLSelectElement).value))
+    for (const id of ['timer-font-add', 'at-font-add']) $(id).addEventListener('click', async () => {
+      await addFontsFromDialog()
+      await refreshTimerFonts(true)
+    })
+    for (const id of ['timer-font-refresh', 'at-font-refresh']) $(id).addEventListener('click', () => void refreshTimerFonts(true))
     settingsModal.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeSettings()
     })
@@ -4607,6 +5149,7 @@ function openSettings(section: SettingsSection = 'screens'): void {
   wireOmtSection(getState().omt)
   showSettingsSection(section)
   settingsModal.classList.remove('hidden')
+  settingsWindow?.onOpen()
 }
 
 // ── Суфлёр (раздел «Настройки → Суфлёр») ────────────────────────────────────
@@ -4650,6 +5193,8 @@ async function openPrompterSection(): Promise<void> {
  */
 function applyPrompterVars(state: AppState): void {
   const root = document.documentElement.style
+  root.setProperty('--speaker-timer-font', timerFontCss(state.timerFont))
+  syncTimerFontSelect('timer-font', state.timerFont)
   root.setProperty('--speaker-toolbar-scale', String(state.speakerToolbarScale))
   const c = state.timerColor
   const setOrClear = (name: string, v: string | null): void => {
@@ -4758,6 +5303,7 @@ function renderPrompterMock(state: AppState): void {
   const view = timerView(state.timer, state.timerMode)
   el.firstChild!.textContent = view.text
   el.style.color = prompterTimerColor(state, view.color)
+  el.style.fontFamily = timerFontCss(state.timerFont)
   el.classList.toggle('off', pos === 'hidden')
   el.classList.toggle('full', pos === 'full' || pos === 'full-noflash')
   el.style.fontSize = `${88 * sc * k}px`
@@ -5038,6 +5584,8 @@ function wireRemoteSection(remote: RemoteStatus): void {
   const httpPort = $<HTMLInputElement>('remote-http-port')
   const oscPort = $<HTMLInputElement>('remote-osc-port')
   const lan = $<HTMLInputElement>('remote-lan')
+  const networkAuth = $<HTMLInputElement>('remote-network-auth')
+  const keyStatus = $<HTMLElement>('remote-key-status')
   const companion = $<HTMLInputElement>('remote-companion')
   const companionHost = $<HTMLInputElement>('remote-companion-host')
   toggle.checked = remote.enabled
@@ -5046,6 +5594,7 @@ function wireRemoteSection(remote: RemoteStatus): void {
   httpPort.value = String(remote.httpPort)
   oscPort.value = String(remote.oscPort)
   lan.checked = remote.lan
+  networkAuth.checked = remote.networkAuth === true
   renderRemoteStatus(remote)
 
   const commit = async (): Promise<void> => {
@@ -5054,10 +5603,12 @@ function wireRemoteSection(remote: RemoteStatus): void {
       httpPort: Number(httpPort.value),
       oscPort: Number(oscPort.value),
       lan: lan.checked,
+      networkAuth: networkAuth.checked,
       companionPush: companion.checked,
       companionHost: companionHost.value,
     })
     if (!res.ok) {
+      networkAuth.checked = getState().remote.networkAuth === true
       renderRemoteStatus(getState().remote, res.error)
       return
     }
@@ -5065,9 +5616,15 @@ function wireRemoteSection(remote: RemoteStatus): void {
     httpPort.value = String(res.status.httpPort)
     oscPort.value = String(res.status.oscPort)
     companionHost.value = res.status.companionHost
+    networkAuth.checked = res.status.networkAuth === true
   }
   toggle.onchange = () => void commit()
   lan.onchange = () => void commit()
+  networkAuth.onchange = () => void commit()
+  $<HTMLButtonElement>('remote-copy-key').onclick = async () => {
+    const result = await window.api.remote.copyAccessKey()
+    keyStatus.textContent = result.ok ? t('Ключ скопирован. Вставьте его в настройках подключения Companion.') : result.error ?? t('Не удалось скопировать ключ.')
+  }
   httpPort.onchange = () => void commit()
   oscPort.onchange = () => void commit()
   companion.onchange = () => void commit()
@@ -5223,6 +5780,7 @@ function renderOmtButton(o: OmtStatus): void {
 }
 
 function renderRemoteStatus(r: RemoteStatus, error?: string): void {
+  error ??= r.networkAuthError ?? undefined
   const el = document.getElementById('remote-status')
   if (!el) return
   const comp = document.getElementById('remote-companion-status')
@@ -5261,7 +5819,8 @@ function renderRemoteStatus(r: RemoteStatus, error?: string): void {
   }
   el.classList.add('on')
   const where = r.lan ? r.hosts.join(', ') : '127.0.0.1'
-  el.textContent = t('● Работает — {where} · HTTP {http} · OSC {osc}', { where, http: r.httpPort, osc: r.oscPort })
+  el.textContent = t('● Работает — {where} · HTTP {http} · OSC {osc}', { where, http: r.httpPort, osc: r.oscPort }) +
+    (r.networkAuth ? t(' · HTTP с ключом, OSC только локально') : '')
 }
 
 function updateWindowedSection(layout: Layout): void {
@@ -5545,8 +6104,20 @@ function setupBottomBarResize(): void {
 
 async function bootstrap(): Promise<void> {
   await initBus()
+  await configureProgramMirror(role, getState)
+  setupTestScreen(role === 'speaker' ? document.body : $('current-slide'), role === 'speaker' ? 'speaker' : 'audience')
+  if (isOperator) {
+    $('audience-output-toggle').addEventListener('click', toggleAudienceOutput)
+    $('test-screen-toggle').addEventListener('click', () => {
+      const state = getState()
+      void window.api.testScreen.setEnabled(!(state.testScreen.manual || state.testScreen.automatic)).catch(err => showBanner(String(err.message)))
+    })
+    $('test-screen-active').addEventListener('click', () => void window.api.testScreen.setEnabled(false))
+
+  }
   setupOperatorControls()
   setupKeyboard()
+  if (isOperator) setupFramePlayerFocus()
   setupFileDrop()
   if (role === 'speaker') setupSpeakerSplitters()
   if (isOperator) {
@@ -5587,24 +6158,8 @@ async function bootstrap(): Promise<void> {
     handleStateChange(state, patch).catch((err) => showBanner(t('Ошибка: {error}', { error: err.message })))
   })
 
-  // Unsupported codec (ProRes / HEVC without OS support) → <video> fires error.
-  // Operator sees the "transcode to H.264" message; other roles just stay black.
-  currentVideo.addEventListener('error', () => {
-    if (getState().fileKind !== 'video' || !currentVideo.getAttribute('src')) return
-    window.api.diag.log('error', `видео не воспроизвелось: ${getState().pdfPath}`, mediaErrorInfo(currentVideo))
-    currentVideo.classList.add('hidden')
-    if (role === 'operator') videoError.classList.remove('hidden')
-  })
-
-  // Слайд-видео не воспроизвелось (кодек) → прячем оверлей, остаётся постер
-  // из PDF; оператору показываем ту же подсказку про перекодирование.
-  mediaOverlay.addEventListener('error', () => {
-    if (!mediaOverlay.getAttribute('src')) return
-    window.api.diag.log('error', `слайд-видео не воспроизвелось: ${overlaySrc}`, mediaErrorInfo(mediaOverlay))
-    overlayFailedSrc = overlaySrc
-    unloadMediaOverlay()
-    if (role === 'operator') videoError.classList.remove('hidden')
-  })
+  bindPresenterVideo(currentVideo)
+  bindPresenterVideo(mediaOverlay)
 
   const initial = getState()
   applyState(initial)
@@ -5649,7 +6204,9 @@ async function bootstrap(): Promise<void> {
         syncVideoElement(currentVideo, s.video)
       }
       updateVideoHeader(s)
-      if (role === 'operator') updateVideoUI(s)
+      if (role === 'operator') {
+        updateVideoUI(s)
+      }
     } else if (s.fileKind === 'pptx') {
       updateMediaOverlay(s)
       if (role === 'operator' && !mediaOverlay.classList.contains('hidden')) updateVideoUI(s)

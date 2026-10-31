@@ -1,3 +1,4 @@
+import { timerFont } from './timer-font.js'
 import type { TimerMode, TimerState } from './types.js'
 
 export interface AudienceTimerConfig {
@@ -8,7 +9,7 @@ export interface AudienceTimerConfig {
   color: string
   backgroundColor: string | null
   backgroundOpacity: number
-  font: 'system' | 'mono' | 'serif'
+  font: string
   tickEnabled: boolean
   gongEnabled: boolean
   loop: boolean
@@ -50,7 +51,7 @@ export function audienceTimerConfig(value: unknown): AudienceTimerConfig {
     color: color(raw.color, DEFAULT_AUDIENCE_TIMER.color),
     backgroundColor: raw.backgroundColor === null ? null : color(raw.backgroundColor, '#000000'),
     backgroundOpacity: number(raw.backgroundOpacity, 0, 1, DEFAULT_AUDIENCE_TIMER.backgroundOpacity),
-    font: raw.font === 'system' || raw.font === 'serif' ? raw.font : 'mono',
+    font: timerFont(raw.font, 'mono'),
     tickEnabled: raw.tickEnabled === true,
     gongEnabled: raw.gongEnabled === true,
     loop: raw.loop === true,

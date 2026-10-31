@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import type { BrowserWindow } from 'electron'
 import type { MonitorRole } from '../shared/types.js'
 import { acquireGhost, createHiddenSpeakerWindow, getActiveWindows, getOperatorWindow, ghostWindow, releaseGhost } from './windows.js'
@@ -13,8 +14,11 @@ import { store } from './state.js'
  * (createHiddenSpeakerWindow), чтобы готовить проект без второго экрана.
  */
 
-const INTERVAL_MS = 500
-const FRAME_WIDTH = 480 // px; ~15–25 КБ JPEG — безопасно слать по IPC 2 раза/с
+// Dev-only benchmark override; shipping default stays at 5 fps.
+const requestedFps = Number(process.env.CUEDECK_MONITOR_FPS ?? 5)
+const monitorFps = !app.isPackaged && Number.isFinite(requestedFps) && requestedFps >= 1 && requestedFps <= 25 ? requestedFps : 5
+const INTERVAL_MS = 1000 / monitorFps
+const FRAME_WIDTH = 480 // px; ~15–25 КБ JPEG — обновляем до 5 раз/с
 const JPEG_QUALITY = 70
 
 // Пропускаем тик, пока предыдущий кадр ещё снимается/жмётся.

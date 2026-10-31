@@ -42,6 +42,17 @@ export function reorderFolderPlaylist(entries: PlaylistEntry[], ids: string[], f
   return normalizeFolderPlaylist(ordered, folders)
 }
 
+/** Clone one playlist record after its source, keeping media paths but not object identity. */
+export function duplicatePlaylistEntry(entries: PlaylistEntry[], id: string, newId: string): PlaylistEntry[] {
+  const at = entries.findIndex((entry) => entry.id === id)
+  if (at < 0 || entries.some((entry) => entry.id === newId)) return entries
+  const copy = structuredClone(entries[at])
+  copy.id = newId
+  const next = [...entries]
+  next.splice(at + 1, 0, copy)
+  return next
+}
+
 /** Removes organization or playlist entries only; has no filesystem effects. */
 export function removePlaylistFolder(entries: PlaylistEntry[], folders: PlaylistFolder[], id: string, removeContents = false): { playlist: PlaylistEntry[]; playlistFolders: PlaylistFolder[]; removed: PlaylistEntry[] } {
   if (!folders.some((folder) => folder.id === id)) return { playlist: entries, playlistFolders: folders, removed: [] }

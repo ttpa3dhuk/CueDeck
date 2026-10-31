@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { inflateRawSync } from 'node:zlib'
+import { createHash, randomBytes } from 'node:crypto'
 const mock = vi.hoisted(() => ({root:'', selected:[] as string[], handlers:new Map<string,Function>(), sender:{send:()=>{}}, state: null as unknown as import('../src/shared/types').AppState}))
 vi.mock('electron', () => ({app:{getVersion:()=> 'test',getPath:()=>mock.root,getLocale:()=> 'en',isPackaged:false},BrowserWindow:{},dialog:{showOpenDialog:async()=>({canceled:false,filePaths:mock.selected})},ipcMain:{on:vi.fn(),handle:(name:string,fn:Function)=>mock.handlers.set(name,fn)},screen:{getPrimaryDisplay:()=>({id:1}),getAllDisplays:()=>[]},shell:{}}))
 vi.mock('electron-log/main',()=>({default:{info:vi.fn(),warn:vi.fn(),error:vi.fn(),transports:{file:{getFile:()=>({path:join(mock.root,'absent.log')})}}}}))
@@ -54,4 +55,31 @@ it('does not accept renderer-supplied paths as attachment authorization',async()
   expect(result.ok).toBe(false)
   // An error must release the in-progress guard.
   expect((await buildReport('retry without files')).ok).toBe(true)
+})
+
+it('excludes the network key store and its contents from the actual diagnostic ZIP', async () => {
+  const key = randomBytes(32).toString('hex')
+  const encrypted = randomBytes(96).toString('base64')
+  const keyHash = createHash('sha256').update(key).digest('hex')
+  const keyFile = join(mock.root, 'remote-access-key.json')
+  const stored = JSON.stringify({ version: 1, encrypted })
+  await writeFile(keyFile, stored)
+  mock.state.remote = { ...mock.state.remote, enabled: true, lan: true, networkAuth: true }
+  markMoment('menu')
+
+  const result = await buildReport('network protection enabled')
+  expect(result.ok).toBe(true)
+  if (!result.ok) throw Error(result.error)
+  const files = entries(await readFile(result.path))
+  expect(files.has('state.json')).toBe(true)
+  expect(JSON.parse(files.get('state.json')!.toString()).remote.networkAuth).toBe(true)
+  expect(files.has('prefs.json')).toBe(true)
+  expect(files.has('markers.json')).toBe(true)
+  for (const [name, data] of files) {
+    expect(name).not.toContain('remote-access-key')
+    for (const secret of [key, keyHash, encrypted, stored]) {
+      expect(data.includes(Buffer.from(secret)), `${name} contains key material`).toBe(false)
+    }
+  }
+  expect(await readFile(keyFile, 'utf8')).toBe(stored)
 })

@@ -1,3 +1,7 @@
+import { setOperatorApplicationMenu } from './application-menu.js'
+import { registerTestScreenIpc } from './test-screen.js'
+import { registerAudienceOutputIpc } from './audience-output.js'
+import { startupTestScreenAllowed } from '../shared/test-screen.js'
 import { app, BrowserWindow, ipcMain, Menu, protocol, screen, session, shell, systemPreferences } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
@@ -22,9 +26,16 @@ import { attachOperatorCloseGuard, requestQuit } from './quit-guard.js'
 import { autoAssignDisplays, defaultLayoutForDisplayCount, type Layout } from './layout.js'
 import { applyLayout, getOperatorWindow, reloadAllWindowsForLang, setOperatorWindowHook } from './windows.js'
 import { registerIpcHandlers, flushPendingWrites, kindOf, mimeOf, applyClickerShortcuts, suspendClickerShortcuts } from './ipc.js'
+import { programMirrorEnabled, registerProgramMirrorIpc } from './program-mirror.js'
 import { mediaDirFor } from './pptx-media.js'
+import { ProgramMediaLeases } from './program-media-leases.js'
+import { configureCompositor } from './compositor.js'
 import {
   getSavedMapping,
+  getPlaylist,
+  getLastPdfPath,
+  getProjectPath,
+  getKeyVisualPath,
   saveMapping,
   getAskLayoutOnStartup,
   setAskLayoutOnStartup,
@@ -35,6 +46,7 @@ import {
   getTimerPosition,
   getTimerScale,
   getTimerFree,
+  getTimerFont,
   getTimerColor,
   getTimerWarnColors,
   getSpeakerToolbarScale,
@@ -74,6 +86,14 @@ export const MEDIA_SCHEME = 'cuedeck-media'
 // Журнал и перехват ошибок — раньше всего остального, чтобы падение на старте
 // тоже оставило след (diag.ts).
 initDiag()
+configureCompositor(process.platform, app.commandLine)
+
+const outgoingMedia = new ProgramMediaLeases((sha1, file) => join(mediaDirFor(sha1), file))
+let previousMediaState = store.get()
+store.onChange((state, patch) => {
+  if (patch.takeTransition && patch.takeTransition.durationMs > 0) outgoingMedia.retain(previousMediaState)
+  previousMediaState = state
+})
 
 // Must be called before app `ready`. Lets the renderer load the active video
 // over a streaming, Range-capable scheme without pulling the whole file into
@@ -81,7 +101,7 @@ initDiag()
 protocol.registerSchemesAsPrivileged([
   {
     scheme: MEDIA_SCHEME,
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: programMirrorEnabled },
   },
 ])
 
@@ -95,11 +115,24 @@ protocol.registerSchemesAsPrivileged([
  * can't read arbitrary files.
  */
 async function handleMediaRequest(request: Request): Promise<Response> {
+  const corsHeaders: Record<string, string> = programMirrorEnabled ? {
+    'Access-Control-Allow-Origin': process.env.ELECTRON_RENDERER_URL
+      ? new URL(process.env.ELECTRON_RENDERER_URL).origin : 'null',
+  } : {}
   const state = store.get()
-  const segments = new URL(request.url).pathname.split('/').filter(Boolean)
+  const url = new URL(request.url)
+  const segments = url.pathname.split('/').filter(Boolean)
+  const token = url.searchParams.get('v')
 
   let filePath: string | null = null
-  if (segments[0] === 'keyvisual') {
+  if (token && token !== state.pdfSha1 &&
+    ((segments[0] === 'program' && segments.length === 1) ||
+      (segments[0] === 'slide' && segments[1] === 'program' && segments.length === 3))) {
+    let file: string | undefined
+    try { file = segments[0] === 'slide' ? decodeURIComponent(segments[2]) : undefined }
+    catch { return new Response(null, { status: 404 }) }
+    filePath = outgoingMedia.resolve(token, file)
+  } else if (segments[0] === 'keyvisual') {
     // Видео-заставка (анимированный KV): отдаём тем же Range-потоком, что и
     // ролики плейлиста — файл может быть тяжёлым, в память его не тянем.
     const kv = state.keyVisualPath
@@ -156,6 +189,7 @@ async function handleMediaRequest(request: Request): Promise<Response> {
         'Content-Length': String(end - start + 1),
         'Content-Range': `bytes ${start}-${end}/${size}`,
         'Accept-Ranges': 'bytes',
+        ...corsHeaders,
       },
     })
   }
@@ -167,8 +201,53 @@ async function handleMediaRequest(request: Request): Promise<Response> {
       'Content-Type': type,
       'Content-Length': String(size),
       'Accept-Ranges': 'bytes',
+      ...corsHeaders,
     },
   })
+}
+
+let menuAudioOutputs: { id: string; label: string }[] = []
+
+function quickMenus(): Electron.MenuItemConstructorOptions[] {
+  const state = store.get()
+  const command = (action: string, value: unknown) => sendToOperator('menu:quick-setting', action, value)
+  const displays = screen.getAllDisplays()
+  const layouts = [
+    ['solo', t('1 экран (только я)')],
+    ['presenter-audience', t('2 экрана (ноут + проектор)')],
+    ['operator-speaker-audience', t('3 экрана (+ суфлёр клиента)')],
+  ] as const
+  const audioMenu = (preview: boolean): Electron.MenuItemConstructorOptions[] => {
+    const current = preview ? state.previewAudioOutputId : state.audioOutputId
+    const choices = [{ id: null, label: preview ? t('Выключена (превью без звука)') : t('Системный выход по умолчанию') }, ...menuAudioOutputs]
+    if (current && !choices.some(d => d.id === current)) choices.push({ id: current, label: t('Устройство недоступно') })
+    return choices.map(d => ({ label: d.label, type: 'radio', checked: (current ?? null) === d.id,
+      enabled: d.id === null || menuAudioOutputs.some(output => output.id === d.id),
+      click: () => command(preview ? 'previewAudio' : 'audio', d.id) }))
+  }
+  return [
+    { label: t('Экраны'), submenu: [
+      { label: t('Режим работы'), submenu: layouts.map(([value, label]) => ({ label, type: 'radio', checked: state.layout === value, click: () => command('layout', value) })) },
+      ...(['operator', 'audience', 'speaker'] as const).map(role => ({
+        label: role === 'operator' ? t('Оператор') : role === 'audience' ? t('Зал') : t('Суфлёр'),
+        enabled: role === 'operator' || (role === 'audience' ? state.layout !== 'solo' : state.layout === 'operator-speaker-audience'),
+        submenu: displays.map((d, i) => ({ label: `${d.label || `Display ${i + 1}`} — ${d.size.width}×${d.size.height}`, type: 'radio' as const,
+          checked: state.displayMap[role] === d.id, click: () => command('display', { role, id: d.id }) })),
+      })),
+      { type: 'separator' },
+      { label: t('Вывод зала'), type: 'checkbox', checked: state.layout !== 'solo' && state.audienceOutputEnabled,
+        enabled: state.layout !== 'solo', click: item => command('audienceOutput', item.checked) },
+      { label: t('Аудитория в окне'), type: 'checkbox', checked: state.audienceWindowed, click: item => command('audienceWindowed', item.checked) },
+      { label: t('Тестовый экран'), type: 'checkbox', checked: state.testScreen.manual || state.testScreen.automatic, click: item => command('testScreen', item.checked) },
+      { label: t('Монитор суфлёра под эфиром'), type: 'checkbox', checked: state.outputMonitorsEnabled, click: item => command('monitor', item.checked) },
+      { type: 'separator' },
+      { label: t('Настройки экранов…'), click: () => sendToOperator('menu:open-display-setup') },
+    ] },
+    { label: t('Звук'), submenu: [
+      { label: t('Эфир'), submenu: audioMenu(false) },
+      { label: t('Предпрослушка'), submenu: audioMenu(true) },
+    ] },
+  ]
 }
 
 function buildMenu(): void {
@@ -224,25 +303,19 @@ function buildMenu(): void {
           click: () => sendToOperator('menu:project-consolidate'),
         },
         { type: 'separator' },
+        { label: t('Текст'), submenu: [
+          { label: t('Отменить ввод'), role: 'undo' }, { label: t('Повторить ввод'), role: 'redo' },
+          { type: 'separator' }, { label: t('Вырезать'), role: 'cut' }, { label: t('Копировать'), role: 'copy' },
+          { label: t('Вставить'), role: 'paste' }, { label: t('Выделить всё'), role: 'selectAll' },
+        ] },
         {
-          label: t('Открыть PDF / PPTX / видео…'),
+          label: t('Добавить файлы в плейлист…'),
           accelerator: 'CmdOrCtrl+O',
           click: () => sendToOperator('menu:open-pdf'),
         },
       ],
     },
-    // Без меню «Правка» на маке Cmd+V/C/X/A/Z не работают ни в одном поле
-    // ввода — вставить ключ трансляции было нельзя (2026-09-28).
-    { role: 'editMenu' },
-    {
-      label: 'View',
-      submenu: [
-        { role: 'reload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-      ],
-    },
+    ...quickMenus(),
     {
       label: 'Help',
       submenu: [
@@ -281,7 +354,7 @@ function buildMenu(): void {
       ],
     },
   ]
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  setOperatorApplicationMenu(Menu.buildFromTemplate(template), getOperatorWindow())
 }
 
 function sendToOperator(channel: string, ...args: unknown[]): void {
@@ -392,6 +465,9 @@ app.whenReady().then(async () => {
   // запоминаем их при регистрации (remote/server.ts).
   captureIpcHandlers()
   registerIpcHandlers()
+  registerProgramMirrorIpc()
+  registerTestScreenIpc()
+  registerAudienceOutputIpc()
   registerDiagIpc()
   registerRemoteIpc()
   registerProfileIpc()
@@ -410,6 +486,19 @@ app.whenReady().then(async () => {
   }
   setLang(uiLang)
   buildMenu()
+  store.onChange((_state, patch) => {
+    if (['layout', 'displayMap', 'audienceOutputEnabled', 'audienceWindowed', 'testScreen', 'outputMonitorsEnabled', 'audioOutputId', 'previewAudioOutputId'].some(key => key in patch)) buildMenu()
+  })
+  screen.on('display-added', () => buildMenu())
+  screen.on('display-removed', () => buildMenu())
+  screen.on('display-metrics-changed', () => buildMenu())
+  ipcMain.handle('menu:audio-outputs', (event, outputs: unknown) => {
+    const op = getOperatorWindow()
+    if (!op || event.sender !== op.webContents || event.senderFrame !== op.webContents.mainFrame) throw new Error('Operator window required')
+    if (!Array.isArray(outputs) || outputs.length > 256 || outputs.some(d => !d || typeof d.id !== 'string' || typeof d.label !== 'string')) throw new Error('Invalid audio outputs')
+    menuAudioOutputs = outputs.filter(d => d.id !== 'default').map(d => ({ id: d.id, label: d.label }))
+    buildMenu()
+  })
 
   /**
    * Живой вход (2.13): без выданного доступа к камере enumerateDevices() отдаёт
@@ -459,6 +548,7 @@ app.whenReady().then(async () => {
 
   // Restore preferences (timer settings, UI prefs) — session content loaded on demand via "Последний"
   store.patch({
+    testScreen: { automatic: startupTestScreenAllowed({ playlist: getPlaylist(), lastPath: getLastPdfPath(), projectPath: getProjectPath(), keyVisualPath: getKeyVisualPath() }), manual: false },
     timer: { ...store.get().timer, durationMs: getLastDurationMs() },
     materialSettings: getMaterialSettings(),
     audienceTimer: createAudienceTimer(getAudienceTimer()),
@@ -466,6 +556,7 @@ app.whenReady().then(async () => {
     timerPosition: getTimerPosition(),
     timerScale: getTimerScale(),
     timerFree: getTimerFree(),
+    timerFont: getTimerFont(),
     timerColor: getTimerColor(),
     timerWarnColors: getTimerWarnColors(),
     speakerToolbarScale: getSpeakerToolbarScale(),

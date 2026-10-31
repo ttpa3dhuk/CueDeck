@@ -24,6 +24,7 @@ const full = sanitizeSettings({
   timerPosition: 'free',
   timerScale: 2.05,
   timerFree: { x: 0.8, y: 0.2 },
+  timerFont: 'PT Sans',
   timerColor: '#ff0000',
   timerPresets: [5, 10, 15, 20],
   speakerToolbarScale: 2.5,
@@ -42,6 +43,7 @@ describe('sanitizeSettings', () => {
     expect(full.audioMain).toEqual({ id: 'abc', label: 'Focusrite 2i2' })
     expect(full.timerPosition).toBe('free')
     expect(full.speakerToolbarScale).toBe(2.5)
+    expect(full.timerFont).toBe('PT Sans')
     expect(full.timerColor).toBe('#ff0000')
     expect(full.speakerMsgLayout.pos).toEqual({ x: 0.3, y: 0.1 })
     expect(full.remote.httpPort).toBe(9500)

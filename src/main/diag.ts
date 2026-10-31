@@ -153,6 +153,7 @@ const QUIET_CHANNELS = new Set([
   'keyvisual:read',
   'state:get',
   'displays:list',
+  'test-screen:info',
   'monitor:audience-size',
   'sidecar:path',
   'soffice:check',
@@ -346,6 +347,11 @@ export function registerDiagIpc(): void {
       const result = await dialog.showOpenDialog(getOperatorWindow()!, { title: t('Выбрать материалы для отчёта'), properties: ['openFile', 'multiSelections'] })
       return { selection: result.canceled ? null : await reportMaterials.select(result.filePaths) }
     } catch (error) { return { selection: null, error: String(error instanceof Error ? error.message : error) } }
+  })
+  ipcMain.handle('diag:remove-material', (event, token: unknown, index: unknown) => {
+    if (event.sender !== getOperatorWindow()?.webContents || event.senderFrame !== event.sender.mainFrame || reportBuilding) throw new Error('Operator only or busy')
+    if (typeof token !== 'string' || typeof index !== 'number') throw new Error('Invalid selection')
+    return reportMaterials.remove(token, index)
   })
   ipcMain.handle('diag:build-report', (event, comment: unknown, token: unknown, markerN: unknown) =>
     event.sender === getOperatorWindow()?.webContents

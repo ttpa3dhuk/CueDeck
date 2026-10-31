@@ -6,6 +6,7 @@ import { normalizeFolderPlaylist, sanitizePlaylistFolders } from '../shared/play
 import type { PlaylistFolder, PlaylistEntry } from './state.js'
 import { audienceTimerConfig, type AudienceTimerConfig } from '../shared/audience-timer.js'
 import { sanitizeSlideFadeMs } from '../shared/slide-transition.js'
+import { sanitizeStoredVideoRange } from '../shared/video-range.js'
 
 /** 2 — пути к материалам внутри папки проекта пишутся относительными. */
 export const PROJECT_SCHEMA_VERSION = 2
@@ -60,9 +61,11 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
   // него нормален. Для остальных записей пустой путь по-прежнему брак.
   const hasItems = Array.isArray(v.items) && v.items.length > 0
   if (!filePath && !hasItems) return null
+  const kind = (v.kind as PlaylistEntry['kind']) ?? 'pdf'
+  const range = kind === 'video' ? sanitizeStoredVideoRange(v.inSec, v.outSec) : null
   return {
     id: String(v.id ?? cryptoRandomId()),
-    kind: (v.kind as PlaylistEntry['kind']) ?? 'pdf',
+    kind,
     filePath,
     fileName: String(v.fileName ?? v.pdfName ?? (filePath ? basename(filePath) : t('Список'))),
     displayName: String(v.displayName ?? ''),
@@ -74,6 +77,7 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
     ...(typeof v.slideFadeMs === 'number' ? { slideFadeMs: sanitizeSlideFadeMs(v.slideFadeMs) } : {}),
     ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
     ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),
+    ...(range ? { inSec: range.inSec, outSec: range.outSec } : {}),
   }
 }
 

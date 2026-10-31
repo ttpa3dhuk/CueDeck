@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 
-const runtime = vi.hoisted(() => ({ windows: [] as any[], displayListeners: new Set<(...args: any[]) => void>() }))
+const runtime = vi.hoisted(() => ({ windows: [] as any[], displayListeners: new Set<(...args: any[]) => void>(), state: { audienceOutputEnabled: true } as any }))
 vi.mock('electron', () => ({
   BrowserWindow: class {
     options: any
@@ -12,17 +12,22 @@ vi.mock('electron', () => ({
     setAlwaysOnTop = vi.fn()
     show = vi.fn()
     showInactive = vi.fn()
+    hide = vi.fn()
     focus = vi.fn()
     removeMenu = vi.fn()
     loadURL = vi.fn()
     loadFile = vi.fn()
     constructor(options: any) { this.options = options; this.bounds = { x: options.x, y: options.y, width: options.width, height: options.height }; this.full = options.fullscreen; runtime.windows.push(this) }
-    once(name: string, callback: () => void) { this.handlers.set(name, callback) }
+    on(name: string, callback: () => void) {
+      const previous = this.handlers.get(name)
+      this.handlers.set(name, () => { previous?.(); callback() })
+    }
+    once(name: string, callback: () => void) { this.on(name, callback) }
     isDestroyed() { return this.destroyed }
     isFullScreen() { return this.full }
     getBounds() { return this.bounds }
     setBounds(bounds: any) { this.bounds = bounds }
-    destroy() { this.destroyed = true }
+    destroy() { if (this.destroyed) return; this.destroyed = true; this.handlers.get('closed')?.() }
     close() { this.destroy() }
   },
   screen: {
@@ -37,7 +42,8 @@ vi.mock('electron', () => ({
     getDisplayMatching: (b: any) => ({ id: b.x < 0 ? 2 : b.x >= 1800 ? 3 : 1 }),
   },
 }))
-vi.mock('../src/main/state.js', () => ({ store: { registerWindow: vi.fn(), unregisterWindow: vi.fn(), patch: vi.fn() } }))
+vi.mock('../src/main/state.js', () => ({ store: { registerWindow: vi.fn(), unregisterWindow: vi.fn(), get: () => runtime.state,
+  patch: vi.fn((patch: object) => Object.assign(runtime.state, patch)) } }))
 vi.mock('../src/shared/i18n.js', () => ({ getLang: () => 'ru' }))
 const platform = process.platform
 let windows: typeof import('../src/main/windows.js')
@@ -48,10 +54,75 @@ async function load(os = 'darwin', tile = false) {
   windows = await import('../src/main/windows.js')
 }
 function ready() { for (const w of runtime.windows) w.handlers.get('ready-to-show')?.() }
-beforeEach(() => { runtime.windows = []; runtime.displayListeners.clear() })
+beforeEach(() => { runtime.windows = []; runtime.displayListeners.clear(); runtime.state = { audienceOutputEnabled: true } })
 afterEach(() => { Object.defineProperty(process, 'platform', { value: platform }); vi.unstubAllEnvs() })
 
 describe('full-display output windows', () => {
+  it.each(['darwin', 'win32'])('hides and returns only the existing audience renderer on %s', async os => {
+    await load(os)
+    const map = { operator: 1, audience: 2, speaker: 3 }
+    const active = windows.applyLayout('operator-speaker-audience', map)
+    ready()
+    const operator = active.get('operator') as any
+    const audience = active.get('audience') as any
+    const speaker = active.get('speaker') as any
+    Object.assign(runtime.state, { pdfPath: '/show.mp4', video: { playing: true, anchorAt: 1234 }, blackout: false })
+    const before = { ...runtime.state }
+    windows.setAudienceOutputEnabled(false)
+    expect(audience.hide).toHaveBeenCalledOnce()
+    expect(runtime.state).toEqual({ ...before, audienceOutputEnabled: false })
+    expect(operator.focus).toHaveBeenCalledTimes(2)
+    expect(speaker.hide).not.toHaveBeenCalled()
+    expect(audience.destroyed).toBe(false)
+    windows.setAudienceOutputEnabled(true)
+    expect(audience.showInactive).toHaveBeenCalledTimes(2)
+    expect(runtime.windows).toHaveLength(3)
+    expect(runtime.state).toEqual(before)
+  })
+  it('does not flash an audience hidden before ready, including after a display change', async () => {
+    await load()
+    windows.applyLayout('presenter-audience', { operator: 1, audience: 2 })
+    windows.setAudienceOutputEnabled(false)
+    ready()
+    expect(runtime.windows[1].showInactive).not.toHaveBeenCalled()
+    windows.applyLayout('presenter-audience', { operator: 1, audience: 3 })
+    ready()
+    const replacement = runtime.windows[2]
+    expect(replacement.showInactive).not.toHaveBeenCalled()
+    windows.setAudienceOutputEnabled(true)
+    expect(replacement.showInactive).toHaveBeenCalledOnce()
+    expect(runtime.state.audienceOutputEnabled).toBe(true)
+  })
+  it('waits for ready when re-enabling a loading output and can reopen a manually closed audience', async () => {
+    await load()
+    windows.applyLayout('presenter-audience', { operator: 1, audience: 2 }, true)
+    const first = runtime.windows[1]
+    windows.setAudienceOutputEnabled(false)
+    windows.setAudienceOutputEnabled(true)
+    expect(first.showInactive).not.toHaveBeenCalled()
+    ready()
+    expect(first.showInactive).toHaveBeenCalledOnce()
+    first.close()
+    expect(runtime.state.audienceOutputEnabled).toBe(false)
+    windows.setAudienceOutputEnabled(true)
+    expect(runtime.windows).toHaveLength(3)
+    const replacement = runtime.windows[2]
+    expect(replacement.showInactive).not.toHaveBeenCalled()
+    ready()
+    expect(replacement.showInactive).toHaveBeenCalledOnce()
+  })
+  it('leaves emergency solo and its hidden capture renderers alone', async () => {
+    await load()
+    windows.applyLayout('presenter-audience', { operator: 1, audience: 2 })
+    ready()
+    windows.applyLayout('solo', { operator: 1 })
+    windows.createHiddenAudienceWindow(1920, 1080)
+    const before = { ...runtime.state }
+    windows.setAudienceOutputEnabled(false)
+    expect(runtime.state).toEqual(before)
+    expect(runtime.windows.at(-1).hide).not.toHaveBeenCalled()
+    expect(runtime.windows.at(-1).showInactive).not.toHaveBeenCalled()
+  })
   it.each(['darwin', 'win32'])('allows restored audio to start without a gesture in %s windows', async (os) => {
     await load(os)
     windows.applyLayout('operator-speaker-audience', { operator: 1, audience: 2, speaker: 3 })
