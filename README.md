@@ -11,7 +11,7 @@ Free · macOS & Windows · for live events and conferences
 [What's new](CHANGELOG.md) ·
 [Video](https://www.youtube.com/watch?v=Vi5BDG_WoRg)
 
-![Stage the next speaker in Preview, press TAKE, and it goes to the hall](docs/screenshots/take.gif)
+![Stage the next speaker in Preview, press TAKE, and it goes to the hall](docs/screenshots/take.gif?v=35185f9b9052)
 
 Line up every speaker beforehand: PDF, PowerPoint, Keynote, video, a guest laptop. Stage the next one in Preview and press TAKE. It goes to the hall, their timer is loaded, the prompter follows.
 
@@ -19,7 +19,7 @@ Group several materials for one speaker into a folder and collapse it. Cmd/Ctrl 
 
 ## Three screens, one operator
 
-![Operator laptop, speaker's prompter and the hall screen side by side](docs/screenshots/screens.png)
+![Operator laptop, speaker's prompter and the hall screen side by side](docs/screenshots/screens.png?v=26ae1db32312)
 
 ## A prompter speakers actually read
 
@@ -27,17 +27,17 @@ Current and next slide, your notes in real time, a timer that turns yellow and r
 
 | | |
 |---|---|
-| ![Prompter: slide, next slide, notes, timer](docs/screenshots/prompter.png) | ![Timer-only prompter mode](docs/screenshots/prompter-timer.png) |
+| ![Prompter: slide, next slide, notes, timer](docs/screenshots/prompter.png?v=bd7eb23fb9d5) | ![Timer-only prompter mode](docs/screenshots/prompter-timer.png?v=c783b50d4727) |
 
 Drag the timer and messages wherever you want them:
 
-![Prompter layout editor in Settings](docs/screenshots/settings-prompter.png)
+![Prompter layout editor in Settings](docs/screenshots/settings-prompter.png?v=7628e4c0ab06)
 
 ## Stream without OBS
 
 The STREAM button sends the hall picture and sound to YouTube, VK and Telegram, up to 5 destinations at once. You can add or drop one while live. Stats show whether a problem is your computer, the network or the platform.
 
-![Stream window with YouTube, VK and Telegram destinations](docs/screenshots/stream.png)
+![Stream window with YouTube, VK and Telegram destinations](docs/screenshots/stream.png?v=5a12a9a9e95b)
 
 ## Window capture and OMT input
 
@@ -61,7 +61,7 @@ We haven't tested live vMix 29 yet, only OBS. If something goes wrong in vMix, [
 
 A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live timer, TAKE with the speaker's name, and an OMT lamp that turns red when vMix takes us on air. Two more pages have a button for every CueDeck command, so you can copy them and lay out your own deck. HTTP and OSC are there too ([setup](companion/README.md)).
 
-![Preview and video buttons from the CueDeck library in Companion (Russian page)](docs/screenshots/streamdeck.png)
+![Preview and video buttons from the CueDeck library in Companion (Russian page)](docs/screenshots/streamdeck.png?v=b9a1681c97f9)
 
 ## Download
 

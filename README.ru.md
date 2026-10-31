@@ -11,7 +11,7 @@
 [Что нового](CHANGELOG.md) ·
 [Видеообзор](https://www.youtube.com/watch?v=Vi5BDG_WoRg)
 
-![Следующего спикера готовишь в превью, жмёшь TAKE, и он уходит в зал](docs/screenshots/take.ru.gif)
+![Следующего спикера готовишь в превью, жмёшь TAKE, и он уходит в зал](docs/screenshots/take.ru.gif?v=656277b6f8b5)
 
 Заранее собираешь всех спикеров: PDF, PowerPoint, Keynote, ролики, ноутбук гостя. Следующего готовишь в превью и жмёшь TAKE. Он уходит в зал, подгружается его таймер, суфлёр переключается следом.
 
@@ -21,7 +21,7 @@
 
 ## Три экрана, один оператор
 
-![Ноутбук оператора, суфлёр спикера и экран зала рядом](docs/screenshots/screens.ru.png)
+![Ноутбук оператора, суфлёр спикера и экран зала рядом](docs/screenshots/screens.ru.png?v=e37ce5fa068c)
 
 ## Суфлёр, который спикер правда читает
 
@@ -29,17 +29,17 @@
 
 | | |
 |---|---|
-| ![Суфлёр: слайд, следующий, заметки, таймер](docs/screenshots/prompter.ru.png) | ![Суфлёр в режиме «только таймер»](docs/screenshots/prompter-timer.ru.png) |
+| ![Суфлёр: слайд, следующий, заметки, таймер](docs/screenshots/prompter.ru.png?v=0db5abcc0afd) | ![Суфлёр в режиме «только таймер»](docs/screenshots/prompter-timer.ru.png?v=c783b50d4727) |
 
 Таймер и сообщение спикеру ставятся мышкой куда угодно:
 
-![Макет суфлёра в Настройках](docs/screenshots/settings-prompter.ru.png)
+![Макет суфлёра в Настройках](docs/screenshots/settings-prompter.ru.png?v=a3bc1010565f)
 
 ## Трансляция без OBS
 
 Кнопка STREAM отправляет картинку и звук зала на YouTube, VK и Telegram, до 5 площадок разом. Площадку можно включить или отключить прямо в эфире. Статистика показывает, где проблема: в компьютере, в сети или на площадке.
 
-![Окно трансляции с площадками YouTube, VK и Telegram](docs/screenshots/stream.ru.png)
+![Окно трансляции с площадками YouTube, VK и Telegram](docs/screenshots/stream.ru.png?v=0165b882b892)
 
 ## Захват окон и приём OMT
 
@@ -63,7 +63,7 @@
 
 Готовая страница для [Bitfocus Companion](https://bitfocus.io/companion): живой таймер, TAKE с именем спикера, лампа OMT (горит красным, когда vMix взял нас в эфир). На двух дополнительных страницах есть кнопка под каждую команду CueDeck, их можно копировать и раскладывать под свою деку. Ещё есть HTTP и OSC ([как подключить](companion/README.md)).
 
-![Кнопки превью и видео из библиотеки CueDeck в Companion](docs/screenshots/streamdeck.png)
+![Кнопки превью и видео из библиотеки CueDeck в Companion](docs/screenshots/streamdeck.png?v=b9a1681c97f9)
 
 ## Скачать
 
