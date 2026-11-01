@@ -116,6 +116,7 @@ export function initialState(): AppState {
     timerLoop: false,
     timerAdjustments: [...DEFAULT_TIMER_ADJUSTMENTS],
     timerPresets: [...DEFAULT_TIMER_PRESETS],
+    playlistDoubleClickTake: false,
     clickerGlobal: false,
     clickerGlobalArrows: false,
     outputMonitorsEnabled: true,

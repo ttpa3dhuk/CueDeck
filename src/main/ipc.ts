@@ -98,6 +98,7 @@ import {
   setTimerLoop,
   getAskLayoutOnStartup,
   setAskLayoutOnStartup,
+  setPlaylistDoubleClickTake,
   setClickerGlobal,
   getClickerGlobalArrows,
   setClickerGlobalArrows,
@@ -851,6 +852,17 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('nav:prev', () => programPrev())
   ipcMain.handle('clicker:next', () => clickerNavigation.next())
   ipcMain.handle('clicker:prev', () => clickerNavigation.prev())
+
+  ipcMain.handle('clicker:set-double-click-take', (event, value: unknown) => {
+    const operator = getOperatorWindow()
+    if (!operator || operator.isDestroyed() || event.sender !== operator.webContents ||
+      event.senderFrame !== operator.webContents.mainFrame) throw new Error('Operator window required')
+    if (typeof value !== 'boolean') throw new Error('Boolean required')
+    const enabled = value
+    setPlaylistDoubleClickTake(enabled)
+    store.patch({ playlistDoubleClickTake: enabled })
+    return enabled
+  })
 
   ipcMain.handle('clicker:set-global', (_e, value: boolean) => {
     const wantArrows = getClickerGlobalArrows()

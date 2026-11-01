@@ -15,6 +15,8 @@
  * множественного числа ни в одном языке.
  */
 export const EN: Record<string, string> = {
+  'Двойной клик по материалу выводит его в эфир': 'Double-click a playlist item to take it to Program',
+  'По умолчанию двойной клик открывает материал только в превью. Для вывода в эфир нажми TAKE.': 'By default, double-click opens an item in Preview only. Press TAKE to send it to Program.',
   "Закрыть окно зала?": "Close the audience window?",
   "Закрыть окно": "Close window",
   "Чтобы открыть окно снова, выбери нужный режим в меню «Экраны → Режим работы».": "To reopen the window, choose the desired mode under Screens \u2192 Operating mode.",

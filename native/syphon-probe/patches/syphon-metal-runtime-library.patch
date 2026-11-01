@@ -1,0 +1,23 @@
+--- a/SyphonServerRendererMetal.m
++++ b/SyphonServerRendererMetal.m
+@@ -43,7 +43,19 @@
+     {
+         NSError *error = NULL;
+         NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+-        id<MTLLibrary> defaultLibrary = [device newDefaultLibraryWithBundle:bundle error:&error];
++        /*
++         Local build adaptation: Apple's Metal command-line toolchain is not
++         installed on this Mac, so there is no compiled default.metallib. Build
++         the same official shader at runtime from the bundled sources instead.
++         */
++        NSURL *shaderURL = [bundle URLForResource:@"SyphonMetalShaders" withExtension:@"metal"];
++        NSURL *typesURL = [bundle URLForResource:@"SyphonServerMetalTypes" withExtension:@"h"];
++        NSString *shaderSource = shaderURL ? [NSString stringWithContentsOfURL:shaderURL encoding:NSUTF8StringEncoding error:&error] : nil;
++        NSString *typesSource = typesURL ? [NSString stringWithContentsOfURL:typesURL encoding:NSUTF8StringEncoding error:&error] : nil;
++        if (shaderSource && typesSource) {
++            shaderSource = [shaderSource stringByReplacingOccurrencesOfString:@"#include \"SyphonServerMetalTypes.h\"" withString:typesSource];
++        }
++        id<MTLLibrary> defaultLibrary = shaderSource ? [device newLibraryWithSource:shaderSource options:nil error:&error] : nil;
+         if(error)
+         {
+             SYPHONLOG(@"Metal library could not be loaded:%@", error);

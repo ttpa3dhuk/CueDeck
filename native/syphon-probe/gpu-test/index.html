@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CueDeck GPU OSR test canvas</title>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="c" width="640" height="360"></canvas>
+<script>
+  const canvas = document.getElementById('c')
+  const ctx = canvas.getContext('2d', { alpha: true })
+  let frame = 0
+  function draw(now) {
+    const w = canvas.width, h = canvas.height
+    ctx.clearRect(0, 0, w, h)
+    ctx.fillStyle = 'rgba(4, 8, 20, 1)'
+    ctx.fillRect(0, 0, w, h)
+    ctx.strokeStyle = 'rgba(80, 110, 180, .35)'
+    ctx.lineWidth = 1
+    for (let x = 0; x < w; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke() }
+    for (let y = 0; y < h; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke() }
+
+    for (let i = 0; i < 5; i++) {
+      const x = ((now * 0.09 + i * 137) % (w + 180)) - 90
+      const hue = (now * 0.02 + i * 48) % 360
+      ctx.fillStyle = `hsl(${hue} 90% 55%)`
+      ctx.fillRect(x, 38 + i * 35, 148, 22)
+    }
+    ctx.fillStyle = 'rgba(30, 240, 130, .30)'
+    ctx.fillRect(w - 250, 24, 160, 80)
+    ctx.fillStyle = '#e8f0ff'
+    ctx.font = 'bold 20px Menlo, monospace'
+    ctx.fillText('CueDeck GPU OSR test', 24, 34)
+    ctx.font = 'bold 52px Menlo, monospace'
+    ctx.fillText(`FRAME ${String(frame).padStart(8, '0')}`, 24, 112)
+    ctx.font = 'bold 18px Menlo, monospace'
+    ctx.fillStyle = '#ff6b6b'
+    ctx.fillText('TOP', w / 2 - 22, 20)
+    ctx.fillStyle = '#77ff99'
+    ctx.fillText('BOTTOM', w / 2 - 40, h - 10)
+    ctx.fillStyle = '#7ab8ff'
+    ctx.fillText('LEFT', 8, h / 2)
+    ctx.fillStyle = '#ffe36e'
+    ctx.fillText('RIGHT', w - 68, h / 2)
+
+    // Fully transparent holes; the offscreen texture must keep alpha.
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.fillRect(w - 180, 120, 90, 64)
+    ctx.beginPath(); ctx.arc(w - 70, 150, 30, 0, Math.PI * 2); ctx.fill()
+    ctx.globalCompositeOperation = 'source-over'
+
+    // A deliberately asymmetric mark in the lower-left.
+    ctx.fillStyle = 'rgba(255, 60, 220, .9)'
+    ctx.fillRect(32, h - 76, 70, 26)
+    frame++
+    requestAnimationFrame(draw)
+  }
+  requestAnimationFrame(draw)
+</script>
+</body>
+</html>

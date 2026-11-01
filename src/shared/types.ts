@@ -425,6 +425,8 @@ export interface AppState {
   /** User-editable minutes of the four timer preset buttons (ПКМ по кнопке). */
   timerAdjustments: number[]
   timerPresets: number[]
+  /** Opt-in double-click TAKE; false keeps playlist activation in Preview. */
+  playlistDoubleClickTake: boolean
   /**
    * Global clicker: PgUp/PgDn switch program slides system-wide (globalShortcut),
    * so the speaker keeps clicking while the operator works in a browser/Finder.

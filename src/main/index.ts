@@ -16,6 +16,10 @@ import { captureIpcHandlers, initRemote, registerRemoteIpc } from './remote/serv
 import { registerWindowCapture } from './window-capture.js'
 import { initStream } from './stream/streamer.js'
 import { initOmt, registerOmtIpc } from './omt/outputs.js'
+import { initSyphonBridge } from './syphon-bridge.js'
+import { initSyphonGpuProbe } from './syphon-gpu-probe.js'
+import { initSyphonGpuAudience } from './syphon-gpu-audience.js'
+import { initLoopProbe } from './loop-probe.js'
 import { registerOmtInputIpc } from './omt/input-ipc.js'
 import { registerProfileIpc } from './profiles.js'
 import { askBootLayout } from './boot-dialog.js'
@@ -65,6 +69,7 @@ import {
   getTimerTickEnabled,
   getTimerGongEnabled,
   getTimerLoop,
+  getPlaylistDoubleClickTake,
   getClickerGlobal,
   getClickerGlobalArrows,
   getSpeakerMsgPresets,
@@ -578,6 +583,7 @@ app.whenReady().then(async () => {
     speakerMsgPresets: getSpeakerMsgPresets(),
     timerPresets: getTimerPresets(),
     timerAdjustments: getTimerAdjustments(),
+    playlistDoubleClickTake: getPlaylistDoubleClickTake(),
     outputMonitorsEnabled: getOutputMonitorsEnabled(),
     uiTheme: getUiTheme(),
     // Re-register the global clicker if it was on; reflect actual success
@@ -603,6 +609,10 @@ app.whenReady().then(async () => {
   booting = false
   watchDisplayChanges()
   startOutputMonitor()
+  initSyphonBridge()
+  initSyphonGpuProbe()
+  initSyphonGpuAudience()
+  initLoopProbe()
 
   // Check for updates a few seconds after boot, then daily
   const scheduleUpdateCheck = () => {

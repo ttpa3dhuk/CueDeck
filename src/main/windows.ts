@@ -8,6 +8,7 @@ import { safeDisplayLayout } from '../shared/display-safety.js'
 import { store } from './state.js'
 import { WINDOW_TITLES } from '../shared/window-titles.js'
 import { getLang } from '../shared/i18n.js'
+import { stopGpuAudienceForNormalOutput } from './gpu-audience-arbiter.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -206,6 +207,9 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
     layout = safe.layout
     displayMap = safe.displayMap
   }
+  // Never keep the experimental GPU audience alive while a physical audience
+  // is being created. Stop it before window reconciliation.
+  if (layout !== 'solo') stopGpuAudienceForNormalOutput('layout')
   const desiredRoles = new Set<Role>(rolesForLayout(layout))
 
   // Close windows whose role is no longer active
@@ -371,6 +375,53 @@ export function createHiddenAudienceWindow(width: number, height: number): Brows
 }
 
 /**
+ * Load the real audience renderer after the GPU publisher/listener is ready.
+ * Registration must happen after load starts so store's initial state:full is
+ * sent on did-finish-load, not into a blank webContents.
+ */
+export function loadGpuAudiencePage(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  win.webContents.setFrameRate(30)
+  loadRenderer(win, { entry: 'audience', role: 'audience' })
+  store.registerWindow('audience', win)
+}
+
+/**
+ * DEV-ONLY real audience GPU producer: the actual audience renderer, offscreen
+ * with a shared texture. Never shown and never used as a normal hidden audience
+ * for stream/OMT/capture. One instance is registered in store as `audience` by
+ * the GPU audience mode through the ghost lease. Target is PHYSICAL texture
+ * pixels; BrowserWindow dimensions are DIP, so Retina scale is divided out and
+ * the actual codedSize is checked by GpuTexturePublisher.
+ */
+export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080, load = true): BrowserWindow {
+  const scaleFactor = screen.getPrimaryDisplay().scaleFactor || 1
+  const width = Math.max(16, Math.round(targetWidth / scaleFactor))
+  const height = Math.max(16, Math.round(targetHeight / scaleFactor))
+  const win = new BrowserWindow({
+    width,
+    height,
+    show: false,
+    frame: false,
+    useContentSize: true,
+    enableLargerThanScreen: true,
+    backgroundColor: '#000000',
+    title: 'CueDeck (GPU audience)',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+      autoplayPolicy: 'no-user-gesture-required',
+      offscreen: { useSharedTexture: true },
+    },
+  })
+  if (load) loadGpuAudiencePage(win)
+  return win
+}
+
+/**
  * Окно-кодировщик трансляции: никогда не показывается. Снимает окно зала
  * (getDisplayMedia → захват вкладки внутри Chromium, прав на запись экрана не
  * нужно), кодирует WebCodecs и отдаёт пакеты в main (stream/streamer.ts).
@@ -448,17 +499,44 @@ export function createOmtAudioWindow(): BrowserWindow {
 // скрытое окно на роль одно, со списком держателей. Ушёл последний — закрыто.
 
 type GhostRole = 'audience' | 'speaker'
-const ghosts = new Map<GhostRole, { win: BrowserWindow; holders: Set<string> }>()
+type GhostKind = 'normal' | 'gpu-audience'
+const ghosts = new Map<GhostRole, { win: BrowserWindow; holders: Set<string>; kind: GhostKind }>()
 
-/** Взять скрытое окно роли (создать, если его нет). `create` зовётся только при создании. */
-export function acquireGhost(role: GhostRole, holder: string, create: () => BrowserWindow): BrowserWindow {
+/**
+ * Взять скрытое окно роли (создать, если его нет). `create` зовётся только при
+ * создании. GPU audience is a distinct ghost kind: a normal consumer must never
+ * silently reuse its offscreen/shared-texture window. The arbiter is called
+ * before falling back to a normal ghost; if a GPU ghost still exists, creation
+ * is refused rather than returning an incompatible window.
+ */
+export function acquireGhost(role: GhostRole, holder: string, create: () => BrowserWindow,
+                            kind: GhostKind = 'normal'): BrowserWindow {
   const g = ghosts.get(role)
   if (g && !g.win.isDestroyed()) {
-    g.holders.add(holder)
-    return g.win
+    if (g.kind === kind) {
+      g.holders.add(holder)
+      return g.win
+    }
+    if (kind === 'normal') {
+      stopGpuAudienceForNormalOutput(`ghost:${holder}`)
+      const after = ghosts.get(role)
+      if (after && !after.win.isDestroyed()) {
+        if (after.kind === 'normal') {
+          after.holders.add(holder)
+          return after.win
+        }
+        // The stop hook did not release a stale GPU ghost. Normal output must
+        // still proceed, so destroy only that incompatible GPU window.
+        ghosts.delete(role)
+        try { after.win.destroy() } catch { /* already gone */ }
+      }
+      // GPU ghost was released/destroyed; fall through and create normal.
+    } else {
+      throw new Error(`incompatible ${role} ghost: existing=${g.kind}, requested=${kind}`)
+    }
   }
   const win = create()
-  ghosts.set(role, { win, holders: new Set([holder]) })
+  ghosts.set(role, { win, holders: new Set([holder]), kind })
   win.on('closed', () => {
     if (ghosts.get(role)?.win === win) ghosts.delete(role)
   })

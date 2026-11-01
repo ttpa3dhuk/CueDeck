@@ -19,6 +19,7 @@ import { t } from '../../shared/i18n.js'
 import { fileStamp, logsDir } from '../diag.js'
 import { store } from '../state.js'
 import { getStreamSettings, sanitizeStreamSettings, setStreamSettings } from '../display-mapping.js'
+import { stopGpuAudienceForNormalOutput } from '../gpu-audience-arbiter.js'
 import {
   acquireGhost,
   createHiddenAudienceWindow,
@@ -392,6 +393,9 @@ export function audienceWindow(): BrowserWindow | null {
 /** В solo зала нет — держим скрытый, пока идёт трансляция; появился настоящий — прячем свой. */
 function syncGhost(): void {
   const running = store.get().stream.running
+  // Stream captures a normal audience window. Release the DEV-only GPU audience
+  // before acquiring/creating the normal ghost; never disable streaming.
+  if (running) stopGpuAudienceForNormalOutput('stream')
   const real = getActiveWindows().get('audience')
   const need = running && (!real || real.isDestroyed())
   if (need) {

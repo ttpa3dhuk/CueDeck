@@ -1524,7 +1524,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
 
   li.append(row1, speakerInput, durRow, missingRow)
 
-  // Single click → stage into preview (safe). Double click → straight to air.
+  // Single click stages preview; double-click TAKE is an explicit opt-in.
   li.addEventListener('contextmenu', (event) => playlistContext(event, fresh(), li, false))
   li.addEventListener('click', (event) => {
     const modifier = window.api.platform === 'darwin' ? event.metaKey : event.ctrlKey
@@ -1557,7 +1557,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
       window.clearTimeout(pendingPlaylistClickTimer)
       pendingPlaylistClickTimer = null
     }
-    activateEntry(fresh(), true)
+    activateEntry(fresh(), getState().playlistDoubleClickTake === true)
   })
 
   li.addEventListener('dragstart', (e) => {
@@ -2227,6 +2227,7 @@ function applyState(state: AppState): void {
     reflectToggle('timer-tick-toggle', state.audienceTimer.tickEnabled)
     reflectToggle('timer-gong-toggle', state.audienceTimer.gongEnabled)
     reflectToggle('timer-loop-toggle', state.audienceTimer.loop)
+    reflectToggle('playlist-double-click-take-toggle', state.playlistDoubleClickTake)
     reflectToggle('clicker-global-toggle', state.clickerGlobal)
     reflectToggle('clicker-arrows-toggle', state.clickerGlobalArrows)
     document.querySelectorAll<HTMLButtonElement>('button.adjust').forEach((btn, i) => {
@@ -3330,6 +3331,9 @@ function setupOperatorControls(): void {
 
   // Глобальный кликер: main отвечает, что реально включилось (регистрация
   // PgUp/PgDn может не пройти) — стейт-патч вернёт галку в фактическое положение.
+  $<HTMLInputElement>('playlist-double-click-take-toggle').addEventListener('change', (event) => {
+    void window.api.clicker.setDoubleClickTake((event.target as HTMLInputElement).checked)
+  })
   const clickerGlobalToggle = $<HTMLInputElement>('clicker-global-toggle')
   clickerGlobalToggle.addEventListener('change', async () => {
     const wanted = clickerGlobalToggle.checked

@@ -71,6 +71,7 @@ const api: PresenterApi = {
   clicker: {
     next: () => ipcRenderer.invoke('clicker:next'),
     prev: () => ipcRenderer.invoke('clicker:prev'),
+    setDoubleClickTake: (value) => ipcRenderer.invoke('clicker:set-double-click-take', value),
     setGlobal: (value) => ipcRenderer.invoke('clicker:set-global', Boolean(value)),
     setGlobalArrows: (value) => ipcRenderer.invoke('clicker:set-global-arrows', Boolean(value)),
   },

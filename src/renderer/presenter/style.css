@@ -810,7 +810,7 @@ body[data-role="operator"] #output-monitors { grid-area: monitor; }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  cursor: grab;
+  cursor: default;
   transition: border-color 150ms ease, background 150ms ease;
   position: relative;
 }

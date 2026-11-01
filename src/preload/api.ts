@@ -116,6 +116,8 @@ export interface PresenterApi {
   clicker: {
     next(): Promise<void>
     prev(): Promise<void>
+    /** Opt in to playlist double-click TAKE. Disabled by default. */
+    setDoubleClickTake(value: boolean): Promise<boolean>
     /** Global PgUp/PgDn clicker. Resolves to what actually got enabled (registration can fail). */
     setGlobal(value: boolean): Promise<boolean>
     /** Also grab ←/→ globally (Spotlight-style clickers). Resolves to the applied value. */

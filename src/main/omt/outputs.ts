@@ -33,6 +33,8 @@ import {
 } from '../../shared/types.js'
 import { cleanOmtFps, cleanOmtName, cleanOmtResolution, getOmtSettings, setOmtSettings } from '../display-mapping.js'
 import { allowAudienceCapture } from '../stream/streamer.js'
+import { acquireFrameTap, type FrameTapLease } from '../frame-tap.js'
+import { stopGpuAudienceForNormalOutput } from '../gpu-audience-arbiter.js'
 import {
   acquireGhost,
   createHiddenAudienceWindow,
@@ -443,6 +445,7 @@ class TimerOutput implements Output {
  */
 class WindowOutput implements Output {
   private win: BrowserWindow | null = null
+  private tap: FrameTapLease | null = null
   private watch: NodeJS.Timeout | null = null
   /** Окно звука (только у зала): снимает звук вкладки зала. */
   audioWin: BrowserWindow | null = null
@@ -484,6 +487,7 @@ class WindowOutput implements Output {
   }
 
   private follow(): void {
+    if (this.role === 'audience') stopGpuAudienceForNormalOutput('omt')
     const real = getActiveWindows().get(this.role)
     let target: BrowserWindow
     if (real && !real.isDestroyed()) {
@@ -496,7 +500,15 @@ class WindowOutput implements Output {
     this.unsubscribe()
     this.win = target
     const wc = target.webContents
-    wc.beginFrameSubscription(false, (image) => this.sender.push(image))
+    // A shared tap: Electron has only one frame subscriber per WebContents.
+    // Taking it directly here would overwrite another consumer (and vice versa).
+    try {
+      this.tap = acquireFrameTap(wc, this.holder, (image) => this.sender.push(image))
+    } catch (err) {
+      log.warn(`omt: не удалось подписаться на кадры окна — ${(err as Error).message}`)
+      this.win = null
+      return
+    }
     // Кадры приходят только на изменения — первый, пока на экране статичный слайд, вызываем сами.
     const kick = (): void => {
       if (!target.isDestroyed()) wc.invalidate()
@@ -520,15 +532,9 @@ class WindowOutput implements Output {
   }
 
   private unsubscribe(): void {
-    const w = this.win
+    this.tap?.release()
+    this.tap = null
     this.win = null
-    if (w && !w.isDestroyed()) {
-      try {
-        w.webContents.endFrameSubscription()
-      } catch {
-        // окно уже уходит
-      }
-    }
   }
 
   stop(): Promise<void> {
