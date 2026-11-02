@@ -24,14 +24,18 @@ import {
   STREAM_HEIGHTS,
   STREAM_KEYFRAME_SEC,
   STREAM_MAX_DESTINATIONS,
+  DEFAULT_SYPHON_SETTINGS,
+  SYPHON_NAME_MAX,
   type OmtFps,
   type OmtResolution,
   type OmtSettings,
   type StreamDestination,
   type StreamSettings,
+  type SyphonSettings,
 } from '../shared/types.js'
 import { EN } from '../shared/i18n-en.js'
 import { parseLang, t, type Lang } from '../shared/i18n.js'
+import { cleanSyphonName } from '../shared/syphon.js'
 
 interface SavedMapping {
   layout: Layout
@@ -95,6 +99,8 @@ interface PersistedShape {
   stream: StreamSettings
   /** Выходы OMT (omt/outputs.ts). */
   omt: OmtSettings
+  /** Syphon для Resolume/OBS (syphon-settings.ts). Нет в файле — не трогали (env QA). */
+  syphon?: SyphonSettings
   /** MIDI-входы, которые слушает CueDeck — имена устройств («Настройки → MIDI»). */
   midiInputs: string[]
   /** Профили площадки (profiles.ts) — список, новые в конце. */
@@ -716,6 +722,26 @@ export function getOmtSettings(): OmtSettings {
 
 export function setOmtSettings(value: OmtSettings): void {
   store().set('omt', value)
+}
+
+export function getSyphonSettings(): SyphonSettings {
+  const raw = (store().get('syphon') ?? {}) as Partial<SyphonSettings>
+  return {
+    enabled: raw.enabled === true,
+    name: cleanSyphonName(raw.name, DEFAULT_SYPHON_SETTINGS.name),
+  }
+}
+
+/** Была ли настройка уже записана: env старого QA только заполняет пустой профиль. */
+export function hasSyphonSettings(): boolean {
+  return store().has('syphon')
+}
+
+export function setSyphonSettings(value: SyphonSettings): void {
+  store().set('syphon', {
+    enabled: value.enabled === true,
+    name: cleanSyphonName(value.name, DEFAULT_SYPHON_SETTINGS.name),
+  })
 }
 
 export function setRemoteSettings(value: RemoteSettings): void {

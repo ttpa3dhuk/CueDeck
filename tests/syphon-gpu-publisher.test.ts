@@ -145,4 +145,53 @@ describe('source-independent GPU publisher', () => {
     expect(native.destroy).toHaveBeenCalled()
     expect(retiredGpuPublisherCount()).toBeGreaterThan(before)
   })
+
+  it('releases the pending texture after native completion on every stop and keeps retired count flat', async () => {
+    vi.useFakeTimers()
+    try {
+      const before = retiredGpuPublisherCount()
+      for (let cycle = 0; cycle < 3; cycle++) {
+        const { publisher, native } = setup()
+        const pending = texture()
+        paint(publisher, pending.value)
+        const wait = publisher.stopAndWait(2000)
+        expect(pending.released()).toBe(0)
+        native.poll.mockReturnValue({ frameId: 1, status: 0, detail: 0 })
+        await vi.advanceTimersByTimeAsync(10)
+        expect(await wait).toEqual({ released: true, timedOut: false })
+        expect(pending.released()).toBe(1)
+        expect(native.destroy).toHaveBeenCalled()
+      }
+      expect(retiredGpuPublisherCount()).toBe(before)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('bounds a stop with no native completion, holds exactly one texture, and reports timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      const { publisher, native } = setup()
+      const pending = texture()
+      paint(publisher, pending.value)
+      native.poll.mockReturnValue(null)
+      const before = retiredGpuPublisherCount()
+      const wait = publisher.stopAndWait(500)
+      await vi.advanceTimersByTimeAsync(600)
+      expect(await wait).toEqual({ released: false, timedOut: true })
+      expect(pending.released()).toBe(0)
+      expect(retiredGpuPublisherCount()).toBe(before + 1)
+      expect(native.destroy).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('releases a late paint immediately after stop', async () => {
+    const { publisher } = setup()
+    await publisher.stopAndWait(100)
+    const late = texture()
+    paint(publisher, late.value)
+    expect(late.released()).toBe(1)
+  })
 })

@@ -2135,6 +2135,42 @@ body[data-theme="light"] #slide-fade-modal { color-scheme: light; }
 .remote-port input.remote-host { width: 130px; }
 .remote-status.on { color: var(--timer-green); }
 .remote-status.error { color: var(--danger); }
+/* Выходы — OMT и Syphon в одном разделе окна «Настройки» */
+.output-group { display: flex; flex-direction: column; gap: 8px; }
+.output-group + .output-group { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 6px; }
+.output-title { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+.output-title-row { display: flex; align-items: baseline; gap: 8px; }
+.output-badge {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.syphon-card.off .syphon-name, .syphon-card.off .syphon-resolution { opacity: 0.55; }
+.syphon-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px 78px;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+.syphon-row .syphon-name {
+  min-width: 0;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.syphon-row .syphon-name:disabled { opacity: 0.55; }
+.syphon-resolution { color: var(--muted); font-variant-numeric: tabular-nums; }
+.syphon-row .syphon-status { grid-column: 1 / -1; padding-left: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.syphon-row .syphon-status:empty { display: none; }
+.remote-status.warn { color: var(--warning); }
+
 /* Выходы OMT — раздел окна «Настройки» */
 .omt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; font-size: 13px; }
 .omt-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px 76px 76px; align-items: center; gap: 4px 10px; }

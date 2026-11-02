@@ -63,12 +63,20 @@ export interface GpuPublisherStatus {
   height: number
 }
 
+export interface GpuPublisherStopResult {
+  /** The pending JS texture was released after native completion. */
+  released: boolean
+  /** Native completion did not arrive within the bound; one texture stays held. */
+  timedOut: boolean
+}
+
 export class GpuTexturePublisher {
   private readonly gate = new GpuSendGate()
   private readonly recovery = new LatestFrameRecovery()
   private readonly metrics = new SyphonGpuMetrics()
   private readonly released = new WeakSet<object>()
   private readonly gateStartedAt = Date.now()
+  private readonly onFirstTexture: (() => void) | undefined
   private native: NativeGpuPublisher | null = null
   private inFlight: InFlightTexture | null = null
   private nextFrameId = 0
@@ -83,7 +91,11 @@ export class GpuTexturePublisher {
   private lastPaintDiagnostics: string | null = null
   private stuck = false
   private disposed = false
+  private stopping = false
   private failed = false
+  private stopPromise: Promise<GpuPublisherStopResult> | null = null
+  private stopPollTimer: NodeJS.Timeout | null = null
+  private stopDeadlineTimer: NodeJS.Timeout | null = null
   private readonly onProcessExit = (): void => {
     this.disposed = true
     this.native?.destroy()
@@ -94,7 +106,10 @@ export class GpuTexturePublisher {
     private readonly options: GpuPublisherOptions,
     private readonly source: () => GpuPaintSource | null,
     private readonly onFatal: (reason: string) => void,
-  ) {}
+    onFirstTexture?: () => void,
+  ) {
+    this.onFirstTexture = onFirstTexture
+  }
 
   start(): void {
     if (this.disposed) return
@@ -121,10 +136,16 @@ export class GpuTexturePublisher {
   }
 
   onPaint(event: Electron.Event<Electron.WebContentsPaintEventParams>): void {
-    if (this.disposed || this.failed || !this.native) return
+    const texture = event.texture
+    // A paint can arrive after stop() began, including after the window was
+    // destroyed. Release it immediately instead of retaining an unreachable
+    // texture; the one already in flight is handled by native completion.
+    if (this.disposed || this.stopping || this.failed || !this.native) {
+      if (texture) this.releaseTexture(texture)
+      return
+    }
     const started = performance.now()
     this.metrics.inc('paints')
-    const texture = event.texture
     if (!texture) {
       // See osr_host_display_client.cc LayeredWindowUpdater::Draw: software
       // compositor emits callback(damage, bitmap, {}) before/without GPU capture.
@@ -166,7 +187,8 @@ export class GpuTexturePublisher {
       this.releaseTexture(texture)
       return
     }
-    if (!this.sawTexture) {
+    const firstTexture = !this.sawTexture
+    if (firstTexture) {
       this.sawTexture = true
       this.firstTextureAtMs = Date.now() - this.gateStartedAt
       this.clearFirstTextureDeadline()
@@ -196,6 +218,7 @@ export class GpuTexturePublisher {
     this.actualHeight = info.codedSize.height
     this.metrics.setSize(info.codedSize.width, info.codedSize.height)
     this.metrics.recordCallback(performance.now() - started)
+    if (firstTexture) this.onFirstTexture?.()
     this.startPolling()
     this.watchdog = setTimeout(() => {
       if (!this.inFlight) return
@@ -208,7 +231,7 @@ export class GpuTexturePublisher {
   }
 
   destroyNow(): void {
-    if (this.disposed) return
+    if (this.disposed || this.stopping) return
     this.disposed = true
     process.removeListener('exit', this.onProcessExit)
     this.clearTimers()
@@ -225,6 +248,63 @@ export class GpuTexturePublisher {
     this.native = null
     this.metrics.stop()
     log.info('syphon-gpu: publisher stopped')
+  }
+
+  /**
+   * Stop and wait for the one in-flight frame, bounded by `timeoutMs`.
+   *
+   * The window/ghost is already gone by the time this is called; only the JS
+   * OffscreenSharedTexture remains. Keeping the native publisher alive until
+   * poll() reports completion is what makes repeated off/on safe: the texture
+   * is released instead of being parked in retiredPublishers forever.
+   *
+   * If completion never arrives within the bound, exactly one texture is held
+   * until app exit and the caller receives `timedOut`. The caller must not start
+   * another publisher after that (SyphonGpuManager locks restarts) — otherwise
+   * every restart would add another permanently held texture.
+   */
+  stopAndWait(timeoutMs = this.options.timeoutMs): Promise<GpuPublisherStopResult> {
+    if (this.stopPromise) return this.stopPromise
+    if (this.disposed) return Promise.resolve({ released: true, timedOut: false })
+    this.stopping = true
+    process.removeListener('exit', this.onProcessExit)
+    this.clearTimers()
+    this.stopPromise = new Promise<GpuPublisherStopResult>((resolve) => {
+      let finished = false
+      const finish = (timedOut: boolean): void => {
+        if (finished) return
+        finished = true
+        this.clearStopTimers()
+        if (timedOut && this.inFlight) {
+          retiredPublishers.add(this)
+          log.warn('syphon-gpu: stop timed out with a native frame pending; ' +
+            'one JS texture held until app exit, restarts must stay blocked')
+        }
+        this.disposed = true
+        this.gate.markDead()
+        this.recovery.reset()
+        this.native?.destroy()
+        this.native = null
+        this.metrics.stop()
+        log.info(`syphon-gpu: publisher stopped${timedOut ? ' (completion timeout)' : ''}`)
+        resolve({ released: !timedOut, timedOut })
+      }
+      if (!this.inFlight) {
+        finish(false)
+        return
+      }
+      if (this.pollStopCompletion()) {
+        finish(false)
+        return
+      }
+      this.stopPollTimer = setInterval(() => {
+        if (this.pollStopCompletion()) finish(false)
+      }, POLL_MS)
+      this.stopPollTimer.unref?.()
+      this.stopDeadlineTimer = setTimeout(() => finish(true), Math.max(100, timeoutMs))
+      this.stopDeadlineTimer.unref?.()
+    })
+    return this.stopPromise
   }
 
   status(): GpuPublisherStatus {
@@ -353,6 +433,35 @@ export class GpuTexturePublisher {
     if (!this.inFlight) {
       if (this.pollTimer) clearInterval(this.pollTimer)
       this.pollTimer = null
+    }
+    return true
+  }
+
+  private clearStopTimers(): void {
+    if (this.stopPollTimer) clearInterval(this.stopPollTimer)
+    if (this.stopDeadlineTimer) clearTimeout(this.stopDeadlineTimer)
+    this.stopPollTimer = this.stopDeadlineTimer = null
+  }
+
+  /** Completion during stop: release the texture, but never call onFatal. */
+  private pollStopCompletion(): boolean {
+    if (!this.native || !this.inFlight) return false
+    const completion = this.native.poll()
+    if (!completion) return false
+    if (completion.frameId !== this.inFlight.frameId) {
+      log.warn(`syphon-gpu: stale native completion during stop ${completion.frameId}`)
+      return false
+    }
+    if (this.watchdog) clearTimeout(this.watchdog)
+    this.watchdog = null
+    const sentAt = this.inFlight.sentAt
+    this.releaseInFlight()
+    this.gate.ack()
+    if (completion.status === 0) {
+      this.metrics.inc('published')
+      this.metrics.recordAck(performance.now() - sentAt)
+    } else {
+      this.metrics.inc('errors')
     }
     return true
   }

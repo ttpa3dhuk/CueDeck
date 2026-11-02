@@ -18,7 +18,7 @@ import { initStream } from './stream/streamer.js'
 import { initOmt, registerOmtIpc } from './omt/outputs.js'
 import { initSyphonBridge } from './syphon-bridge.js'
 import { initSyphonGpuProbe } from './syphon-gpu-probe.js'
-import { initSyphonGpuAudience } from './syphon-gpu-audience.js'
+import { initSyphonGpuAudience, registerSyphonIpc } from './syphon-settings.js'
 import { initLoopProbe } from './loop-probe.js'
 import { registerOmtInputIpc } from './omt/input-ipc.js'
 import { registerProfileIpc } from './profiles.js'
@@ -477,6 +477,7 @@ app.whenReady().then(async () => {
   registerRemoteIpc()
   registerProfileIpc()
   registerOmtIpc()
+  registerSyphonIpc()
   registerOmtInputIpc()
   registerWindowCapture()
   initStream()

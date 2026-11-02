@@ -453,6 +453,8 @@ export interface AppState {
   stream: StreamStatus
   /** Выходы OMT (Open Media Transport) в сеть: настройки + живой статус. */
   omt: OmtStatus
+  /** Syphon для Resolume/OBS на macOS: запрошенная настройка + фактический статус. */
+  syphon: SyphonStatus
 }
 
 /**
@@ -528,6 +530,68 @@ export const DEFAULT_OMT_SETTINGS: OmtSettings = {
   fps: { timer: 30, program: 30, prompter: 30 },
   programAudio: true,
   timerMessage: true,
+}
+
+/**
+ * Syphon (main/syphon-settings.ts, main/syphon-gpu-audience.ts) — локальный видеовыход зала для
+ * Resolume/OBS на macOS. Только картинка, без звука. Настройка живёт в
+ * electron-store; runtime-состояние отдельное: requested enabled может быть
+ * true, пока выход заблокирован физическим залом, OMT «Зал» или стримом.
+ */
+export type SyphonRuntimeState = 'off' | 'starting' | 'on' | 'blocked' | 'error' | 'unavailable'
+
+export type SyphonReason =
+  | 'packaged'
+  | 'platform'
+  | 'native-missing'
+  | 'synthetic'
+  | 'cpu-bridge'
+  | 'layout'
+  | 'physical-audience'
+  | 'audience-lease'
+  | 'stream'
+  | 'omt-program'
+  | 'busy'
+  | 'stop-timeout'
+  | 'runtime'
+  | 'start-refused'
+
+export interface SyphonSettings {
+  /** Оператор просит выход работать; фактическое состояние — в status. */
+  enabled: boolean
+  /** Имя источника в Resolume/OBS. */
+  name: string
+}
+
+export interface SyphonStatus extends SyphonSettings {
+  state: SyphonRuntimeState
+  /** Почему выход не работает; null у off/starting/on. */
+  reason: SyphonReason | null
+  /** Техническая подробность для error/unavailable (английский текст). */
+  detail: string | null
+  /** Физический размер кадра; всегда 1920×1080. */
+  target: { width: number; height: number }
+  /** Фактический размер последнего кадра; null до первого кадра. */
+  actual: { width: number; height: number } | null
+}
+
+export const SYPHON_TARGET = { width: 1920, height: 1080 } as const
+export const SYPHON_NAME_MAX = 64
+
+export const DEFAULT_SYPHON_SETTINGS: SyphonSettings = {
+  enabled: false,
+  name: 'CueDeck Audience',
+}
+
+export function defaultSyphonStatus(): SyphonStatus {
+  return {
+    ...DEFAULT_SYPHON_SETTINGS,
+    state: 'off',
+    reason: null,
+    detail: null,
+    target: { ...SYPHON_TARGET },
+    actual: null,
+  }
 }
 
 /**

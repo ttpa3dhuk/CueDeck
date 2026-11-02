@@ -25,6 +25,8 @@ import type {
   StreamEncoderStatus,
   StreamSettings,
   StreamStatus,
+  SyphonSettings,
+  SyphonStatus,
   TimerMode,
   TimerPosition,
   UiTheme,
@@ -73,6 +75,8 @@ export type {
   StreamDestStatus,
   StreamSettings,
   StreamStatus,
+  SyphonSettings,
+  SyphonStatus,
   TimerMode,
   TimerPosition,
   TimerState,
@@ -297,6 +301,13 @@ export interface PresenterApi {
     configure(settings: Partial<OmtSettings>): Promise<{ ok: true; status: OmtStatus }>
     /** Окно звука OMT: кусок звука зала, 32 бит float по каналам подряд. */
     sendAudio(chunk: { sampleRate: number; channels: number; frames: number; data: Float32Array }): void
+  }
+  /** Syphon для Resolume/OBS (macOS, dev): настройки + фактический статус. */
+  syphon: {
+    status(): Promise<SyphonStatus>
+    configure(settings: Partial<SyphonSettings>): Promise<
+      { ok: true; status: SyphonStatus } | { ok: false; error: string; status: SyphonStatus }
+    >
   }
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */

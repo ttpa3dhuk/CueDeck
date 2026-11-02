@@ -1074,9 +1074,36 @@ export const EN: Record<string, string> = {
   '{name}: площадка обрывает соединение сразу — похоже, эфир там завершён или ключ сменился':
     '{name}: the destination keeps closing the connection right away — the broadcast there is likely over, or the key changed',
   'Ещё не было ни одного эфира': 'No broadcast has run yet',
-  // ── Настройки → Выходы OMT ──
+  // ── Настройки → Выходы (OMT и Syphon) ──
   'Выходы OMT': 'OMT outputs',
+  'Выходы': 'Outputs',
   'Источники в сети для vMix 29+ и OBS (плагин OMT).': 'Network sources for vMix 29+ and OBS (OMT plugin).',
+  'Локальный видеовыход для Resolume и OBS. Только картинка, без звука.':
+    'Local video output for Resolume and OBS. Picture only, no sound.',
+  'Работает в Solo без физического зала. OMT «Зал» и стрим занимают этот выход.':
+    'Works in Solo without a physical venue. OMT “Audience” and streaming occupy this output.',
+  'Имя источника': 'Source name',
+  'Работает': 'On',
+  'Запускается…': 'Starting…',
+  'Не запущен: {reason}. Выключи и включи снова, когда причина уйдёт.':
+    'Not running: {reason}. Turn it off and on again when the cause is gone.',
+  'Недоступно: {reason}': 'Unavailable: {reason}',
+  'в этой сборке Syphon ещё не готов': 'Syphon is not ready in this build yet',
+  'только macOS': 'macOS only',
+  'не найден модуль Syphon': 'the Syphon module is missing',
+  'включён тестовый GPU-режим': 'the GPU test mode is on',
+  'включён CPU-мост': 'the CPU bridge is on',
+  'нужна раскладка Solo': 'Solo layout required',
+  'открыт физический зал': 'the physical audience window is open',
+  'выход зала уже занят': 'the audience output is already in use',
+  'идёт трансляция': 'streaming is running',
+  'включён OMT «Зал»': 'the OMT “Audience” output is on',
+  'выход ещё завершает предыдущий кадр': 'the output is still finishing the previous frame',
+  'предыдущий кадр не завершился': 'the previous frame did not complete',
+  'не удалось запустить': 'could not start',
+  'неизвестная причина': 'unknown reason',
+  'Не удалось изменить настройку Syphon': 'Could not change the Syphon setting',
+  'Не удалось изменить имя Syphon': 'Could not change the Syphon name',
   'OMT в CueDeck есть только на macOS и Windows': 'OMT in CueDeck is available on macOS and Windows only',
   'нет файла {path}': 'file not found: {path}',
   'не удалось создать источник OMT': 'could not create the OMT source',

@@ -58,7 +58,7 @@ vi.mock('../src/main/syphon-gpu-publisher.js', () => ({
     source: any
     onFatal: any
     start = vi.fn()
-    destroyNow = vi.fn()
+    stopAndWait = vi.fn(async () => ({ released: true, timedOut: false }))
     status = vi.fn(() => ({ failed: false, disposed: false, sawTexture: true, missingTexturePaints: 0, inFlight: false, firstTextureAtMs: 10, width: 1920, height: 1080 }))
     constructor(options: any, source: any, onFatal: any) {
       this.options = options
@@ -98,7 +98,7 @@ function reset(): void {
 beforeEach(reset)
 
 describe('GPU audience mode', () => {
-  it('uses the single audience ghost, actual audience factory, and explicit 1920x1080 target', () => {
+  it('uses the single audience ghost, actual audience factory, and explicit 1920x1080 target', async () => {
     const mode = new GpuAudienceMode()
     expect(mode.start()).toEqual({ ok: true })
     expect(h.acquireGhost).toHaveBeenCalledWith('audience', 'gpu-audience', expect.any(Function), 'gpu-audience')
@@ -110,8 +110,8 @@ describe('GPU audience mode', () => {
     expect(h.loadGpuAudiencePage).toHaveBeenCalledWith(h.win)
     expect(isGpuAudienceActive()).toBe(true)
     expect(mode.status()).toMatchObject({ active: true, target: { width: 1920, height: 1080 }, actual: { width: 1920, height: 1080 } })
-    mode.stop('test')
-    expect(Publisher.instances[0].destroyNow).toHaveBeenCalled()
+    await mode.stop('test')
+    expect(Publisher.instances[0].stopAndWait).toHaveBeenCalled()
     expect(h.releaseGhost).toHaveBeenCalledWith('audience', 'gpu-audience')
     expect(isGpuAudienceActive()).toBe(false)
     expect(mode.status().active).toBe(false)
@@ -139,7 +139,7 @@ describe('GPU audience mode', () => {
     expect(mode.start().ok).toBe(true)
     expect(isGpuAudienceActive()).toBe(true)
     expect(stopGpuAudienceForNormalOutput('stream')).toBe(true)
-    expect(Publisher.instances[0].destroyNow).toHaveBeenCalled()
+    expect(Publisher.instances[0].stopAndWait).toHaveBeenCalled()
     expect(h.releaseGhost).toHaveBeenCalledWith('audience', 'gpu-audience')
     expect(isGpuAudienceActive()).toBe(false)
     expect(h.win.destroy).toHaveBeenCalled()
@@ -150,7 +150,7 @@ describe('GPU audience mode', () => {
     expect(mode.start().ok).toBe(true)
     h.state.layout = 'operator-speaker-audience'
     for (const fn of h.listeners) fn(h.state)
-    expect(Publisher.instances[0].destroyNow).toHaveBeenCalled()
+    expect(Publisher.instances[0].stopAndWait).toHaveBeenCalled()
     expect(isGpuAudienceActive()).toBe(false)
 
     reset()
@@ -158,7 +158,7 @@ describe('GPU audience mode', () => {
     expect(streamMode.start().ok).toBe(true)
     h.state.stream.running = true
     for (const fn of h.listeners) fn(h.state)
-    expect(Publisher.instances[0].destroyNow).toHaveBeenCalled()
+    expect(Publisher.instances[0].stopAndWait).toHaveBeenCalled()
     expect(isGpuAudienceActive()).toBe(false)
 
     reset()
@@ -166,7 +166,7 @@ describe('GPU audience mode', () => {
     expect(omtMode.start().ok).toBe(true)
     h.state.omt.enabled.program = true
     for (const fn of h.listeners) fn(h.state)
-    expect(Publisher.instances[0].destroyNow).toHaveBeenCalled()
+    expect(Publisher.instances[0].stopAndWait).toHaveBeenCalled()
     expect(isGpuAudienceActive()).toBe(false)
   })
 })

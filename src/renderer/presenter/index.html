@@ -537,7 +537,7 @@
             <button data-section="ui">Интерфейс</button>
             <button data-section="lo">PPTX / LibreOffice</button>
             <button data-section="remote">Внешнее управление</button>
-            <button data-section="omt">Выходы OMT</button>
+            <button data-section="omt">Выходы</button>
             <button data-section="midi">MIDI</button>
           </nav>
           <div class="settings-body">
@@ -852,8 +852,10 @@
     </div>
             </section>
             <section class="settings-section hidden" data-section="omt">
-              <p class="audio-hint">Источники в сети для vMix 29+ и OBS (плагин OMT).</p>
-              <div id="omt-section" class="omt-list">
+              <div class="output-group">
+                <h3 class="output-title">OMT</h3>
+                <p class="audio-hint">Источники в сети для vMix 29+ и OBS (плагин OMT).</p>
+                <div id="omt-section" class="omt-list">
                 <div class="omt-row" data-omt="timer">
                   <label class="windowed-label">
                     <input class="omt-on" type="checkbox" />
@@ -922,7 +924,25 @@
                   </select>
                   <span class="omt-status remote-status"></span>
                 </div>
-                <p id="omt-error" class="remote-status error hidden"></p>
+                  <p id="omt-error" class="remote-status error hidden"></p>
+                </div>
+              </div>
+              <div id="syphon-settings" class="output-group syphon-card">
+                <div class="output-title-row">
+                  <h3 class="output-title">Syphon</h3>
+                  <span class="output-badge">macOS</span>
+                </div>
+                <p class="audio-hint">Локальный видеовыход для Resolume и OBS. Только картинка, без звука.</p>
+                <div class="syphon-row">
+                  <label class="windowed-label">
+                    <input id="syphon-enabled" type="checkbox" />
+                    <span>Зал</span>
+                  </label>
+                  <input id="syphon-name" class="syphon-name" type="text" maxlength="64" spellcheck="false" aria-label="Имя источника" />
+                  <span class="syphon-resolution" title="Разрешение">1920×1080</span>
+                  <span id="syphon-status" class="syphon-status remote-status" role="status"></span>
+                </div>
+                <p class="audio-hint">Работает в Solo без физического зала. OMT «Зал» и стрим занимают этот выход.</p>
               </div>
             </section>
             <section class="settings-section hidden" data-section="midi">

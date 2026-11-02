@@ -34,7 +34,7 @@ import { getLang, t, type Lang } from '../../shared/i18n'
 import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
 import { OMT_OUTPUTS } from '../../shared/types'
-import type { ListMode, OmtFps, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, UiTheme, VenueProfile } from '../../shared/types'
+import type { ListMode, OmtFps, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, SyphonReason, SyphonStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL, SUPPORT_URL } from '../../preload/api'
 import { initStreamUi } from './stream-ui'
 import { setupSettingsWindow } from './settings-window'
@@ -3716,6 +3716,7 @@ function setupOperatorControls(): void {
   subscribe((s, patch) => {
     if (patch?.remote && !settingsModal.classList.contains('hidden')) renderRemoteStatus(s.remote)
     if (patch?.omt && !settingsModal.classList.contains('hidden')) renderOmtStatus(s.omt)
+    if (patch?.syphon && !settingsModal.classList.contains('hidden')) renderSyphonStatus(s.syphon)
     if (patch?.omt) renderOmtButton(s.omt)
   })
   renderOmtButton(getState().omt)
@@ -5151,6 +5152,7 @@ function openSettings(section: SettingsSection = 'screens'): void {
   }
   wireRemoteSection(getState().remote)
   wireOmtSection(getState().omt)
+  wireSyphonSection(getState().syphon)
   showSettingsSection(section)
   settingsModal.classList.remove('hidden')
   settingsWindow?.onOpen()
@@ -5748,6 +5750,106 @@ function renderOmtStatus(o: OmtStatus): void {
 
 function omtLabel(id: OmtOutputId): string {
   return id === 'timer' ? t('Таймер') : id === 'program' ? t('Зал') : t('Суфлёр')
+}
+
+// ── Syphon (main/syphon-gpu-audience.ts) ────────────────────────────────────
+// Настройка одна: включён ли выход и как зовётся источник. Статус — фактический:
+// requested enabled может быть true, пока выход заблокирован OMT/стримом/залом.
+
+function syphonReasonText(reason: SyphonReason | null): string {
+  switch (reason) {
+    case 'packaged': return t('в этой сборке Syphon ещё не готов')
+    case 'platform': return t('только macOS')
+    case 'native-missing': return t('не найден модуль Syphon')
+    case 'synthetic': return t('включён тестовый GPU-режим')
+    case 'cpu-bridge': return t('включён CPU-мост')
+    case 'layout': return t('нужна раскладка Solo')
+    case 'physical-audience': return t('открыт физический зал')
+    case 'audience-lease': return t('выход зала уже занят')
+    case 'stream': return t('идёт трансляция')
+    case 'omt-program': return t('включён OMT «Зал»')
+    case 'busy': return t('выход ещё завершает предыдущий кадр')
+    case 'stop-timeout': return t('предыдущий кадр не завершился')
+    case 'runtime': return t('внутренняя ошибка')
+    case 'start-refused': return t('не удалось запустить')
+    default: return t('неизвестная причина')
+  }
+}
+
+function renderSyphonStatus(syphon: SyphonStatus): void {
+  const card = document.getElementById('syphon-settings')
+  if (!card) return
+  card.classList.toggle('hidden', window.api.platform !== 'darwin')
+  const enabled = $<HTMLInputElement>('syphon-enabled')
+  const name = $<HTMLInputElement>('syphon-name')
+  const status = $('syphon-status')
+  const unavailable = syphon.state === 'unavailable'
+  enabled.checked = syphon.enabled
+  enabled.disabled = unavailable
+  name.disabled = unavailable
+  if (document.activeElement !== name) name.value = syphon.name
+  card.classList.toggle('off', !syphon.enabled || syphon.state === 'off' ||
+    syphon.state === 'blocked' || syphon.state === 'error')
+  status.className = 'syphon-status remote-status'
+  status.title = syphon.detail ?? ''
+  if (syphon.state === 'on') {
+    status.classList.add('on')
+    status.textContent = t('Работает')
+  } else if (syphon.state === 'starting') {
+    status.textContent = t('Запускается…')
+  } else if (syphon.state === 'off') {
+    status.textContent = t('Выключено')
+  } else if (syphon.state === 'blocked') {
+    status.classList.add('warn')
+    status.textContent = t('Не запущен: {reason}. Выключи и включи снова, когда причина уйдёт.', { reason: syphonReasonText(syphon.reason) })
+  } else if (syphon.state === 'error') {
+    status.classList.add('error')
+    status.textContent = t('Ошибка: {error}', {
+      error: syphon.detail ?? syphonReasonText(syphon.reason),
+    })
+  } else {
+    status.classList.add('error')
+    status.textContent = t('Недоступно: {reason}', { reason: syphonReasonText(syphon.reason) })
+  }
+}
+
+function wireSyphonSection(syphon: SyphonStatus): void {
+  renderSyphonStatus(syphon)
+  const enabled = $<HTMLInputElement>('syphon-enabled')
+  const name = $<HTMLInputElement>('syphon-name')
+  enabled.onchange = () => {
+    void (async () => {
+      enabled.disabled = true
+      try {
+        const result = await window.api.syphon.configure({ enabled: enabled.checked })
+        renderSyphonStatus(result.status)
+      } catch {
+        renderSyphonStatus(getState().syphon)
+        showBanner(t('Не удалось изменить настройку Syphon'), 5000)
+      }
+    })()
+  }
+  name.onchange = () => {
+    void (async () => {
+      const value = name.value.trim()
+      if (!value) {
+        renderSyphonStatus(getState().syphon)
+        return
+      }
+      name.disabled = true
+      try {
+        const result = await window.api.syphon.configure({ name: value })
+        renderSyphonStatus(result.status)
+      } catch {
+        renderSyphonStatus(getState().syphon)
+        showBanner(t('Не удалось изменить имя Syphon'), 5000)
+      }
+    })()
+  }
+  name.onkeydown = (event) => {
+    event.stopPropagation()
+    if (event.key === 'Enter') name.blur()
+  }
 }
 
 /**
