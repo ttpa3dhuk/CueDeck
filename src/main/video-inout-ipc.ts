@@ -22,7 +22,7 @@ export function registerVideoInOutIpc(ipc: VideoIpcRegistrar, controller: VideoI
   ipc.handle('video:set-range', (_event, payload: { deck?: VideoDeck; edge?: VideoRangeEdge } | null) => {
     const deck: VideoDeck = payload?.deck === 'preview' ? 'preview' : 'program'
     const edge = payload?.edge
-    if (edge !== 'in' && edge !== 'out' && edge !== 'reset') return { ok: false, code: 'invalid-range' }
+    if (edge !== 'in' && edge !== 'out' && edge !== 'reset' && edge !== 'clear-in' && edge !== 'clear-out') return { ok: false, code: 'invalid-range' }
     return controller.setRange(deck, edge)
   })
 }

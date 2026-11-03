@@ -5,6 +5,7 @@ import { sanitizeStoredVideoRange } from '../shared/video-range.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { DEFAULT_TAKE_FADE_MS, sanitizeTakeFadeMs } from '../shared/take-transition.js'
 import Store from 'electron-store'
+import { startupSettings, DEFAULT_STARTUP_SETTINGS, type StartupSettings, type SessionCheckpoint } from '../shared/startup-settings.js'
 import { audienceTimerConfig, DEFAULT_AUDIENCE_TIMER, type AudienceTimerConfig } from '../shared/audience-timer.js'
 import { DEFAULT_MATERIAL_SETTINGS, sanitizeMaterialSettings, type MaterialSettings } from '../shared/material-settings.js'
 import { screen } from 'electron'
@@ -43,6 +44,9 @@ interface SavedMapping {
 }
 
 interface PersistedShape {
+  startup: StartupSettings
+  sessionCheckpoint?: SessionCheckpoint
+  restorePending: boolean
   audienceTimer: Partial<AudienceTimerConfig>
   materialSettings: MaterialSettings
   mappings: Record<string, SavedMapping>
@@ -117,6 +121,8 @@ interface PersistedShape {
 // Leave cue flags absent until first restore so pre-hall settings can migrate.
 const { tickEnabled: _tick, gongEnabled: _gong, loop: _loop, ...audienceTimerDefaults } = DEFAULT_AUDIENCE_TIMER
 const STORE_DEFAULTS: PersistedShape = {
+  startup: { ...DEFAULT_STARTUP_SETTINGS },
+  restorePending: false,
   audienceTimer: audienceTimerDefaults,
   materialSettings: { ...DEFAULT_MATERIAL_SETTINGS },
   mappings: {},
@@ -179,6 +185,13 @@ function store(): Store<PersistedShape> {
   }
   return _store
 }
+
+export const getStartupSettings = (): StartupSettings => startupSettings(store().get('startup'))
+export const setStartupSettings = (value: StartupSettings): void => { store().set('startup', startupSettings(value)) }
+export const getSessionCheckpoint = (): SessionCheckpoint | undefined => store().get('sessionCheckpoint')
+export const setSessionCheckpoint = (value: SessionCheckpoint): void => { store().set('sessionCheckpoint', value) }
+export const getRestorePending = (): boolean => store().get('restorePending') === true
+export const setRestorePending = (value: boolean): void => { store().set('restorePending', value) }
 
 function topologyKey(displayIds: number[]): string {
   return [...displayIds].sort((a, b) => a - b).join(',')
@@ -690,7 +703,7 @@ export function cleanOmtName(v: unknown, def: string): string {
   return s || def
 }
 
-/** Разрешение выхода OMT: только 720 / 1080 / 2160, иначе дефолт. */
+/** Разрешение выхода OMT: только 720 / 1080, иначе дефолт. */
 export function cleanOmtResolution(v: unknown, def: OmtResolution): OmtResolution {
   return OMT_RESOLUTIONS.includes(v as OmtResolution) ? (v as OmtResolution) : def
 }

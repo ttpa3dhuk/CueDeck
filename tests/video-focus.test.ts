@@ -43,6 +43,12 @@ describe('frame-step focus contract', () => {
 })
 
 describe('I/O range keys', () => {
+  it('clears only the matching edge with Alt/Option and preserves focus guards', () => {
+    expect(resolveRangeActionForKey({ ...base, code: 'KeyI', altKey: true })).toEqual({ deck: 'program', edge: 'clear-in' })
+    expect(resolveRangeActionForKey({ ...base, code: 'KeyO', altKey: true, focusedDeck: 'preview' })).toEqual({ deck: 'preview', edge: 'clear-out' })
+    expect(resolveRangeActionForKey({ ...base, code: 'KeyI', altKey: true, focusedDeck: null })).toBeNull()
+    expect(resolveRangeActionForKey({ ...base, code: 'KeyI', altKey: true, ctrlKey: true })).toBeNull()
+  })
   it('sets In/Out on the focused video deck at the playhead', () => {
     expect(resolveRangeActionForKey({ ...base, code: 'KeyI' })).toEqual({ deck: 'program', edge: 'in' })
     expect(resolveRangeActionForKey({ ...base, code: 'KeyO', focusedDeck: 'preview' })).toEqual({ deck: 'preview', edge: 'out' })

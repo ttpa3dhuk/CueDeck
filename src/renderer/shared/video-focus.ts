@@ -35,13 +35,13 @@ export interface RangeKeyInput extends Omit<FrameStepKeyInput, 'code'> {
  * boundary testable and prevents accidental edits while slides/typing are active.
  */
 export function resolveRangeActionForKey(input: RangeKeyInput): { deck: VideoDeck; edge: VideoRangeEdge } | null {
-  if (input.ctrlKey || input.metaKey || input.altKey || input.shiftKey) return null
+  if (input.ctrlKey || input.metaKey || input.shiftKey) return null
   if (!input.focusedDeck) return null
   const deck = input.focusedDeck === 'program'
     ? (input.hasProgramVideo ? 'program' : null)
     : (input.hasPreviewVideo ? 'preview' : null)
   if (!deck) return null
-  if (input.code === 'KeyI') return { deck, edge: 'in' }
-  if (input.code === 'KeyO') return { deck, edge: 'out' }
+  if (input.code === 'KeyI') return { deck, edge: input.altKey ? 'clear-in' : 'in' }
+  if (input.code === 'KeyO') return { deck, edge: input.altKey ? 'clear-out' : 'out' }
   return null
 }

@@ -9,6 +9,20 @@ import type { FrameTimelineProbeResult } from '../src/shared/frame-timeline'
 
 const T0 = 1_000_000
 
+it.each(['program', 'preview'] as const)('clears In and Out independently on %s', deck => {
+  const store = makeStore({ playlist: [entry({ inSec: 5, outSec: 20 })],
+    program: { anchorSec: 10, range: { inSec: 5, outSec: 20 } },
+    preview: { anchorSec: 10, range: { inSec: 5, outSec: 20 } } })
+  const controller = new VideoInOutController(store, { get: okFrames([0, 1]) }, () => undefined)
+  expect(controller.setRange(deck, 'clear-in', T0).ok).toBe(true)
+  const current = () => deck === 'program' ? store.get().video : store.get().preview.video
+  expect(current().range).toEqual({ inSec: 0, outSec: 20 })
+  expect(current().anchorSec).toBe(10)
+  expect(controller.setRange(deck, 'clear-out', T0).ok).toBe(true)
+  expect(current().range).toBeNull()
+  expect(current().anchorSec).toBe(10)
+})
+
 function entry(partial: Partial<PlaylistEntry> = {}): PlaylistEntry {
   return {
     id: 'a', kind: 'video', filePath: '/same.mp4', fileName: 'same.mp4',

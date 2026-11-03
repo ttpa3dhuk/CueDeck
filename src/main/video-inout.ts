@@ -306,6 +306,10 @@ export class VideoInOutController {
       const outSec = current?.outSec ?? duration
       if (playhead >= outSec - RANGE_EPSILON) return { ok: false, code: 'invalid-range' }
       next = normalizeVideoRange({ inSec: playhead, outSec }, duration)
+    } else if (edge === 'clear-in') {
+      next = normalizeVideoRange({ inSec: 0, outSec: current?.outSec ?? duration }, duration)
+    } else if (edge === 'clear-out') {
+      next = normalizeVideoRange({ inSec: current?.inSec ?? 0, outSec: duration }, duration)
     } else if (edge === 'out') {
       const inSec = current?.inSec ?? 0
       if (playhead <= inSec + RANGE_EPSILON) return { ok: false, code: 'invalid-range' }

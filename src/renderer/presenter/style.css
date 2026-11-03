@@ -1506,6 +1506,15 @@ body[data-role="operator"] #current-slide {
 .video-timeline .timeline-range.hidden {
   display: none;
 }
+.video-timeline .timeline-marker::before {
+  position: absolute;
+  top: -7px;
+  color: var(--text);
+  font: 700 8px/9px system-ui, sans-serif;
+}
+.video-timeline .timeline-marker.in::before { content: 'IN'; left: 0; }
+.video-timeline .timeline-marker.out { transform: translateX(-100%); }
+.video-timeline .timeline-marker.out::before { content: 'OUT'; right: 0; }
 body[data-role="operator"] [data-frame-player]:focus,
 body[data-role="operator"] [data-frame-player]:focus-within {
   outline: 2px solid var(--accent);
@@ -2996,6 +3005,57 @@ body[data-role="speaker"] .timer { font-family: var(--speaker-timer-font, system
 #report-materials-list li button { flex-shrink: 0; padding: 2px 8px; }
 
 /* Program audio belongs to transport, outside the on-air picture. */
+#startup-mode {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: 13px/18px Arial, sans-serif;
+  height: 30px;
+  padding: 5px 12px;
+  max-width: 100%;
+}
+.autosave-row, .autosave-options { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.autosave-row button { white-space: nowrap; }
+.autosave-row button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.autosave-options button:disabled { opacity: .45; }
+
+/* Match the settings navigation: one body/control size in this section. */
+.settings-section[data-section="ui"] {
+  font: 13px/1.5 Arial, sans-serif;
+  gap: 24px;
+}
+.settings-section[data-section="ui"] .live-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+}
+.settings-section[data-section="ui"] .live-field-label {
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.settings-section[data-section="ui"] .audio-hint {
+  margin: 0;
+  font: inherit;
+  color: var(--muted);
+}
+.settings-section[data-section="ui"] button,
+.settings-section[data-section="ui"] select {
+  box-sizing: border-box;
+  height: 30px;
+  font: 13px/18px Arial, sans-serif;
+  padding: 5px 12px;
+  border-radius: 6px;
+}
+.settings-section[data-section="ui"] .windowed-label { font: inherit; min-height: 24px; }
+.settings-section[data-section="ui"] input[type="radio"] { width: 14px; height: 14px; margin: 0; }
+
 body[data-role="operator"] #program-playback > #current-meter {
   position: relative;
   right: auto;

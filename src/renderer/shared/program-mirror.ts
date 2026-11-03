@@ -50,6 +50,8 @@ export async function configureProgramMirror(windowRole: Role, getState: () => A
 }
 
 export function loadProgramVideo(video: HTMLVideoElement, key: string): void {
+  // Audio metering needs an origin-clean element even without frame sharing.
+  video.crossOrigin = 'anonymous'
   if (!enabled) { video.src = key; video.load(); return }
   const source = role === owner()
   if (active?.video === video && active.key === key && active.source === source) return

@@ -564,6 +564,7 @@ export function elementAudioStream(el: HTMLMediaElement | null): MediaStream | n
 
 export class LiveMeter {
   private stream: MediaStream | null = null
+  private track: MediaStreamTrack | null = null
   private source: MediaStreamAudioSourceNode | null = null
   private analyser: AnalyserNode | null = null
   private buf = new Float32Array(METER_FFT)
@@ -572,10 +573,12 @@ export class LiveMeter {
 
   /** Идемпотентно: вызывается на каждом тике UI. */
   attach(stream: MediaStream | null): void {
-    if (stream === this.stream) return
+    const track = stream?.getAudioTracks().find(track => track.readyState !== 'ended') ?? null
+    if (stream === this.stream && track === this.track) return
     this.detach()
     this.stream = stream
-    if (!stream || stream.getAudioTracks().length === 0) return
+    this.track = track
+    if (!stream || !track) return
 
     const ctx = audioContext()
     if (!ctx) return
@@ -626,6 +629,7 @@ export class LiveMeter {
     this.source = null
     this.analyser = null
     this.stream = null
+    this.track = null
     this.value = 0
   }
 }

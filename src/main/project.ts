@@ -113,7 +113,19 @@ export async function loadProjectFile(path: string): Promise<LoadedProject> {
   }
 }
 
-export async function saveProjectFile(
+let saveChain: Promise<void> = Promise.resolve()
+
+/** Manual saves and autosaves share one queue; atomic renames cannot race. */
+export function saveProjectFile(
+  path: string,
+  data: { playlist: PlaylistEntry[]; playlistFolders?: PlaylistFolder[]; keyVisualPath: string | null; audienceTimer?: AudienceTimerConfig },
+): Promise<void> {
+  const write = saveChain.then(() => writeProjectFile(path, data))
+  saveChain = write.catch(() => undefined)
+  return write
+}
+
+async function writeProjectFile(
   path: string,
   data: { playlist: PlaylistEntry[]; playlistFolders?: PlaylistFolder[]; keyVisualPath: string | null; audienceTimer?: AudienceTimerConfig },
 ): Promise<void> {

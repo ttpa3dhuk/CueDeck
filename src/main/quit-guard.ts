@@ -3,6 +3,7 @@ import { companionGoodbye } from './remote/companion-push.js'
 import { shutdownStream } from './stream/streamer.js'
 import { flushPendingWrites, saveProject } from './ipc.js'
 import { markCleanExit } from './diag.js'
+import { finishSessionCleanly } from './session-lifecycle.js'
 import { t } from '../shared/i18n.js'
 import { isProjectTransferRunning } from './project-transfer.js'
 
@@ -92,6 +93,7 @@ export async function requestQuit(opts: { relaunch?: boolean } = {}): Promise<vo
   shutdownStream()
   await companionGoodbye()
   await flushPendingWrites()
+  finishSessionCleanly()
   markCleanExit()
   if (relaunch) app.relaunch()
   app.exit(0)

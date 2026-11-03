@@ -1,4 +1,5 @@
 import { FADE_MAX_MS, type TakeTransition } from './take-transition.js'
+import type { StartupSettings } from './startup-settings.js'
 import type { ReportMarkerContext } from './report-recovery.js'
 /**
  * Single source of truth for the state types shared by the main process and
@@ -132,7 +133,7 @@ export interface FrameStepIdentity {
   sha1: string | null
 }
 
-export type VideoRangeEdge = 'in' | 'out' | 'reset'
+export type VideoRangeEdge = 'in' | 'out' | 'reset' | 'clear-in' | 'clear-out'
 
 export type VideoRangeError = 'not-video' | 'no-entry' | 'list-unsupported' | 'no-duration' | 'invalid-range'
 
@@ -301,6 +302,9 @@ export interface ProjectTransferStatus {
 }
 
 export interface AppState {
+  startup: StartupSettings
+  recoveryStartup: boolean
+  autosaveError: string | null
   /** Session-only local audience visibility; capture and playback keep running. */
   audienceOutputEnabled: boolean
   testScreen: import('./test-screen.js').TestScreenState
@@ -466,18 +470,18 @@ export type OmtOutputId = 'timer' | 'program' | 'prompter'
 
 export const OMT_OUTPUTS: readonly OmtOutputId[] = ['timer', 'program', 'prompter']
 
-/** Разрешение выхода — высота кадра 16:9: 720p, 1080p, 4K. */
-export type OmtResolution = 720 | 1080 | 2160
+/** Разрешение выхода — высота кадра 16:9: 720p, 1080p. */
+export type OmtResolution = 720 | 1080
 
-export const OMT_RESOLUTIONS: readonly OmtResolution[] = [720, 1080, 2160]
+export const OMT_RESOLUTIONS: readonly OmtResolution[] = [720, 1080]
 
 /**
  * Частота кадров выхода. Неподвижную картинку мы повторяем с этой частотой,
  * а кодек VMX сжимает каждый кадр целиком — поток пропорционален частоте.
  */
-export type OmtFps = 15 | 25 | 30 | 50 | 60
+export type OmtFps = 15 | 25 | 30
 
-export const OMT_FPS: readonly OmtFps[] = [15, 25, 30, 50, 60]
+export const OMT_FPS: readonly OmtFps[] = [15, 25, 30]
 
 export interface OmtSettings {
   /** Какие выходы отдавать в сеть. */
@@ -657,9 +661,9 @@ export interface StreamDestination {
 
 export interface StreamSettings {
   destinations: StreamDestination[]
-  /** Высота кадра, ширина — по 16:9: 480/720/1080/1440/2160. */
+  /** Высота кадра, ширина — по 16:9: 480/720/1080. */
   height: number
-  /** 25/30/50/60. */
+  /** 25/30. */
   fps: number
   videoKbps: number
   audioKbps: number
@@ -674,8 +678,8 @@ export interface StreamSettings {
   inputGainDb: number
 }
 
-export const STREAM_HEIGHTS = [480, 720, 1080, 1440, 2160] as const
-export const STREAM_FPS = [25, 30, 50, 60] as const
+export const STREAM_HEIGHTS = [480, 720, 1080] as const
+export const STREAM_FPS = [25, 30] as const
 export const STREAM_VIDEO_KBPS = [1500, 2500, 3000, 4500, 6000, 8000, 10000, 12000, 16000, 20000, 30000, 40000] as const
 export const STREAM_AUDIO_KBPS = [96, 128, 160, 192, 256, 320] as const
 export const STREAM_KEYFRAME_SEC = [1, 2, 4] as const

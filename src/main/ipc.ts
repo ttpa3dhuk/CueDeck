@@ -4,6 +4,7 @@ import { materialTakeTimer, sanitizeMaterialSettings, validMaterialDuration } fr
 import { setMaterialSettings } from './display-mapping.js'
 import { initialSlideVideo } from '../shared/slide-video.js'
 import { slideNavigationPatch, sanitizeSlideFadeMs } from '../shared/slide-transition.js'
+import { beginSessionRestore, finishSessionRestore, beginEmptyProject, configureStartup, flushSessionCheckpoint, initSessionLifecycle, shouldRestoreAtStartup } from './session-lifecycle.js'
 import { recoveryTakeFrame } from '../shared/recovery-take.js'
 import { createClickerNavigation } from './clicker-navigation.js'
 import { audienceTimerConfig, createAudienceTimer } from '../shared/audience-timer.js'
@@ -440,7 +441,7 @@ function cancelFrameProbeIfUnused(path: string | null): void {
 
 async function openFile(
   filePath: string,
-  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; startOnTake?: boolean; transition?: TakeTransition } = {},
+  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; startOnTake?: boolean; transition?: TakeTransition; restorePaused?: boolean } = {},
 ): Promise<OpenPdfResult> {
   // Любая загрузка в эфир мимо проигрывателя снимает список с эфира — иначе
   // его таймер продолжил бы подменять картинку под уже другим материалом.
@@ -496,7 +497,10 @@ async function openFile(
         muted: store.get().video.muted,
         range: entryRange,
       },
-      ...(info.kind === 'pptx' ? initialSlideVideo(info.kind, info.slideMedia, 1, store.get().video.muted) : {}),
+      ...(info.kind === 'pptx' ? (() => {
+        const initial = initialSlideVideo(info.kind, info.slideMedia, 1, store.get().video.muted)
+        return opts.restorePaused && initial.video ? { ...initial, video: { ...initial.video, playing: false, anchorAt: null } } : initial
+      })() : {}),
     })
     store.patchTimer(typeof opts.durationMs === 'number'
       ? materialTakeTimer(opts.durationMs, info.kind, store.get().timerMode, opts.startOnTake === true && store.get().materialSettings.autoStartTimer, Date.now())
@@ -775,7 +779,60 @@ export async function saveProject(
   }
 }
 
+async function restoreLastSession(): Promise<OpenPdfResult & { hadSession: boolean }> {
+  const saved = beginSessionRestore()
+  let success = false
+  try {
+    stopListPlayback()
+    const playlist = saved?.playlist ?? getPlaylist()
+    const folders = saved?.playlistFolders ?? getPlaylistFolders()
+    const id = saved ? saved.program.playlistId : getCurrentPlaylistId()
+    const path = saved ? saved.program.path : getLastPdfPath()
+    store.patch({ playlist: normalizeFolderPlaylist(playlist, folders), playlistFolders: folders,
+      currentPlaylistId: id, keyVisualPath: saved ? saved.keyVisualPath : getKeyVisualPath(),
+      projectPath: saved ? saved.projectPath : getProjectPath(), audienceTimer: createAudienceTimer(getAudienceTimer()) })
+    void refreshMissingFiles()
+    let result: OpenPdfResult = { ok: true }
+    if (path) result = await openFile(path, { playlistId: id, restorePaused: true })
+    if (!result.ok) return { ...result, hadSession: true }
+    if (saved) {
+      if (path) {
+        const state = store.get()
+        const slide = Math.max(1, Math.min(state.totalSlides || 1, saved.program.slide))
+        store.patch({ currentSlide: slide, video: { ...state.video, ...saved.program.video, playing: false, anchorAt: null } })
+      }
+      if (saved.preview.path) {
+        const previewResult = await loadPreview(saved.preview.path, { playlistId: saved.preview.playlistId })
+        if (!previewResult.ok) return { ...previewResult, hadSession: true }
+        const preview = store.get().preview
+        store.patchPreview({ currentSlide: Math.max(1, Math.min(preview.totalSlides || 1, saved.preview.slide)),
+          video: { ...preview.video, ...saved.preview.video, playing: false, anchorAt: null } })
+      }
+      store.patch({ timer: { ...saved.timer, running: false, startedAt: null },
+        audienceTimer: { ...createAudienceTimer(saved.audienceTimer), elapsedMs: saved.audienceTimer.elapsedMs, running: false, startedAt: null } })
+    }
+    success = true
+    if (path || playlist.length || folders.length) store.patch({ recoveryStartup: false })
+    return { ...result, hadSession: Boolean(path || playlist.length || folders.length) }
+  } finally { finishSessionRestore(success) }
+}
+
 export function registerIpcHandlers(): void {
+  initSessionLifecycle(async () => {
+    const state = store.get()
+    if (!state.projectPath) return
+    await saveProjectFile(state.projectPath, { playlist: state.playlist, playlistFolders: state.playlistFolders,
+      keyVisualPath: state.keyVisualPath, audienceTimer: audienceTimerConfig(state.audienceTimer) })
+  })
+  ipcMain.handle('session:configure-startup', (event, raw: unknown) => {
+    if (event.sender !== getOperatorWindow()?.webContents) throw new Error('Operator window required')
+    return configureStartup(raw)
+  })
+  ipcMain.handle('session:startup', async (event) => {
+    if (event.sender !== getOperatorWindow()?.webContents) throw new Error('Operator window required')
+    if (!shouldRestoreAtStartup()) return { ok: true, hadSession: false, recovery: store.get().recoveryStartup }
+    return { ...await restoreLastSession(), recovery: false }
+  })
   setRecoveryStager(async plan => {
     if (isProjectTransferRunning()) throw new Error(t('Дождись окончания сборки проекта'))
     const folderId = randomUUID()
@@ -2164,37 +2221,10 @@ export function registerIpcHandlers(): void {
   })
 
   /** Restores the last session: playlist, key visual, project path, and last open file. */
-  ipcMain.handle('session:restore', async (): Promise<OpenPdfResult & { hadSession: boolean }> => {
-    const lastPath = getLastPdfPath()
-    const savedPlaylist = getPlaylist()
-    const savedPlaylistId = getCurrentPlaylistId()
-    const savedKeyVisual = getKeyVisualPath()
-    const savedProjectPath = getProjectPath()
-
-    store.patch({
-      playlist: normalizeFolderPlaylist(savedPlaylist, getPlaylistFolders()),
-      playlistFolders: getPlaylistFolders(),
-      currentPlaylistId: savedPlaylistId,
-      keyVisualPath: savedKeyVisual,
-      projectPath: savedProjectPath,
-      audienceTimer: createAudienceTimer(getAudienceTimer()),
-    })
-
-    void refreshMissingFiles()
-
-    if (!lastPath) {
-      return { ok: true, hadSession: savedPlaylist.length > 0 || getPlaylistFolders().length > 0 }
-    }
-
-    const entry = savedPlaylistId ? savedPlaylist.find((e) => e.id === savedPlaylistId) : undefined
-    const result = await openFile(lastPath, {
-      playlistId: savedPlaylistId,
-      durationMs: entry?.durationMs,
-    })
-    return { ...result, hadSession: true }
-  })
+  ipcMain.handle('session:restore', () => restoreLastSession())
 
   ipcMain.handle('project:new', () => {
+    beginEmptyProject()
     stopListPlayback()
     // Intentionally do NOT clear persistent storage (lastPdfPath, playlist,
     // keyVisualPath, projectPath) — this keeps session:has-last returning true
@@ -2439,5 +2469,6 @@ export function registerIpcHandlers(): void {
 }
 
 export async function flushPendingWrites(): Promise<void> {
+  flushSessionCheckpoint()
   await notesWriter.flush()
 }

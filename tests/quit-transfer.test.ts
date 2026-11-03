@@ -5,6 +5,7 @@ const runtime = vi.hoisted(() => ({
   dialog: vi.fn(async () => ({ response: 1 })),
   exit: vi.fn(), relaunch: vi.fn(), flush: vi.fn(async () => {}),
   clean: vi.fn(), shutdown: vi.fn(), goodbye: vi.fn(async () => {}),
+  sessionClean: vi.fn(),
 }))
 vi.mock('electron', () => ({
   app: { exit: runtime.exit, relaunch: runtime.relaunch },
@@ -13,6 +14,7 @@ vi.mock('electron', () => ({
 }))
 vi.mock('../src/main/ipc', () => ({ flushPendingWrites: runtime.flush, saveProject: vi.fn(async () => ({ ok: true })) }))
 vi.mock('../src/main/diag', () => ({ markCleanExit: runtime.clean }))
+vi.mock('../src/main/session-lifecycle', () => ({ finishSessionCleanly: runtime.sessionClean }))
 vi.mock('../src/main/remote/companion-push', () => ({ companionGoodbye: runtime.goodbye }))
 vi.mock('../src/main/stream/streamer', () => ({ shutdownStream: runtime.shutdown }))
 vi.mock('../src/main/project-transfer', () => ({ isProjectTransferRunning: () => runtime.busy }))
@@ -27,9 +29,11 @@ describe('quit during project transfer', () => {
     expect(runtime.exit).not.toHaveBeenCalled()
     expect(runtime.flush).not.toHaveBeenCalled()
     expect(runtime.shutdown).not.toHaveBeenCalled()
+    expect(runtime.sessionClean).not.toHaveBeenCalled()
     runtime.busy = false
     await requestQuit()
     expect(runtime.exit).toHaveBeenCalledWith(0)
+    expect(runtime.sessionClean).toHaveBeenCalledOnce()
     expect(runtime.relaunch).not.toHaveBeenCalled()
   })
 

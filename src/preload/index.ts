@@ -334,6 +334,8 @@ const api: PresenterApi = {
     },
   },
   session: {
+    configureStartup: (settings) => ipcRenderer.invoke('session:configure-startup', settings),
+    startup: () => ipcRenderer.invoke('session:startup'),
     hasLast: () => ipcRenderer.invoke('session:has-last'),
     restore: () => ipcRenderer.invoke('session:restore'),
   },

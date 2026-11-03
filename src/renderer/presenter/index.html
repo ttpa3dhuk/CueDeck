@@ -611,6 +611,7 @@
               </div>
               <fieldset class="test-screen-settings">
                 <legend>Тестовый экран</legend>
+                <label class="windowed-label"><input id="startup-test-screen" type="checkbox" /> <span>Показывать автоматически при пустом шоу</span></label>
                 <button id="test-screen-toggle" aria-pressed="false">Показать тестовый экран</button>
               </fieldset>
               <div class="modal-actions">
@@ -619,7 +620,7 @@
               </div>
             </section>
             <section class="settings-section hidden" data-section="materials">
-              <p class="audio-hint">Время по умолчанию применяется только к новым записям. Для уже добавленных материалов выдели нужные карточки и выбери «Задать время…» в меню правой кнопки мыши.</p>
+              <p class="audio-hint">Время по умолчанию применяется только к новым записям. Для уже добавленных материалов выдели нужные карточки и выбери «Таймер материала…» в меню правой кнопки мыши.</p>
               <label class="live-field">Таймер новых записей, мин
                 <input id="material-default-minutes" type="number" min="0" max="999" step="1" value="0" />
               </label>
@@ -763,6 +764,22 @@
             </section>
             <section class="settings-section hidden" data-section="ui">
               <div class="live-field">
+                <span class="live-field-label">При запуске</span>
+                <select id="startup-mode"><option value="empty">Пустое шоу</option><option value="last">Последняя сессия</option></select>
+                <p class="audio-hint">Восстановление без запуска роликов и таймеров. После аварии восстановления программа откроется пустой.</p>
+              </div>
+              <div class="live-field">
+                <div class="autosave-row">
+                  <button id="project-autosave" type="button" aria-pressed="false">Автосохранение проекта</button>
+                  <div class="autosave-options" role="group" aria-label="Интервал автосохранения">
+                    <button type="button" data-autosave-minutes="15" aria-pressed="false">15 минут</button>
+                    <button type="button" data-autosave-minutes="30" aria-pressed="false">30 минут</button>
+                    <button type="button" data-autosave-minutes="60" aria-pressed="false">60 минут</button>
+                  </div>
+                </div>
+                <p class="audio-hint">Сначала сохрани проект в файл. Автосохранение обновляет этот файл; последняя сессия запоминается отдельно.</p>
+              </div>
+              <div class="live-field">
                 <span class="live-field-label">Тема окна</span>
                 <label class="windowed-label"><input type="radio" name="ui-theme" value="dark" /> <span>Тёмная</span></label>
                 <label class="windowed-label"><input type="radio" name="ui-theme" value="light" /> <span>Светлая</span></label>
@@ -865,14 +882,11 @@
                   <select class="omt-size">
                     <option value="720">720p</option>
                     <option value="1080">1080p</option>
-                    <option value="2160">4K</option>
                   </select>
                   <select class="omt-fps">
                     <option value="15">15 fps</option>
                     <option value="25">25 fps</option>
                     <option value="30">30 fps</option>
-                    <option value="50">50 fps</option>
-                    <option value="60">60 fps</option>
                   </select>
                   <span class="omt-status remote-status"></span>
                 </div>
@@ -889,14 +903,11 @@
                   <select class="omt-size">
                     <option value="720">720p</option>
                     <option value="1080">1080p</option>
-                    <option value="2160">4K</option>
                   </select>
                   <select class="omt-fps">
                     <option value="15">15 fps</option>
                     <option value="25">25 fps</option>
                     <option value="30">30 fps</option>
-                    <option value="50">50 fps</option>
-                    <option value="60">60 fps</option>
                   </select>
                   <span class="omt-status remote-status"></span>
                 </div>
@@ -913,14 +924,11 @@
                   <select class="omt-size">
                     <option value="720">720p</option>
                     <option value="1080">1080p</option>
-                    <option value="2160">4K</option>
                   </select>
                   <select class="omt-fps">
                     <option value="15">15 fps</option>
                     <option value="25">25 fps</option>
                     <option value="30">30 fps</option>
-                    <option value="50">50 fps</option>
-                    <option value="60">60 fps</option>
                   </select>
                   <span class="omt-status remote-status"></span>
                 </div>

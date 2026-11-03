@@ -2,6 +2,7 @@ import { setOperatorApplicationMenu } from './application-menu.js'
 import { registerTestScreenIpc } from './test-screen.js'
 import { registerAudienceOutputIpc } from './audience-output.js'
 import { startupTestScreenAllowed } from '../shared/test-screen.js'
+import { getStartupSettings, getRestorePending } from './display-mapping.js'
 import { app, BrowserWindow, ipcMain, Menu, protocol, screen, session, shell, systemPreferences } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
@@ -106,7 +107,7 @@ store.onChange((state, patch) => {
 protocol.registerSchemesAsPrivileged([
   {
     scheme: MEDIA_SCHEME,
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: programMirrorEnabled },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true },
   },
 ])
 
@@ -120,10 +121,10 @@ protocol.registerSchemesAsPrivileged([
  * can't read arbitrary files.
  */
 async function handleMediaRequest(request: Request): Promise<Response> {
-  const corsHeaders: Record<string, string> = programMirrorEnabled ? {
+  const corsHeaders: Record<string, string> = {
     'Access-Control-Allow-Origin': process.env.ELECTRON_RENDERER_URL
       ? new URL(process.env.ELECTRON_RENDERER_URL).origin : 'null',
-  } : {}
+  }
   const state = store.get()
   const url = new URL(request.url)
   const segments = url.pathname.split('/').filter(Boolean)
@@ -554,7 +555,7 @@ app.whenReady().then(async () => {
 
   // Restore preferences (timer settings, UI prefs) — session content loaded on demand via "Последний"
   store.patch({
-    testScreen: { automatic: startupTestScreenAllowed({ playlist: getPlaylist(), lastPath: getLastPdfPath(), projectPath: getProjectPath(), keyVisualPath: getKeyVisualPath() }), manual: false },
+    testScreen: { automatic: getStartupSettings().autoTestScreen && !getRestorePending() && startupTestScreenAllowed({ playlist: getPlaylist(), lastPath: getLastPdfPath(), projectPath: getProjectPath(), keyVisualPath: getKeyVisualPath() }), manual: false },
     timer: { ...store.get().timer, durationMs: getLastDurationMs() },
     materialSettings: getMaterialSettings(),
     audienceTimer: createAudienceTimer(getAudienceTimer()),

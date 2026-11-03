@@ -472,15 +472,16 @@ function paintMeter(
   meter: LiveMeter,
   /** Уровень из окна-озвучивателя (IPC); используется, когда мерить локально нечего. */
   remote?: { level: number; at: number },
+  keepVisible = false,
 ): void {
   if (!meterEl) return
   // Пакеты приходят 10 раз в секунду; пауза дольше секунды = звука в эфире нет.
   const remoteFresh = remote !== undefined && Date.now() - remote.at < 1000
-  if (!meter.hasAudio() && !remoteFresh) {
+  if (!meter.hasAudio() && !remoteFresh && !keepVisible) {
     meterEl.classList.add('hidden')
     return
   }
-  const level = meter.hasAudio() ? meter.level() : remote!.level
+  const level = meter.hasAudio() ? meter.level() : remoteFresh ? remote!.level : 0
   const bar = meterEl.firstElementChild as HTMLElement | null
   if (bar) bar.style.width = `${Math.min(100, Math.round(level * 100))}%`
   meterEl.classList.toggle('hot', level > 0.9)
@@ -685,18 +686,21 @@ function updateTimelineRange(
 ): void {
   const layout = videoRangeLayout(range, durationSec)
   refs.range?.classList.toggle('hidden', !layout)
-  refs.inMarker?.classList.toggle('hidden', !layout)
-  refs.outMarker?.classList.toggle('hidden', !layout)
-  if (!layout) return
-  if (refs.range) {
-    refs.range.style.left = `${layout.leftPct}%`
-    refs.range.style.width = `${layout.widthPct}%`
+  refs.inMarker?.classList.toggle('hidden', !layout || layout.inPct <= 0)
+  refs.outMarker?.classList.toggle('hidden', !layout || layout.outPct >= 100)
+  if (!layout) {
+    if (refs.root) refs.root.title = ''
+    return
   }
-  if (refs.inMarker) refs.inMarker.style.left = `${layout.inPct}%`
-  if (refs.outMarker) refs.outMarker.style.left = `${layout.outPct}%`
+  if (refs.range) {
+    refs.range.style.left = `${layout?.leftPct ?? 0}%`
+    refs.range.style.width = `${layout?.widthPct ?? 100}%`
+  }
+  if (refs.inMarker) refs.inMarker.style.left = `${layout?.inPct ?? 0}%`
+  if (refs.outMarker) refs.outMarker.style.left = `${layout?.outPct ?? 100}%`
   if (refs.root) {
-    const inSec = durationSec * layout.inPct / 100
-    const outSec = durationSec * layout.outPct / 100
+    const inSec = durationSec * (layout?.inPct ?? 0) / 100
+    const outSec = durationSec * (layout?.outPct ?? 100) / 100
     refs.root.title = `In ${labels?.in ?? formatFrameTimecode(inSec, null)} · Out ${labels?.out ?? formatFrameTimecode(outSec, null)}`
   }
 }
@@ -957,6 +961,7 @@ async function loadPreviewFile(): Promise<void> {
     previewImage.removeAttribute('src')
     previewVideo.classList.remove('hidden')
     applyPreviewMonitoring(previewVideo, getState())
+    previewVideo.crossOrigin = 'anonymous'
     previewVideo.src = videoSrc(p.sha1 ?? '', 'preview')
     previewVideo.load()
     await window.api.preview.reportTotal(1)
@@ -1324,8 +1329,8 @@ function playlistContext(event: MouseEvent, entry: PlaylistEntry, node: HTMLLIEl
   }
   if (withRename) action(t('Переименовать'), () => startRename(node, getState().playlist.find((item) => item.id === entry.id) ?? entry))
   action(t('Дублировать'), () => { void window.api.playlist.duplicate(entry.id) })
-  action(t('Задать время…'), () => editSelectedDuration(selectedEntries()))
-  if (entry.kind === 'pdf' || entry.kind === 'pptx') action(t('Переходы между слайдами…'), () => editSlideFade(entry))
+  action(t('Таймер материала…'), () => editSelectedDuration(selectedEntries()))
+  if (entry.kind === 'pdf' || entry.kind === 'pptx') action('FADE', () => editSlideFade(entry))
   action(t('Группировать'), () => editPlaylistFolder(undefined, selectedEntries()))
   if (entry.kind !== 'live' && entry.kind !== 'list') {
     action(revealSourceLabel(), () => { void revealSource(entry.id) })
@@ -1586,9 +1591,9 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   })
   li.addEventListener('drop', (e) => {
     e.preventDefault()
+    li.classList.remove('drop-target')
     if (e.dataTransfer?.types.includes('Files')) return
     e.stopPropagation()
-    li.classList.remove('drop-target')
     const draggedId = e.dataTransfer?.getData('text/plain')
     if (draggedId?.startsWith('folder:')) reorderFolderBlock(draggedId.slice(7), entry.id)
     else if (draggedId && draggedId !== entry.id) {
@@ -2309,6 +2314,17 @@ function applyState(state: AppState): void {
 
   if (isOperator) {
     document.body.dataset.theme = state.uiTheme
+    const startupMode = document.getElementById('startup-mode') as HTMLSelectElement | null
+    const autosave = document.getElementById('project-autosave') as HTMLButtonElement | null
+    const testScreenAuto = document.getElementById('startup-test-screen') as HTMLInputElement | null
+    if (startupMode) startupMode.value = state.startup.mode
+    const autosaveActive = Boolean(state.projectPath) && state.startup.autosaveMinutes > 0
+    if (autosave) autosave.setAttribute('aria-pressed', String(autosaveActive))
+    document.querySelectorAll<HTMLButtonElement>('[data-autosave-minutes]').forEach(button => {
+      button.disabled = !autosaveActive
+      button.setAttribute('aria-pressed', String(autosaveActive && Number(button.dataset.autosaveMinutes) === state.startup.autosaveMinutes))
+    })
+    if (testScreenAuto) testScreenAuto.checked = state.startup.autoTestScreen
     updateOutputMonitors(state)
   }
 }
@@ -2441,6 +2457,8 @@ let prevFilePath: string | null = null
 let prevSlide = 0
 
 async function handleStateChange(state: AppState, patch: Partial<AppState> | null): Promise<void> {
+  if (isOperator && patch?.recoveryStartup === false) showBanner(t('Последняя сессия восстановлена'), 5000)
+  if (isOperator && patch?.autosaveError) showBanner(t('Автосохранение не удалось: {error}', { error: patch.autosaveError }), 12000)
   if (patch && Object.hasOwn(patch, 'takeTransition')) {
     takeFade.begin(patch.takeTransition ?? null, Boolean(state.preview.sha1 && state.preview.sha1 === state.pdfSha1) || state.preview.path === prevFilePath)
   } else if (!state.pdfPath || (patch && Object.hasOwn(patch, 'currentSlide'))) {
@@ -3133,6 +3151,10 @@ function setupKeyboard(): void {
 function setupFileDrop(): void {
   if (!isOperator) return
   const playlistEl = document.querySelector<HTMLElement>('.playlist')
+  const clearDropFeedback = (): void => {
+    playlistEl?.classList.remove('file-drop')
+    playlistEl?.querySelectorAll('.drop-target').forEach(node => node.classList.remove('drop-target'))
+  }
   const isFileDrag = (e: DragEvent): boolean => Boolean(e.dataTransfer?.types.includes('Files'))
   const positionAt = (e: DragEvent): PlaylistInsertPosition | undefined => {
     const target = e.target instanceof Element ? e.target : null
@@ -3167,12 +3189,13 @@ function setupFileDrop(): void {
   })
   window.addEventListener('dragleave', (e) => {
     // relatedTarget null → курсор покинул окно
-    if (e.relatedTarget === null) playlistEl?.classList.remove('file-drop')
+    if (e.relatedTarget === null) clearDropFeedback()
   })
+  window.addEventListener('dragend', clearDropFeedback)
   window.addEventListener('drop', (e) => {
+    clearDropFeedback()
     if (!isFileDrag(e)) return
     e.preventDefault()
-    playlistEl?.classList.remove('file-drop')
     const files = Array.from(e.dataTransfer?.files ?? [])
     const paths = files.map((f) => window.api.files.pathFor(f)).filter(Boolean)
     if (paths.length === 0) return
@@ -4624,7 +4647,7 @@ function editSelectedDuration(ids: string[]): void {
 function editSlideFade(entry: PlaylistEntry): void {
   const overlay = document.createElement('div'); overlay.className = 'modal'; overlay.id = 'slide-fade-modal'
   const form = document.createElement('form'); form.className = 'modal-content'
-  const heading = document.createElement('h2'); heading.textContent = t('Переходы между слайдами')
+  const heading = document.createElement('h2'); heading.textContent = t('Фейд слайда')
   const label = document.createElement('label'); label.textContent = t('Плавное листание')
   const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.id = 'slide-fade-enabled'; enabled.checked = Boolean(entry.slideFadeMs)
   label.prepend(enabled)
@@ -6319,7 +6342,10 @@ async function bootstrap(): Promise<void> {
     })
     window.setInterval(() => {
       attachMeters(getState())
-      paintMeter(currentMeterEl, programMeter, airLevel)
+      const state = getState()
+      const fileAudio = state.fileKind === 'video' ||
+        (state.fileKind === 'pptx' && state.slideMedia.some(media => media.slide === state.currentSlide))
+      paintMeter(currentMeterEl, programMeter, airLevel, fileAudio)
       paintMeter(previewMeterEl, previewMeter)
     }, 80)
   }
@@ -6396,12 +6422,46 @@ async function bootstrap(): Promise<void> {
   })
 }
 
+async function setupStartupPreferences(): Promise<void> {
+  if (!isOperator) return
+  const mode = $<HTMLSelectElement>('startup-mode')
+  const autosave = $<HTMLButtonElement>('project-autosave')
+  let lastInterval: 15 | 30 | 60 = getState().startup.autosaveMinutes || 15
+  const autoTest = $<HTMLInputElement>('startup-test-screen')
+  const configure = (): void => {
+    void window.api.session.configureStartup({ mode: mode.value === 'last' ? 'last' : 'empty',
+      autoTestScreen: autoTest.checked })
+      .catch(error => showBanner(String(error)))
+  }
+  mode.addEventListener('change', configure)
+  autosave.addEventListener('click', () => {
+    if (!getState().projectPath) {
+      showBanner(t('Сначала сохрани проект в файл'), 5000)
+      return
+    }
+    void window.api.session.configureStartup({ autosaveMinutes: getState().startup.autosaveMinutes ? 0 : lastInterval })
+      .catch(error => showBanner(String(error)))
+  })
+  document.querySelectorAll<HTMLButtonElement>('[data-autosave-minutes]').forEach(button => {
+    button.addEventListener('click', () => {
+      lastInterval = Number(button.dataset.autosaveMinutes) as 15 | 30 | 60
+      void window.api.session.configureStartup({ autosaveMinutes: lastInterval }).catch(error => showBanner(String(error)))
+    })
+  })
+  autoTest.addEventListener('change', configure)
+  try {
+    const result = await window.api.session.startup()
+    if (result.recovery) showBanner(t('После аварии автоматическое восстановление пропущено. Для ручной попытки нажми «Последний».'), 15000)
+    else if (!result.ok) showBanner(result.error ?? t('Не удалось восстановить последнюю сессию'), 12000)
+  } catch (error) { showBanner(String(error), 12000) }
+}
+
 /** Код и текст MediaError — без них «видео не играет» в журнале бесполезно. */
 function mediaErrorInfo(el: HTMLVideoElement): { code: number | null; message: string | null } {
   return { code: el.error?.code ?? null, message: el.error?.message ?? null }
 }
 
-bootstrap().catch((err) => {
+bootstrap().then(setupStartupPreferences).catch((err) => {
   window.api.diag.log('error', 'bootstrap упал', String(err?.stack ?? err))
   showBanner(t('Не удалось запустить: {error}', { error: err.message }))
 })

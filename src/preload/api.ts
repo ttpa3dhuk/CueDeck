@@ -399,6 +399,8 @@ export interface PresenterApi {
     onAvailable(cb: (info: { newerVersion: string; url: string }) => void): Unsubscribe
   }
   session: {
+    configureStartup(settings: Partial<import('../shared/startup-settings').StartupSettings>): Promise<import('../shared/startup-settings').StartupSettings>
+    startup(): Promise<OpenPdfResult & { hadSession: boolean; recovery: boolean }>
     hasLast(): Promise<boolean>
     restore(): Promise<OpenPdfResult & { hadSession: boolean }>
   }

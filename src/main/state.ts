@@ -1,5 +1,6 @@
 import { DEFAULT_TEST_SCREEN, hasTestScreenContent } from '../shared/test-screen.js'
 import { DEFAULT_TIMER_ADJUSTMENTS } from '../shared/timer-controls.js'
+import { DEFAULT_STARTUP_SETTINGS } from '../shared/startup-settings.js'
 import { DEFAULT_TAKE_FADE_MS } from '../shared/take-transition.js'
 import { BrowserWindow } from 'electron'
 import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS, defaultSyphonStatus } from '../shared/types.js'
@@ -58,6 +59,9 @@ export function initialDeckState(): DeckState {
 
 export function initialState(): AppState {
   return {
+    startup: { ...DEFAULT_STARTUP_SETTINGS },
+    recoveryStartup: false,
+    autosaveError: null,
     audienceOutputEnabled: true,
     testScreen: { ...DEFAULT_TEST_SCREEN },
     pdfPath: null,
