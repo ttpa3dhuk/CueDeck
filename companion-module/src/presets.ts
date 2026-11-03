@@ -395,6 +395,80 @@ export function UpdatePresets(self: ModuleInstance): void {
 	]
 
 	const ru = self.presetLang() === 'ru'
+	const outputControls = [
+		...(['syphon', 'audience-output', 'test-screen'] as const).flatMap((target) => {
+			const label =
+				target === 'syphon'
+					? 'SYPHON\nSPOUT'
+					: target === 'audience-output'
+						? ru
+							? 'ЗАЛ'
+							: 'AUDIENCE'
+						: ru
+							? 'ТЕСТОВЫЙ\nЭКРАН'
+							: 'TEST\nSCREEN'
+			const flag = target === 'audience-output' ? 'audience' : target === 'test-screen' ? 'testScreen' : 'syphon'
+			return (['toggle', 'on', 'off'] as const).map((mode) =>
+				add(
+					`${target}_${mode}`,
+					`${target}: ${mode}`,
+					label + (mode === 'toggle' ? '' : `\n${mode === 'on' ? (ru ? 'ВКЛ' : 'ON') : ru ? 'ВЫКЛ' : 'OFF'}`),
+					[a('output', { target, mode })],
+					[
+						{ feedbackId: 'output_active', options: { target: flag }, style: { bgcolor: C.greenBg } },
+						...(target === 'syphon'
+							? [{ feedbackId: 'syphon_warning' as const, options: {}, style: { bgcolor: C.amberBg } }]
+							: []),
+					],
+				),
+			)
+		}),
+		add(
+			'project_save',
+			'Save the named project (choose filename in CueDeck first)',
+			ru ? 'СОХРАН.\nПРОЕКТ' : 'SAVE\nPROJECT',
+			[a('project_save')],
+			[{ feedbackId: 'project_named', options: {}, style: { color: C.white } }],
+			{ color: C.muted },
+		),
+		...(['program', 'timer', 'prompter'] as const).map((target) =>
+			add(
+				`omt_${target}_toggle`,
+				`OMT ${target}: toggle`,
+				`OMT\n${target === 'program' ? (ru ? 'ЗАЛ' : 'MAIN') : target === 'timer' ? (ru ? 'ТАЙМЕР' : 'TIMER') : ru ? 'СУФЛЁР' : 'PROMPTER'}`,
+				[a('omt_output', { target, mode: 'toggle' })],
+				[{ feedbackId: 'omt_output_on', options: { target }, style: { bgcolor: C.greenBg } }],
+			),
+		),
+	]
+	const takeControls = [
+		add(
+			'take_fade',
+			'TAKE with Fade',
+			'TAKE\nFADE',
+			[a('take_fade')],
+			[{ feedbackId: 'preview_loaded', options: {}, style: { bgcolor: C.redBg } }],
+		),
+		add('take_fade_ms', 'Fade duration (editable)', 'FADE\n400 ms', [a('take_fade_ms', { milliseconds: 400 })]),
+		...(['play-start', 'play-resume', 'hold-first'] as const).map((mode, i) =>
+			add(
+				`take_video_${mode}`,
+				`Video TAKE: ${mode}`,
+				(ru
+					? ['РОЛИК\nС НАЧАЛА', 'РОЛИК\nПРОДОЛЖ.', 'РОЛИК\n1 КАДР']
+					: ['VIDEO\nRESTART', 'VIDEO\nRESUME', 'VIDEO\n1 FRAME'])[i],
+				[a('take_video_mode', { mode })],
+			),
+		),
+		...(['from-start', 'from-current'] as const).map((mode, i) =>
+			add(
+				`take_slide_${mode}`,
+				`Slide TAKE: ${mode}`,
+				(ru ? ['СЛАЙДЫ\nС НАЧАЛА', 'СЛАЙДЫ\nТЕКУЩИЙ'] : ['SLIDES\nSTART', 'SLIDES\nSELECTED'])[i],
+				[a('take_slide_mode', { mode })],
+			),
+		),
+	]
 	const hall = [
 		add(
 			'audience_timer',
@@ -453,6 +527,8 @@ export function UpdatePresets(self: ModuleInstance): void {
 	})
 
 	const structure: CompanionPresetSection<ModuleSchema>[] = [
+		{ id: 'outputs_project', name: ru ? 'Выходы и проект' : 'Outputs and project', definitions: outputControls },
+		{ id: 'take_modes', name: ru ? 'TAKE и режимы выдачи' : 'TAKE and playout modes', definitions: takeControls },
 		{
 			id: 'timer',
 			name: t.sTimer,

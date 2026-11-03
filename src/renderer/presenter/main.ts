@@ -2318,7 +2318,7 @@ function applyState(state: AppState): void {
     const autosave = document.getElementById('project-autosave') as HTMLButtonElement | null
     const testScreenAuto = document.getElementById('startup-test-screen') as HTMLInputElement | null
     if (startupMode) startupMode.value = state.startup.mode
-    const autosaveActive = Boolean(state.projectPath) && state.startup.autosaveMinutes > 0
+    const autosaveActive = state.startup.autosaveMinutes > 0
     if (autosave) autosave.setAttribute('aria-pressed', String(autosaveActive))
     document.querySelectorAll<HTMLButtonElement>('[data-autosave-minutes]').forEach(button => {
       button.disabled = !autosaveActive
@@ -2471,7 +2471,19 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
 
   if (isOperator) handlePreviewChange(state).catch(() => undefined)
 
-  if (state.pdfPath && state.pdfPath !== prevFilePath) {
+  if (!state.pdfPath) {
+    if (prevFilePath !== null) {
+      // New/restoration can clear the deck. Hiding the element alone leaves its
+      // decoder and audio running, and the same path would never reload later.
+      prevFilePath = null
+      prevSlide = 0
+      ++programLoadGeneration
+      docLoaded = false
+      lastRenderedSlide = -1
+      disposeCurrentImage()
+      unloadCurrentVideo()
+    }
+  } else if (state.pdfPath !== prevFilePath) {
     prevFilePath = state.pdfPath
     // Slide numbers belong to this document. Keeping the previous document's
     // number can suppress navigation back to that number in the new one.
@@ -6428,6 +6440,10 @@ async function setupStartupPreferences(): Promise<void> {
   const autosave = $<HTMLButtonElement>('project-autosave')
   let lastInterval: 15 | 30 | 60 = getState().startup.autosaveMinutes || 15
   const autoTest = $<HTMLInputElement>('startup-test-screen')
+  $<HTMLButtonElement>('session-restore-backup').addEventListener('click', async () => {
+    const result = await window.api.session.restoreBackup()
+    if (!result.ok && result.error) showBanner(t('Ошибка: {error}', { error: result.error }), 6000)
+  })
   const configure = (): void => {
     void window.api.session.configureStartup({ mode: mode.value === 'last' ? 'last' : 'empty',
       autoTestScreen: autoTest.checked })
@@ -6435,10 +6451,6 @@ async function setupStartupPreferences(): Promise<void> {
   }
   mode.addEventListener('change', configure)
   autosave.addEventListener('click', () => {
-    if (!getState().projectPath) {
-      showBanner(t('Сначала сохрани проект в файл'), 5000)
-      return
-    }
     void window.api.session.configureStartup({ autosaveMinutes: getState().startup.autosaveMinutes ? 0 : lastInterval })
       .catch(error => showBanner(String(error)))
   })
@@ -6451,7 +6463,7 @@ async function setupStartupPreferences(): Promise<void> {
   autoTest.addEventListener('change', configure)
   try {
     const result = await window.api.session.startup()
-    if (result.recovery) showBanner(t('После аварии автоматическое восстановление пропущено. Для ручной попытки нажми «Последний».'), 15000)
+    if (result.recovery) showBanner(t('После двух аварий подряд автовосстановление пропущено. Для ручной попытки нажми «Последний».'), 15000)
     else if (!result.ok) showBanner(result.error ?? t('Не удалось восстановить последнюю сессию'), 12000)
   } catch (error) { showBanner(String(error), 12000) }
 }

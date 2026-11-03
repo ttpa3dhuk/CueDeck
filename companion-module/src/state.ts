@@ -72,9 +72,20 @@ export interface CueDeckState {
 	/** Появилось после 0.8.1 — с более старыми версиями просто отсутствует. */
 	stream?: { running: boolean; live: number; total: number; warn: boolean }
 	/** Появилось в CueDeck 0.10 — раньше выходов OMT не было. Нас интересует только «Зал» (`program`). */
-	omt?: { program?: { on: boolean; receivers: number; program: boolean; preview: boolean } }
+	omt?: Partial<
+		Record<
+			'timer' | 'program' | 'prompter',
+			{ on: boolean; enabled?: boolean; state?: string; receivers: number; program: boolean; preview: boolean }
+		>
+	>
 	/** Язык интерфейса CueDeck: по нему выбирается язык кнопок в режиме «Auto». Старые версии его не отдают. */
 	lang?: 'ru' | 'en'
+	outputs?: {
+		audience: boolean
+		testScreen: boolean
+		syphon: { enabled: boolean; state: string; name: string; reason: string | null }
+	}
+	project?: { name: string | null; saved: boolean }
 }
 
 export type VarValue = string | number | boolean
@@ -150,6 +161,14 @@ export function variableNames(s: CueDeckState | null): Record<string, string> {
 		omt_program: 'vMix has the Program output on air (true / false)',
 		omt_preview: 'vMix has the Program output in preview (true / false)',
 		omt_receivers: 'Receivers pulling the Program output over OMT',
+		audience_output: 'Audience window is enabled',
+		test_screen: 'Test screen is enabled',
+		syphon_enabled: 'Syphon / Spout is requested',
+		syphon_state: 'Actual Syphon / Spout state: on, off, blocked, error',
+		project_saved: 'Project has a filename and can be saved remotely',
+		project_name: 'Named project filename',
+		omt_timer_on: 'OMT timer output is on',
+		omt_prompter_on: 'OMT prompter output is on',
 	}
 	for (let i = 1; i <= speakerCount(s); i++) out[`speaker_${i}`] = `Playlist entry ${i}: name`
 	const p = presetCounts(s)
@@ -185,6 +204,12 @@ export function variableValues(s: CueDeckState | null): Record<string, VarValue>
 			omt_on: false,
 			omt_program: false,
 			omt_preview: false,
+			audience_output: false,
+			test_screen: false,
+			syphon_enabled: false,
+			project_saved: false,
+			omt_timer_on: false,
+			omt_prompter_on: false,
 		}
 	}
 	// Лампа горит, только пока выход включён: tally от vMix мог остаться от прошлого раза.
@@ -236,6 +261,14 @@ export function variableValues(s: CueDeckState | null): Record<string, VarValue>
 		omt_program: omtOn && !!omt?.program,
 		omt_preview: omtOn && !!omt?.preview,
 		omt_receivers: omt ? omt.receivers : '',
+		audience_output: s.outputs?.audience ?? false,
+		test_screen: s.outputs?.testScreen ?? false,
+		syphon_enabled: s.outputs?.syphon.enabled ?? false,
+		syphon_state: s.outputs?.syphon.state ?? '',
+		project_saved: s.project?.saved ?? false,
+		project_name: s.project?.name ?? '',
+		omt_timer_on: s.omt?.timer?.on ?? false,
+		omt_prompter_on: s.omt?.prompter?.on ?? false,
 	}
 	for (let i = 1; i <= speakerCount(s); i++) v[`speaker_${i}`] = shortName(s.playlist.names?.[i - 1])
 	const p = presetCounts(s)

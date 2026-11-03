@@ -46,6 +46,10 @@ export type RemoteStateView = Pick<
   | 'timerLoop'
   | 'timerTickEnabled'
   | 'timerGongEnabled'
+  | 'audienceOutputEnabled'
+  | 'testScreen'
+  | 'syphon'
+  | 'projectPath'
 >
 
 type ArgKind = 'none' | 'duration' | 'index' | 'number' | 'seconds' | 'enum' | 'text' | 'milliseconds'
@@ -60,6 +64,8 @@ type Group =
   | 'Сообщение спикеру'
   | 'Трансляция'
   | 'Выходы OMT'
+  | 'Выходы'
+  | 'Проект'
 
 export interface RemoteCommand {
   /** Путь без префикса: `timer/start`. */
@@ -733,6 +739,20 @@ export const REMOTE_COMMANDS: RemoteCommand[] = [
     (want) => [call('omt:configure', { enabled: { [id]: want } })],
     (s) => s.omt.enabled[id],
   )),
+
+  ...onOff('audience-output', 'Выходы', 'Окно зала',
+    want => [call('audience-output:set-enabled', want)], s => s.audienceOutputEnabled),
+  ...onOff('test-screen', 'Выходы', 'Тестовый экран',
+    want => [call('test-screen:set-enabled', want)], s => s.testScreen.manual || s.testScreen.automatic),
+  // Explicit on retries a blocked native output; off always tears it down.
+  ...(['toggle', 'on', 'off'] as const).map((action): RemoteCommand => ({
+    path: `syphon/${action}`, ...(action === 'toggle' ? { aliases: ['syphon'] } : {}),
+    arg: 'none', group: 'Выходы', what: 'Syphon / Spout', // i18n-ok: helpPage translates group and commandTitle translates what
+    title: action === 'toggle' ? 'переключить' : action === 'on' ? 'включить' : 'выключить', // i18n-ok: commandTitle translates title
+    build: (_a, s) => [call('syphon:configure', { enabled: action === 'toggle' ? !s.syphon.enabled : action === 'on' })],
+  })),
+  { path: 'project/save', arg: 'none', group: 'Проект', title: 'Сохранить проект', // i18n-ok: helpPage and commandTitle translate keys
+    build: (_a, s) => s.projectPath ? [call('project:save')] : t('Сначала сохрани проект в CueDeck') },
 
   // ── Трансляция ──
   ...onOff('stream', 'Трансляция', 'Трансляция', (want) => [call(want ? 'stream:start' : 'stream:stop')], (s) => s.stream.running),

@@ -18,6 +18,10 @@ export const C = {
 type NoOptions = Record<string, never>
 
 export type FeedbacksSchema = {
+	output_active: { type: 'boolean'; options: { target: 'audience' | 'testScreen' | 'syphon' } }
+	syphon_warning: { type: 'boolean'; options: NoOptions }
+	project_named: { type: 'boolean'; options: NoOptions }
+	omt_output_on: { type: 'boolean'; options: { target: 'timer' | 'program' | 'prompter' } }
 	audience_timer_flag: {
 		type: 'boolean'
 		options: { setting: 'running' | 'visible' | 'loop' | 'tickEnabled' | 'gongEnabled' }
@@ -50,6 +54,59 @@ export function UpdateFeedbacks(self: ModuleInstance): void {
 	const st = () => self.state
 
 	const feedbacks: CompanionFeedbackDefinitions<FeedbacksSchema> = {
+		output_active: {
+			type: 'boolean',
+			name: 'Outputs: actual state',
+			defaultStyle: { bgcolor: C.greenBg, color: C.white },
+			options: [
+				{
+					id: 'target',
+					type: 'dropdown',
+					label: 'Output',
+					default: 'audience',
+					choices: [
+						{ id: 'audience', label: 'Audience window' },
+						{ id: 'testScreen', label: 'Test screen' },
+						{ id: 'syphon', label: 'Syphon / Spout' },
+					],
+				},
+			],
+			callback: (e) =>
+				e.options.target === 'syphon' ? st()?.outputs?.syphon.state === 'on' : !!st()?.outputs?.[e.options.target],
+		},
+		syphon_warning: {
+			type: 'boolean',
+			name: 'Syphon / Spout: blocked or unavailable',
+			options: [],
+			defaultStyle: { bgcolor: C.amberBg, color: C.white },
+			callback: () => ['blocked', 'error', 'unavailable'].includes(st()?.outputs?.syphon.state ?? ''),
+		},
+		project_named: {
+			type: 'boolean',
+			name: 'Project: named and ready to save',
+			options: [],
+			defaultStyle: { color: C.white },
+			callback: () => !!st()?.project?.saved,
+		},
+		omt_output_on: {
+			type: 'boolean',
+			name: 'OMT: output is on',
+			defaultStyle: { bgcolor: C.greenBg, color: C.white },
+			options: [
+				{
+					id: 'target',
+					type: 'dropdown',
+					label: 'Output',
+					default: 'program',
+					choices: [
+						{ id: 'program', label: 'Audience' },
+						{ id: 'timer', label: 'Timer' },
+						{ id: 'prompter', label: 'Prompter' },
+					],
+				},
+			],
+			callback: (e) => !!st()?.omt?.[e.options.target]?.on,
+		},
 		audience_timer_flag: {
 			type: 'boolean',
 			name: 'Hall timer: state',

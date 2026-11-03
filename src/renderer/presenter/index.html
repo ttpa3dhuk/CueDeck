@@ -766,7 +766,7 @@
               <div class="live-field">
                 <span class="live-field-label">При запуске</span>
                 <select id="startup-mode"><option value="empty">Пустое шоу</option><option value="last">Последняя сессия</option></select>
-                <p class="audio-hint">Восстановление без запуска роликов и таймеров. После аварии восстановления программа откроется пустой.</p>
+                <p class="audio-hint">Восстановление без запуска роликов и таймеров. После двух аварий подряд программа откроется пустой.</p>
               </div>
               <div class="live-field">
                 <div class="autosave-row">
@@ -777,7 +777,8 @@
                     <button type="button" data-autosave-minutes="60" aria-pressed="false">60 минут</button>
                   </div>
                 </div>
-                <p class="audio-hint">Сначала сохрани проект в файл. Автосохранение обновляет этот файл; последняя сессия запоминается отдельно.</p>
+                <button id="session-restore-backup" type="button">Восстановить контрольную копию…</button>
+                <p class="audio-hint">До сохранения проекта создаются контрольные копии. После сохранения обновляется файл проекта; последняя сессия запоминается отдельно.</p>
               </div>
               <div class="live-field">
                 <span class="live-field-label">Тема окна</span>

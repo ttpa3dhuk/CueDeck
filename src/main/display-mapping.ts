@@ -47,6 +47,7 @@ interface PersistedShape {
   startup: StartupSettings
   sessionCheckpoint?: SessionCheckpoint
   restorePending: boolean
+  recoveryRun?: { active: boolean; crashes: number }
   audienceTimer: Partial<AudienceTimerConfig>
   materialSettings: MaterialSettings
   mappings: Record<string, SavedMapping>
@@ -192,6 +193,8 @@ export const getSessionCheckpoint = (): SessionCheckpoint | undefined => store()
 export const setSessionCheckpoint = (value: SessionCheckpoint): void => { store().set('sessionCheckpoint', value) }
 export const getRestorePending = (): boolean => store().get('restorePending') === true
 export const setRestorePending = (value: boolean): void => { store().set('restorePending', value) }
+export const getRecoveryRun = (): { active: boolean; crashes: number } | undefined => store().get('recoveryRun')
+export const setRecoveryRun = (value: { active: boolean; crashes: number }): void => { store().set('recoveryRun', value) }
 
 function topologyKey(displayIds: number[]): string {
   return [...displayIds].sort((a, b) => a - b).join(',')

@@ -16,3 +16,10 @@ it('accepts only an operator main-frame boolean and leaves rejected calls withou
   call(operator, false)
   expect(rt.setEnabled).toHaveBeenCalledExactlyOnceWith(false)
 })
+
+it('accepts the private remote capability but rejects a structurally identical object', async () => {
+  const { REMOTE_EVENT } = await import('../src/main/remote/event')
+  expect(() => call({ ...REMOTE_EVENT }, false)).toThrow('Operator')
+  call(REMOTE_EVENT, false)
+  expect(rt.setEnabled).toHaveBeenCalledExactlyOnceWith(false)
+})

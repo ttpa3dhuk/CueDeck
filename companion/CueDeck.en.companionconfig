@@ -15799,6 +15799,563 @@
 										"isExpression": false
 									},
 									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_video_loop) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "VIDEO\nLOOP\n↔",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Clip loop: toggle"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000029",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "video/loop/toggle",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					}
+				},
+				"1": {
+					"0": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_video_loop) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "VIDEO\nLOOP\nON",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Clip loop: on"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002a",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "video/loop/on",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"1": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_video_loop) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "VIDEO\nLOOP\nOFF",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Clip loop: off"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002b",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "video/loop/off",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"2": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
 										"value": 0,
 										"isExpression": false
 									},
@@ -15896,7 +16453,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act000029",
+											"id": "act00002c",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -15931,10 +16488,8 @@
 							}
 						},
 						"localVariables": []
-					}
-				},
-				"1": {
-					"0": {
+					},
+					"3": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -16083,7 +16638,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002a",
+											"id": "act00002d",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -16119,7 +16674,7 @@
 						},
 						"localVariables": []
 					},
-					"1": {
+					"4": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -16268,7 +16823,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002b",
+											"id": "act00002e",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -16304,7 +16859,7 @@
 						},
 						"localVariables": []
 					},
-					"2": {
+					"5": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -16453,7 +17008,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002c",
+											"id": "act00002f",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -16489,7 +17044,7 @@
 						},
 						"localVariables": []
 					},
-					"3": {
+					"6": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -16638,7 +17193,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002d",
+											"id": "act00002g",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -16674,7 +17229,7 @@
 						},
 						"localVariables": []
 					},
-					"4": {
+					"7": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -16823,7 +17378,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002e",
+											"id": "act00002h",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -16858,8 +17413,10 @@
 							}
 						},
 						"localVariables": []
-					},
-					"5": {
+					}
+				},
+				"2": {
+					"0": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -17008,7 +17565,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002f",
+											"id": "act00002i",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -17044,7 +17601,7 @@
 						},
 						"localVariables": []
 					},
-					"6": {
+					"1": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -17193,7 +17750,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002g",
+											"id": "act00002j",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -17229,7 +17786,7 @@
 						},
 						"localVariables": []
 					},
-					"7": {
+					"2": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -17378,7 +17935,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002h",
+											"id": "act00002k",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -17413,10 +17970,8 @@
 							}
 						},
 						"localVariables": []
-					}
-				},
-				"2": {
-					"0": {
+					},
+					"3": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -17565,7 +18120,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002i",
+											"id": "act00002l",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -17601,7 +18156,7 @@
 						},
 						"localVariables": []
 					},
-					"1": {
+					"4": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -17750,7 +18305,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002j",
+											"id": "act00002m",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -17786,7 +18341,7 @@
 						},
 						"localVariables": []
 					},
-					"2": {
+					"5": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -17838,8 +18393,8 @@
 										"isExpression": false
 									},
 									"color": {
-										"value": 0,
-										"isExpression": false
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_omt_timer_on) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
 									},
 									"borderWidth": {
 										"value": 0,
@@ -17935,7 +18490,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002k",
+											"id": "act00002n",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -17971,7 +18526,7 @@
 						},
 						"localVariables": []
 					},
-					"3": {
+					"6": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -18023,8 +18578,8 @@
 										"isExpression": false
 									},
 									"color": {
-										"value": 0,
-										"isExpression": false
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_omt_timer_on) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
 									},
 									"borderWidth": {
 										"value": 0,
@@ -18120,7 +18675,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002l",
+											"id": "act00002o",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -18156,7 +18711,7 @@
 						},
 						"localVariables": []
 					},
-					"4": {
+					"7": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -18208,8 +18763,8 @@
 										"isExpression": false
 									},
 									"color": {
-										"value": 0,
-										"isExpression": false
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_omt_timer_on) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
 									},
 									"borderWidth": {
 										"value": 0,
@@ -18305,7 +18860,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002m",
+											"id": "act00002p",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -18340,8 +18895,10 @@
 							}
 						},
 						"localVariables": []
-					},
-					"5": {
+					}
+				},
+				"3": {
+					"0": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -18393,8 +18950,8 @@
 										"isExpression": false
 									},
 									"color": {
-										"value": 0,
-										"isExpression": false
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_omt_on) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
 									},
 									"borderWidth": {
 										"value": 0,
@@ -18490,7 +19047,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002n",
+											"id": "act00002q",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -18526,7 +19083,7 @@
 						},
 						"localVariables": []
 					},
-					"6": {
+					"1": {
 						"type": "button-layered",
 						"style": {
 							"layers": [
@@ -18578,8 +19135,8 @@
 										"isExpression": false
 									},
 									"color": {
-										"value": 0,
-										"isExpression": false
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_omt_on) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
 									},
 									"borderWidth": {
 										"value": 0,
@@ -18675,12 +19232,2431 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002o",
+											"id": "act00002r",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
 												"url": {
 													"value": "omt/program/on",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"2": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_omt_on) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "OMT\nMAIN\nOFF",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "OMT: program: off"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002s",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "omt/program/off",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"3": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_omt_prompter_on) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "OMT\nPROMPTER\n↔",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "OMT: prompter: toggle"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002t",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "omt/prompter/toggle",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"4": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_omt_prompter_on) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "OMT\nPROMPTER\nON",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "OMT: prompter: on"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002u",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "omt/prompter/on",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"5": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_omt_prompter_on) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "OMT\nPROMPTER\nOFF",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "OMT: prompter: off"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002v",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "omt/prompter/off",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"6": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_output) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "AUDIENCE\n↔",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Audience window: toggle"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002w",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-output/toggle",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"7": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_output) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "AUDIENCE\nON",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Audience window: on"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002x",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-output/on",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					}
+				}
+			},
+			"gridSize": {
+				"minColumn": 0,
+				"maxColumn": 7,
+				"minRow": 0,
+				"maxRow": 3
+			}
+		},
+		"5": {
+			"id": "cuedeckExtra32",
+			"name": "CueDeck: Remote 2",
+			"controls": {
+				"0": {
+					"0": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_audience_output) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "AUDIENCE\nOFF",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Audience window: off"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002y",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "audience-output/off",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"1": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_test_screen) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "TEST SCREEN\n↔",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Test screen: toggle"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act00002z",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "test-screen/toggle",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"2": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_test_screen) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "TEST SCREEN\nON",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Test screen: on"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000030",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "test-screen/on",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"3": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_test_screen) == '1' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "TEST SCREEN\nOFF",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Test screen: off"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000031",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "test-screen/off",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"4": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_syphon_state) == 'on' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "SYPHON / SPOUT\n↔",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Syphon / Spout: toggle"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000032",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "syphon/toggle",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"5": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_syphon_state) == 'on' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "SYPHON / SPOUT\nON",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Syphon / Spout: on"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000033",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "syphon/on",
+													"isExpression": false
+												},
+												"header": {
+													"value": "",
+													"isExpression": false
+												},
+												"jsonResultDataVariable": {
+													"isExpression": false
+												},
+												"result_stringify": {
+													"value": true,
+													"isExpression": false
+												},
+												"statusCodeVariable": {
+													"isExpression": false
+												}
+											},
+											"upgradeIndex": 2,
+											"type": "action"
+										}
+									],
+									"up": []
+								},
+								"options": {
+									"runWhileHeld": []
+								}
+							}
+						},
+						"localVariables": []
+					},
+					"6": {
+						"type": "button-layered",
+						"style": {
+							"layers": [
+								{
+									"id": "canvas",
+									"name": "Canvas",
+									"usage": "auto",
+									"type": "canvas",
+									"decoration": {
+										"value": "default",
+										"isExpression": false
+									},
+									"showStatusIcons": {
+										"value": "default",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "box0",
+									"name": "Background",
+									"usage": "auto",
+									"type": "box",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"color": {
+										"value": "($(custom:cuedeck_online) == '1' && $(internal:time_unix) - $(custom:cuedeck_seen) < 10) && $(custom:cuedeck_syphon_state) == 'on' ? '#1e7a45' : '#000000'",
+										"isExpression": true
+									},
+									"borderWidth": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderColor": {
+										"value": 0,
+										"isExpression": false
+									},
+									"borderPosition": {
+										"value": "inside",
+										"isExpression": false
+									}
+								},
+								{
+									"id": "text0",
+									"name": "Text",
+									"usage": "auto",
+									"type": "text",
+									"enabled": {
+										"value": true,
+										"isExpression": false
+									},
+									"opacity": {
+										"value": 100,
+										"isExpression": false
+									},
+									"x": {
+										"value": 0,
+										"isExpression": false
+									},
+									"y": {
+										"value": 0,
+										"isExpression": false
+									},
+									"width": {
+										"value": 100,
+										"isExpression": false
+									},
+									"height": {
+										"value": 100,
+										"isExpression": false
+									},
+									"rotation": {
+										"value": 0,
+										"isExpression": false
+									},
+									"text": {
+										"value": "SYPHON / SPOUT\nOFF",
+										"isExpression": false
+									},
+									"color": {
+										"value": 16777215,
+										"isExpression": false
+									},
+									"halign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"valign": {
+										"value": "center",
+										"isExpression": false
+									},
+									"fontsize": {
+										"value": 20,
+										"isExpression": false
+									},
+									"fontsizeAllowShrink": {
+										"value": true,
+										"isExpression": false
+									},
+									"font": {
+										"value": "companion-sans",
+										"isExpression": false
+									},
+									"outlineColor": {
+										"value": 4278190080,
+										"isExpression": false
+									}
+								}
+							]
+						},
+						"options": {
+							"stepProgression": "auto",
+							"stepExpression": "",
+							"rotaryActions": false,
+							"canModifyStyleInApis": false,
+							"notes": "Syphon / Spout: off"
+						},
+						"feedbacks": [],
+						"steps": {
+							"0": {
+								"action_sets": {
+									"down": [
+										{
+											"id": "act000034",
+											"definitionId": "get",
+											"connectionId": "cuedeckHttpConnection",
+											"options": {
+												"url": {
+													"value": "syphon/off",
 													"isExpression": false
 												},
 												"header": {
@@ -18813,7 +21789,7 @@
 										"isExpression": false
 									},
 									"text": {
-										"value": "OMT\nMAIN\nOFF",
+										"value": "SAVE\nPROJECT",
 										"isExpression": false
 									},
 									"color": {
@@ -18852,7 +21828,7 @@
 							"stepExpression": "",
 							"rotaryActions": false,
 							"canModifyStyleInApis": false,
-							"notes": "OMT: program: off"
+							"notes": "Save project"
 						},
 						"feedbacks": [],
 						"steps": {
@@ -18860,569 +21836,12 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002p",
+											"id": "act000035",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
 												"url": {
-													"value": "omt/program/off",
-													"isExpression": false
-												},
-												"header": {
-													"value": "",
-													"isExpression": false
-												},
-												"jsonResultDataVariable": {
-													"isExpression": false
-												},
-												"result_stringify": {
-													"value": true,
-													"isExpression": false
-												},
-												"statusCodeVariable": {
-													"isExpression": false
-												}
-											},
-											"upgradeIndex": 2,
-											"type": "action"
-										}
-									],
-									"up": []
-								},
-								"options": {
-									"runWhileHeld": []
-								}
-							}
-						},
-						"localVariables": []
-					}
-				},
-				"3": {
-					"0": {
-						"type": "button-layered",
-						"style": {
-							"layers": [
-								{
-									"id": "canvas",
-									"name": "Canvas",
-									"usage": "auto",
-									"type": "canvas",
-									"decoration": {
-										"value": "default",
-										"isExpression": false
-									},
-									"showStatusIcons": {
-										"value": "default",
-										"isExpression": false
-									}
-								},
-								{
-									"id": "box0",
-									"name": "Background",
-									"usage": "auto",
-									"type": "box",
-									"enabled": {
-										"value": true,
-										"isExpression": false
-									},
-									"opacity": {
-										"value": 100,
-										"isExpression": false
-									},
-									"x": {
-										"value": 0,
-										"isExpression": false
-									},
-									"y": {
-										"value": 0,
-										"isExpression": false
-									},
-									"width": {
-										"value": 100,
-										"isExpression": false
-									},
-									"height": {
-										"value": 100,
-										"isExpression": false
-									},
-									"rotation": {
-										"value": 0,
-										"isExpression": false
-									},
-									"color": {
-										"value": 0,
-										"isExpression": false
-									},
-									"borderWidth": {
-										"value": 0,
-										"isExpression": false
-									},
-									"borderColor": {
-										"value": 0,
-										"isExpression": false
-									},
-									"borderPosition": {
-										"value": "inside",
-										"isExpression": false
-									}
-								},
-								{
-									"id": "text0",
-									"name": "Text",
-									"usage": "auto",
-									"type": "text",
-									"enabled": {
-										"value": true,
-										"isExpression": false
-									},
-									"opacity": {
-										"value": 100,
-										"isExpression": false
-									},
-									"x": {
-										"value": 0,
-										"isExpression": false
-									},
-									"y": {
-										"value": 0,
-										"isExpression": false
-									},
-									"width": {
-										"value": 100,
-										"isExpression": false
-									},
-									"height": {
-										"value": 100,
-										"isExpression": false
-									},
-									"rotation": {
-										"value": 0,
-										"isExpression": false
-									},
-									"text": {
-										"value": "OMT\nPROMPTER\n↔",
-										"isExpression": false
-									},
-									"color": {
-										"value": 16777215,
-										"isExpression": false
-									},
-									"halign": {
-										"value": "center",
-										"isExpression": false
-									},
-									"valign": {
-										"value": "center",
-										"isExpression": false
-									},
-									"fontsize": {
-										"value": 20,
-										"isExpression": false
-									},
-									"fontsizeAllowShrink": {
-										"value": true,
-										"isExpression": false
-									},
-									"font": {
-										"value": "companion-sans",
-										"isExpression": false
-									},
-									"outlineColor": {
-										"value": 4278190080,
-										"isExpression": false
-									}
-								}
-							]
-						},
-						"options": {
-							"stepProgression": "auto",
-							"stepExpression": "",
-							"rotaryActions": false,
-							"canModifyStyleInApis": false,
-							"notes": "OMT: prompter: toggle"
-						},
-						"feedbacks": [],
-						"steps": {
-							"0": {
-								"action_sets": {
-									"down": [
-										{
-											"id": "act00002q",
-											"definitionId": "get",
-											"connectionId": "cuedeckHttpConnection",
-											"options": {
-												"url": {
-													"value": "omt/prompter/toggle",
-													"isExpression": false
-												},
-												"header": {
-													"value": "",
-													"isExpression": false
-												},
-												"jsonResultDataVariable": {
-													"isExpression": false
-												},
-												"result_stringify": {
-													"value": true,
-													"isExpression": false
-												},
-												"statusCodeVariable": {
-													"isExpression": false
-												}
-											},
-											"upgradeIndex": 2,
-											"type": "action"
-										}
-									],
-									"up": []
-								},
-								"options": {
-									"runWhileHeld": []
-								}
-							}
-						},
-						"localVariables": []
-					},
-					"1": {
-						"type": "button-layered",
-						"style": {
-							"layers": [
-								{
-									"id": "canvas",
-									"name": "Canvas",
-									"usage": "auto",
-									"type": "canvas",
-									"decoration": {
-										"value": "default",
-										"isExpression": false
-									},
-									"showStatusIcons": {
-										"value": "default",
-										"isExpression": false
-									}
-								},
-								{
-									"id": "box0",
-									"name": "Background",
-									"usage": "auto",
-									"type": "box",
-									"enabled": {
-										"value": true,
-										"isExpression": false
-									},
-									"opacity": {
-										"value": 100,
-										"isExpression": false
-									},
-									"x": {
-										"value": 0,
-										"isExpression": false
-									},
-									"y": {
-										"value": 0,
-										"isExpression": false
-									},
-									"width": {
-										"value": 100,
-										"isExpression": false
-									},
-									"height": {
-										"value": 100,
-										"isExpression": false
-									},
-									"rotation": {
-										"value": 0,
-										"isExpression": false
-									},
-									"color": {
-										"value": 0,
-										"isExpression": false
-									},
-									"borderWidth": {
-										"value": 0,
-										"isExpression": false
-									},
-									"borderColor": {
-										"value": 0,
-										"isExpression": false
-									},
-									"borderPosition": {
-										"value": "inside",
-										"isExpression": false
-									}
-								},
-								{
-									"id": "text0",
-									"name": "Text",
-									"usage": "auto",
-									"type": "text",
-									"enabled": {
-										"value": true,
-										"isExpression": false
-									},
-									"opacity": {
-										"value": 100,
-										"isExpression": false
-									},
-									"x": {
-										"value": 0,
-										"isExpression": false
-									},
-									"y": {
-										"value": 0,
-										"isExpression": false
-									},
-									"width": {
-										"value": 100,
-										"isExpression": false
-									},
-									"height": {
-										"value": 100,
-										"isExpression": false
-									},
-									"rotation": {
-										"value": 0,
-										"isExpression": false
-									},
-									"text": {
-										"value": "OMT\nPROMPTER\nON",
-										"isExpression": false
-									},
-									"color": {
-										"value": 16777215,
-										"isExpression": false
-									},
-									"halign": {
-										"value": "center",
-										"isExpression": false
-									},
-									"valign": {
-										"value": "center",
-										"isExpression": false
-									},
-									"fontsize": {
-										"value": 20,
-										"isExpression": false
-									},
-									"fontsizeAllowShrink": {
-										"value": true,
-										"isExpression": false
-									},
-									"font": {
-										"value": "companion-sans",
-										"isExpression": false
-									},
-									"outlineColor": {
-										"value": 4278190080,
-										"isExpression": false
-									}
-								}
-							]
-						},
-						"options": {
-							"stepProgression": "auto",
-							"stepExpression": "",
-							"rotaryActions": false,
-							"canModifyStyleInApis": false,
-							"notes": "OMT: prompter: on"
-						},
-						"feedbacks": [],
-						"steps": {
-							"0": {
-								"action_sets": {
-									"down": [
-										{
-											"id": "act00002r",
-											"definitionId": "get",
-											"connectionId": "cuedeckHttpConnection",
-											"options": {
-												"url": {
-													"value": "omt/prompter/on",
-													"isExpression": false
-												},
-												"header": {
-													"value": "",
-													"isExpression": false
-												},
-												"jsonResultDataVariable": {
-													"isExpression": false
-												},
-												"result_stringify": {
-													"value": true,
-													"isExpression": false
-												},
-												"statusCodeVariable": {
-													"isExpression": false
-												}
-											},
-											"upgradeIndex": 2,
-											"type": "action"
-										}
-									],
-									"up": []
-								},
-								"options": {
-									"runWhileHeld": []
-								}
-							}
-						},
-						"localVariables": []
-					},
-					"2": {
-						"type": "button-layered",
-						"style": {
-							"layers": [
-								{
-									"id": "canvas",
-									"name": "Canvas",
-									"usage": "auto",
-									"type": "canvas",
-									"decoration": {
-										"value": "default",
-										"isExpression": false
-									},
-									"showStatusIcons": {
-										"value": "default",
-										"isExpression": false
-									}
-								},
-								{
-									"id": "box0",
-									"name": "Background",
-									"usage": "auto",
-									"type": "box",
-									"enabled": {
-										"value": true,
-										"isExpression": false
-									},
-									"opacity": {
-										"value": 100,
-										"isExpression": false
-									},
-									"x": {
-										"value": 0,
-										"isExpression": false
-									},
-									"y": {
-										"value": 0,
-										"isExpression": false
-									},
-									"width": {
-										"value": 100,
-										"isExpression": false
-									},
-									"height": {
-										"value": 100,
-										"isExpression": false
-									},
-									"rotation": {
-										"value": 0,
-										"isExpression": false
-									},
-									"color": {
-										"value": 0,
-										"isExpression": false
-									},
-									"borderWidth": {
-										"value": 0,
-										"isExpression": false
-									},
-									"borderColor": {
-										"value": 0,
-										"isExpression": false
-									},
-									"borderPosition": {
-										"value": "inside",
-										"isExpression": false
-									}
-								},
-								{
-									"id": "text0",
-									"name": "Text",
-									"usage": "auto",
-									"type": "text",
-									"enabled": {
-										"value": true,
-										"isExpression": false
-									},
-									"opacity": {
-										"value": 100,
-										"isExpression": false
-									},
-									"x": {
-										"value": 0,
-										"isExpression": false
-									},
-									"y": {
-										"value": 0,
-										"isExpression": false
-									},
-									"width": {
-										"value": 100,
-										"isExpression": false
-									},
-									"height": {
-										"value": 100,
-										"isExpression": false
-									},
-									"rotation": {
-										"value": 0,
-										"isExpression": false
-									},
-									"text": {
-										"value": "OMT\nPROMPTER\nOFF",
-										"isExpression": false
-									},
-									"color": {
-										"value": 16777215,
-										"isExpression": false
-									},
-									"halign": {
-										"value": "center",
-										"isExpression": false
-									},
-									"valign": {
-										"value": "center",
-										"isExpression": false
-									},
-									"fontsize": {
-										"value": 20,
-										"isExpression": false
-									},
-									"fontsizeAllowShrink": {
-										"value": true,
-										"isExpression": false
-									},
-									"font": {
-										"value": "companion-sans",
-										"isExpression": false
-									},
-									"outlineColor": {
-										"value": 4278190080,
-										"isExpression": false
-									}
-								}
-							]
-						},
-						"options": {
-							"stepProgression": "auto",
-							"stepExpression": "",
-							"rotaryActions": false,
-							"canModifyStyleInApis": false,
-							"notes": "OMT: prompter: off"
-						},
-						"feedbacks": [],
-						"steps": {
-							"0": {
-								"action_sets": {
-									"down": [
-										{
-											"id": "act00002s",
-											"definitionId": "get",
-											"connectionId": "cuedeckHttpConnection",
-											"options": {
-												"url": {
-													"value": "omt/prompter/off",
+													"value": "project/save",
 													"isExpression": false
 												},
 												"header": {
@@ -19462,7 +21881,7 @@
 				"maxRow": 3
 			}
 		},
-		"5": {
+		"6": {
 			"id": "cuedeckHallTimer",
 			"name": "CueDeck: hall timer",
 			"controls": {
@@ -19616,7 +22035,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002t",
+											"id": "act000036",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -19801,7 +22220,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002u",
+											"id": "act000037",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -19986,7 +22405,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002v",
+											"id": "act000038",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -20171,7 +22590,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002w",
+											"id": "act000039",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -20356,7 +22775,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002x",
+											"id": "act00003a",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -20607,7 +23026,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00002y",
+											"id": "act00003b",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -20643,7 +23062,7 @@
 						},
 						"localVariables": [
 							{
-								"id": "lv00002z",
+								"id": "lv00003c",
 								"type": "feedback",
 								"definitionId": "user_value",
 								"connectionId": "internal",
@@ -20880,7 +23299,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act000030",
+											"id": "act00003d",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -20916,7 +23335,7 @@
 						},
 						"localVariables": [
 							{
-								"id": "lv000031",
+								"id": "lv00003e",
 								"type": "feedback",
 								"definitionId": "user_value",
 								"connectionId": "internal",
@@ -21153,7 +23572,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act000032",
+											"id": "act00003f",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -21189,7 +23608,7 @@
 						},
 						"localVariables": [
 							{
-								"id": "lv000033",
+								"id": "lv00003g",
 								"type": "feedback",
 								"definitionId": "user_value",
 								"connectionId": "internal",
@@ -21362,7 +23781,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act000034",
+											"id": "act00003h",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -21547,7 +23966,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act000035",
+											"id": "act00003i",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -21732,7 +24151,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act000036",
+											"id": "act00003j",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -21917,7 +24336,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act000037",
+											"id": "act00003k",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -22102,7 +24521,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act000038",
+											"id": "act00003l",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -22287,7 +24706,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act000039",
+											"id": "act00003m",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -22472,7 +24891,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00003a",
+											"id": "act00003n",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -22657,7 +25076,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00003b",
+											"id": "act00003o",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -22844,7 +25263,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00003c",
+											"id": "act00003p",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -23029,7 +25448,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00003d",
+											"id": "act00003q",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -23214,7 +25633,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00003e",
+											"id": "act00003r",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -23399,7 +25818,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00003f",
+											"id": "act00003s",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -23584,7 +26003,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00003g",
+											"id": "act00003t",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -23769,7 +26188,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00003h",
+											"id": "act00003u",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -23954,7 +26373,7 @@
 								"action_sets": {
 									"down": [
 										{
-											"id": "act00003i",
+											"id": "act00003v",
 											"definitionId": "get",
 											"connectionId": "cuedeckHttpConnection",
 											"options": {
@@ -24003,275 +26422,317 @@
 	"triggers": {},
 	"triggerCollections": [],
 	"custom_variables": {
+		"cuedeck_omt_prompter_on": {
+			"description": "CueDeck — OMT prompter enabled: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 0
+		},
+		"cuedeck_omt_timer_on": {
+			"description": "CueDeck — OMT timer enabled: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 1
+		},
+		"cuedeck_video_loop": {
+			"description": "CueDeck — Video loop enabled: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 2
+		},
+		"cuedeck_audience_output": {
+			"description": "CueDeck — Audience window enabled: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 3
+		},
+		"cuedeck_test_screen": {
+			"description": "CueDeck — Test screen enabled: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 4
+		},
+		"cuedeck_syphon_enabled": {
+			"description": "CueDeck — Syphon / Spout requested: 1 / 0",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 5
+		},
+		"cuedeck_syphon_state": {
+			"description": "CueDeck — Syphon / Spout runtime state",
+			"defaultValue": "",
+			"persistCurrentValue": false,
+			"sortOrder": 6
+		},
 		"cuedeck_audience_timer": {
 			"description": "CueDeck — Hall timer: current countdown, stopwatch or clock text",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 0
+			"sortOrder": 7
 		},
 		"cuedeck_audience_timer_color": {
 			"description": "CueDeck — Hall timer status: green / yellow / red / neutral",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 1
+			"sortOrder": 8
 		},
 		"cuedeck_audience_timer_over": {
 			"description": "CueDeck — Hall timer has expired: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 2
+			"sortOrder": 9
 		},
 		"cuedeck_audience_timer_running": {
 			"description": "CueDeck — Hall timer running: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 3
+			"sortOrder": 10
 		},
 		"cuedeck_audience_timer_visible": {
 			"description": "CueDeck — Hall timer visible: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 4
+			"sortOrder": 11
 		},
 		"cuedeck_audience_timer_mode": {
 			"description": "CueDeck — Hall timer mode: countdown / stopwatch / clock",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 5
+			"sortOrder": 12
 		},
 		"cuedeck_audience_timer_loop": {
 			"description": "CueDeck — Hall timer repeat enabled: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 6
+			"sortOrder": 13
 		},
 		"cuedeck_audience_timer_tick": {
 			"description": "CueDeck — Hall timer tick enabled: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 7
+			"sortOrder": 14
 		},
 		"cuedeck_audience_timer_gong": {
 			"description": "CueDeck — Hall timer gong enabled: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 8
+			"sortOrder": 15
 		},
 		"cuedeck_online": {
 			"description": "CueDeck — CueDeck is running and sending data: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 9
+			"sortOrder": 16
 		},
 		"cuedeck_seen": {
 			"description": "CueDeck — When CueDeck last sent data (unix seconds). More than 10 s behind $(internal:time_unix) — CueDeck crashed or the network dropped",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 10
+			"sortOrder": 17
 		},
 		"cuedeck_timer": {
 			"description": "CueDeck — Timer as on the prompter: 04:59, −00:12 (or the time of day in clock mode)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 11
+			"sortOrder": 18
 		},
 		"cuedeck_timer_color": {
 			"description": "CueDeck — Timer colour: green / yellow / red / neutral",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 12
+			"sortOrder": 19
 		},
 		"cuedeck_timer_over": {
 			"description": "CueDeck — Time is up (the countdown went negative): 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 13
+			"sortOrder": 20
 		},
 		"cuedeck_timer_running": {
 			"description": "CueDeck — Timer running: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 14
+			"sortOrder": 21
 		},
 		"cuedeck_slide": {
 			"description": "CueDeck — Slide on air: 3/12 (empty when there is nothing to flip)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 15
+			"sortOrder": 22
 		},
 		"cuedeck_slides_left": {
 			"description": "CueDeck — Slides left after the current one: 9",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 16
+			"sortOrder": 23
 		},
 		"cuedeck_program": {
 			"description": "CueDeck — What is on air (playlist entry or file name)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 17
+			"sortOrder": 24
 		},
 		"cuedeck_preview": {
 			"description": "CueDeck — What is in preview — goes to the audience on TAKE",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 18
+			"sortOrder": 25
 		},
 		"cuedeck_next": {
 			"description": "CueDeck — Which entry “next speaker” will put into preview",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 19
+			"sortOrder": 26
 		},
 		"cuedeck_video": {
 			"description": "CueDeck — Time left of the clip on air: 00:13 (empty when there is no clip)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 20
+			"sortOrder": 27
 		},
 		"cuedeck_video_playing": {
 			"description": "CueDeck — Clip on air is playing: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 21
+			"sortOrder": 28
 		},
 		"cuedeck_muted": {
 			"description": "CueDeck — Program sound is off: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 22
+			"sortOrder": 29
 		},
 		"cuedeck_blackout": {
 			"description": "CueDeck — Blackout / key visual on: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 23
+			"sortOrder": 30
 		},
 		"cuedeck_message": {
 			"description": "CueDeck — Speaker message on the prompter (empty — none)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 24
+			"sortOrder": 31
 		},
 		"cuedeck_stream_running": {
 			"description": "CueDeck — Streaming is on (the STREAM button is pressed): 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 25
+			"sortOrder": 32
 		},
 		"cuedeck_stream_warn": {
 			"description": "CueDeck — Something is wrong with the stream — a destination is reconnecting, no picture, or the network can’t keep up: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 26
+			"sortOrder": 33
 		},
 		"cuedeck_stream_live": {
 			"description": "CueDeck — How many destinations are live right now: 2",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 27
+			"sortOrder": 34
 		},
 		"cuedeck_stream_total": {
 			"description": "CueDeck — How many destinations are enabled in total: 3",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 28
+			"sortOrder": 35
 		},
 		"cuedeck_timer_preset_1": {
 			"description": "CueDeck — Timer preset 1, minutes: 5 (empty if there is no such preset)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 29
+			"sortOrder": 36
 		},
 		"cuedeck_timer_preset_2": {
 			"description": "CueDeck — Timer preset 2, minutes: 10 (empty if there is no such preset)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 30
+			"sortOrder": 37
 		},
 		"cuedeck_timer_preset_3": {
 			"description": "CueDeck — Timer preset 3, minutes: 15 (empty if there is no such preset)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 31
+			"sortOrder": 38
 		},
 		"cuedeck_timer_preset_4": {
 			"description": "CueDeck — Timer preset 4, minutes: 20 (empty if there is no such preset)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 32
+			"sortOrder": 39
 		},
 		"cuedeck_program_index": {
 			"description": "CueDeck — Playlist entry number on air, as on the card: 3 (empty if what is on air is not from the playlist)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 33
+			"sortOrder": 40
 		},
 		"cuedeck_preview_index": {
 			"description": "CueDeck — Playlist entry number in preview, as on the card: 4 (empty if none)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 34
+			"sortOrder": 41
 		},
 		"cuedeck_message_preset_1": {
 			"description": "CueDeck — Text of speaker message preset 1 (empty if there is no such preset)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 35
+			"sortOrder": 42
 		},
 		"cuedeck_message_preset_2": {
 			"description": "CueDeck — Text of speaker message preset 2 (empty if there is no such preset)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 36
+			"sortOrder": 43
 		},
 		"cuedeck_message_preset_3": {
 			"description": "CueDeck — Text of speaker message preset 3 (empty if there is no such preset)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 37
+			"sortOrder": 44
 		},
 		"cuedeck_message_preset_4": {
 			"description": "CueDeck — Text of speaker message preset 4 (empty if there is no such preset)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 38
+			"sortOrder": 45
 		},
 		"cuedeck_message_preset_5": {
 			"description": "CueDeck — Text of speaker message preset 5 (empty if there is no such preset)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 39
+			"sortOrder": 46
 		},
 		"cuedeck_message_preset_6": {
 			"description": "CueDeck — Text of speaker message preset 6 (empty if there is no such preset)",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 40
+			"sortOrder": 47
 		},
 		"cuedeck_omt_on": {
 			"description": "CueDeck — OMT output “Program” is on: 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 41
+			"sortOrder": 48
 		},
 		"cuedeck_omt_program": {
 			"description": "CueDeck — vMix has the Program output on air (red OMT lamp): 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 42
+			"sortOrder": 49
 		},
 		"cuedeck_omt_preview": {
 			"description": "CueDeck — vMix has the Program output in preview (green OMT lamp): 1 / 0",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 43
+			"sortOrder": 50
 		},
 		"cuedeck_omt_receivers": {
 			"description": "CueDeck — How many receivers are pulling the Program output over OMT: 2",
 			"defaultValue": "",
 			"persistCurrentValue": false,
-			"sortOrder": 44
+			"sortOrder": 51
 		}
 	},
 	"customVariablesCollections": [],

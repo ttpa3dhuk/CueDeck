@@ -1,6 +1,7 @@
+import { REMOTE_EVENT } from './event.js'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 // Готовая страница Companion едет внутри приложения — клиенту не нужен репозиторий
 // (собирается `npx vite-node companion/build.ts`, см. companion/README.md).
 import companionPageRu from '../../../companion/CueDeck.companionconfig?raw'
@@ -56,9 +57,6 @@ export function captureIpcHandlers(): void {
     prev(channel, listener)
   }) as typeof ipcMain.handle
 }
-
-/** Обработчики из ipc.ts event не трогают; окна-отправителя у нас нет. */
-const REMOTE_EVENT = { sender: null, frameId: -1, processId: -1 } as unknown as IpcMainInvokeEvent
 
 /**
  * Вызвать обработчик ipc так же, как его вызвала бы кнопка оператора. Нужен
@@ -211,11 +209,14 @@ function statusJson(): Record<string, unknown> {
     },
     /** Язык интерфейса CueDeck: по нему модуль Companion выбирает язык кнопок. */
     lang: getLang(),
+    outputs: { audience: s.audienceOutputEnabled, testScreen: s.testScreen.manual || s.testScreen.automatic,
+      syphon: { enabled: s.syphon.enabled, state: s.syphon.state, name: s.syphon.name, reason: s.syphon.reason } },
+    project: { name: s.projectPath ? basename(s.projectPath) : null, saved: Boolean(s.projectPath) },
     /** Выходы OMT: включён ли, сколько получателей, tally от vMix (в эфире / в превью). */
     omt: Object.fromEntries(
       (['timer', 'program', 'prompter'] as const).map((id) => {
         const o = s.omt.outputs[id]
-        return [id, { on: o.state === 'on', receivers: o.receivers, program: o.program, preview: o.preview }]
+        return [id, { on: o.state === 'on', enabled: s.omt.enabled[id], state: o.state, receivers: o.receivers, program: o.program, preview: o.preview }]
       }),
     ),
   }

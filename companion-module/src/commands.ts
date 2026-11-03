@@ -64,6 +64,27 @@ export function commandFor(actionId: string, o: Options): Command | null {
 			return { path: 'program/goto', value: int(o.slide) }
 		case 'take':
 			return { path: 'take' }
+		case 'take_fade':
+			return { path: 'take/fade' }
+		case 'take_fade_ms':
+			return { path: 'take/fade-ms', value: str(o.milliseconds) || '400' }
+		case 'take_video_mode':
+			return {
+				path: 'take/video-mode',
+				value: oneOf(['play-start', 'play-resume', 'hold-first'] as const, o.mode, 'play-start'),
+			}
+		case 'take_slide_mode':
+			return { path: 'take/slide-mode', value: oneOf(['from-start', 'from-current'] as const, o.mode, 'from-start') }
+		case 'output':
+			return {
+				path: `${oneOf(['syphon', 'audience-output', 'test-screen'] as const, o.target, 'audience-output')}/${oneOf(ON_OFF, o.mode, 'toggle')}`,
+			}
+		case 'omt_output':
+			return {
+				path: `omt/${oneOf(['timer', 'program', 'prompter'] as const, o.target, 'program')}/${oneOf(ON_OFF, o.mode, 'toggle')}`,
+			}
+		case 'project_save':
+			return { path: 'project/save' }
 		case 'blackout':
 			return { path: `blackout/${oneOf(ON_OFF, o.mode, 'toggle')}` }
 		case 'stream':

@@ -1,10 +1,12 @@
+import { hasLastSession, listSessionBackups } from './session-files.js'
 import { timerFont } from '../shared/timer-font.js'
 import { timerAdjustments } from '../shared/timer-controls.js'
 import { materialTakeTimer, sanitizeMaterialSettings, validMaterialDuration } from '../shared/material-settings.js'
 import { setMaterialSettings } from './display-mapping.js'
 import { initialSlideVideo } from '../shared/slide-video.js'
 import { slideNavigationPatch, sanitizeSlideFadeMs } from '../shared/slide-transition.js'
-import { beginSessionRestore, finishSessionRestore, beginEmptyProject, configureStartup, flushSessionCheckpoint, initSessionLifecycle, shouldRestoreAtStartup } from './session-lifecycle.js'
+import { clearSessionDecks, restoreSessionDecks } from './session-restore.js'
+import { assertSessionIdle, waitForSessionRestore, beginSessionRestore, finishSessionRestore, beginEmptyProject, finishEmptyProject, configureStartup, flushSessionCheckpoint, initSessionLifecycle, shouldRestoreAtStartup } from './session-lifecycle.js'
 import { recoveryTakeFrame } from '../shared/recovery-take.js'
 import { createClickerNavigation } from './clicker-navigation.js'
 import { audienceTimerConfig, createAudienceTimer } from '../shared/audience-timer.js'
@@ -128,6 +130,7 @@ import {
   loadProjectFile,
   PROJECT_EXTENSION,
   saveProjectFile,
+  flushProjectWrites,
 } from './project.js'
 
 import type { DisplayInfo, OpenPdfResult } from '../shared/types.js'
@@ -752,6 +755,7 @@ export async function refreshMissingFiles(): Promise<number> {
 export async function saveProject(
   saveAs = false,
 ): Promise<{ ok: boolean; path?: string; error?: string }> {
+  await waitForSessionRestore()
   const op = getOperatorWindow()
   const state = store.get()
   let target = state.projectPath
@@ -779,8 +783,10 @@ export async function saveProject(
   }
 }
 
-async function restoreLastSession(): Promise<OpenPdfResult & { hadSession: boolean }> {
-  const saved = beginSessionRestore()
+async function restoreLastSession(backupId?: string): Promise<OpenPdfResult & { hadSession: boolean }> {
+  let saved: ReturnType<typeof beginSessionRestore>
+  try { saved = beginSessionRestore(backupId) }
+  catch (error) { return { ok: false, hadSession: false, error: error instanceof Error ? error.message : String(error) } }
   let success = false
   try {
     stopListPlayback()
@@ -792,29 +798,24 @@ async function restoreLastSession(): Promise<OpenPdfResult & { hadSession: boole
       currentPlaylistId: id, keyVisualPath: saved ? saved.keyVisualPath : getKeyVisualPath(),
       projectPath: saved ? saved.projectPath : getProjectPath(), audienceTimer: createAudienceTimer(getAudienceTimer()) })
     void refreshMissingFiles()
-    let result: OpenPdfResult = { ok: true }
-    if (path) result = await openFile(path, { playlistId: id, restorePaused: true })
-    if (!result.ok) return { ...result, hadSession: true }
+    let result: OpenPdfResult
     if (saved) {
-      if (path) {
-        const state = store.get()
-        const slide = Math.max(1, Math.min(state.totalSlides || 1, saved.program.slide))
-        store.patch({ currentSlide: slide, video: { ...state.video, ...saved.program.video, playing: false, anchorAt: null } })
-      }
-      if (saved.preview.path) {
-        const previewResult = await loadPreview(saved.preview.path, { playlistId: saved.preview.playlistId })
-        if (!previewResult.ok) return { ...previewResult, hadSession: true }
-        const preview = store.get().preview
-        store.patchPreview({ currentSlide: Math.max(1, Math.min(preview.totalSlides || 1, saved.preview.slide)),
-          video: { ...preview.video, ...saved.preview.video, playing: false, anchorAt: null } })
-      }
-      store.patch({ timer: { ...saved.timer, running: false, startedAt: null },
-        audienceTimer: { ...createAudienceTimer(saved.audienceTimer), elapsedMs: saved.audienceTimer.elapsedMs, running: false, startedAt: null } })
+      result = await restoreSessionDecks(saved, {
+        program: (filePath, playlistId) => openFile(filePath, { playlistId, restorePaused: true }),
+        preview: (filePath, playlistId) => loadPreview(filePath, { playlistId }),
+      })
+    } else {
+      clearSessionDecks()
+      result = path ? await openFile(path, { playlistId: id, restorePaused: true }) : { ok: true }
     }
+    if (!result.ok) return { ...result, hadSession: true }
     success = true
     if (path || playlist.length || folders.length) store.patch({ recoveryStartup: false })
     return { ...result, hadSession: Boolean(path || playlist.length || folders.length) }
-  } finally { finishSessionRestore(success) }
+  } finally {
+    finishSessionRestore(success)
+    if (success && backupId) flushSessionCheckpoint()
+  }
 }
 
 export function registerIpcHandlers(): void {
@@ -2217,11 +2218,26 @@ export function registerIpcHandlers(): void {
 
   /** Returns true if there is a previous session worth restoring. */
   ipcMain.handle('session:has-last', () => {
-    return Boolean(getLastPdfPath()) || getPlaylist().length > 0 || getPlaylistFolders().length > 0
+    return hasLastSession() || Boolean(getLastPdfPath()) || getPlaylist().length > 0 || getPlaylistFolders().length > 0
   })
 
   /** Restores the last session: playlist, key visual, project path, and last open file. */
   ipcMain.handle('session:restore', () => restoreLastSession())
+  ipcMain.handle('session:restore-backup', async event => {
+    if (event.sender !== getOperatorWindow()?.webContents) throw new Error('Operator window required')
+    try {
+      const backups = listSessionBackups()
+      if (!backups.length) return { ok: false, error: t('Контрольных копий пока нет') }
+      const result = await dialog.showMessageBox(getOperatorWindow()!, {
+        type: 'question', title: t('Контрольные копии'),
+        message: t('Выбери копию для восстановления'),
+        buttons: [...backups.map(item => item.name), t('Отмена')],
+        cancelId: backups.length, defaultId: backups.length, noLink: true,
+      })
+      if (result.response === backups.length) return { ok: false, cancelled: true }
+      return await restoreLastSession(backups[result.response].id)
+    } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) } }
+  })
 
   ipcMain.handle('project:new', () => {
     beginEmptyProject()
@@ -2247,6 +2263,7 @@ export function registerIpcHandlers(): void {
       speakerMessage: null,
       audienceTimer: createAudienceTimer(getAudienceTimer()),
     })
+    finishEmptyProject()
   })
 
   ipcMain.handle(
@@ -2263,6 +2280,8 @@ export function registerIpcHandlers(): void {
       missing?: number
       total?: number
     }> => {
+      try { assertSessionIdle() }
+      catch (error) { return { ok: false, error: (error as Error).message } }
       const op = getOperatorWindow()
       const res = await dialog.showOpenDialog(op!, {
         title: t('Открыть проект'),
@@ -2272,8 +2291,10 @@ export function registerIpcHandlers(): void {
       if (res.canceled || res.filePaths.length === 0) return { ok: false }
       const path = res.filePaths[0]
       try {
+        assertSessionIdle()
         if (store.get().testScreen.automatic) store.patch({ testScreen: { ...store.get().testScreen, automatic: false } })
         const loaded = await loadProjectFile(path)
+        beginEmptyProject()
         store.patch({
           playlist: loaded.playlist,
           playlistFolders: loaded.playlistFolders,
@@ -2469,6 +2490,8 @@ export function registerIpcHandlers(): void {
 }
 
 export async function flushPendingWrites(): Promise<void> {
+  await waitForSessionRestore()
   flushSessionCheckpoint()
   await notesWriter.flush()
+  await flushProjectWrites()
 }

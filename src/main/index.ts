@@ -2,7 +2,7 @@ import { setOperatorApplicationMenu } from './application-menu.js'
 import { registerTestScreenIpc } from './test-screen.js'
 import { registerAudienceOutputIpc } from './audience-output.js'
 import { startupTestScreenAllowed } from '../shared/test-screen.js'
-import { getStartupSettings, getRestorePending } from './display-mapping.js'
+import { getStartupSettings } from './display-mapping.js'
 import { app, BrowserWindow, ipcMain, Menu, protocol, screen, session, shell, systemPreferences } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
@@ -555,7 +555,7 @@ app.whenReady().then(async () => {
 
   // Restore preferences (timer settings, UI prefs) — session content loaded on demand via "Последний"
   store.patch({
-    testScreen: { automatic: getStartupSettings().autoTestScreen && !getRestorePending() && startupTestScreenAllowed({ playlist: getPlaylist(), lastPath: getLastPdfPath(), projectPath: getProjectPath(), keyVisualPath: getKeyVisualPath() }), manual: false },
+    testScreen: { automatic: getStartupSettings().autoTestScreen && !store.get().recoveryStartup && startupTestScreenAllowed({ playlist: getPlaylist(), lastPath: getLastPdfPath(), projectPath: getProjectPath(), keyVisualPath: getKeyVisualPath() }), manual: false },
     timer: { ...store.get().timer, durationMs: getLastDurationMs() },
     materialSettings: getMaterialSettings(),
     audienceTimer: createAudienceTimer(getAudienceTimer()),

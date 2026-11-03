@@ -7,7 +7,7 @@
 | Что скачать | Где взять | Как установить |
 | --- | --- | --- |
 | Готовые страницы `.companionconfig` | [Скачать русскую версию](https://raw.githubusercontent.com/ttpa3dhuk/CueDeck/main/companion/CueDeck.companionconfig) · [Download English version](https://raw.githubusercontent.com/ttpa3dhuk/CueDeck/main/companion/CueDeck.en.companionconfig) | Companion → Import / Export → Import → выбрать файл, затем нужные страницы и Custom Variables. Подробности ниже |
-| Модуль CueDeck `.tgz` | [Скачать модуль 0.3.0](https://github.com/ttpa3dhuk/CueDeck/releases/download/v0.12.0/cuedeck-cuedeck-0.3.0.tgz) из релиза CueDeck 0.12.0 | Companion → Modules → Import module package → выбрать `.tgz`, не распаковывая. Затем Connections → Add Connection → CueDeck |
+| Модуль CueDeck `.tgz` | [Скачать модуль 0.4.1](https://github.com/ttpa3dhuk/CueDeck/releases/download/v0.13.0/cuedeck-cuedeck-0.4.1.tgz) из релиза CueDeck 0.13.0 | Companion → Modules → Import module package → выбрать `.tgz`, не распаковывая. Затем Connections → Add Connection → CueDeck |
 
 Прямые ссылки на страницы выше ведут на ветку main. Страницу именно установленной версии можно сохранить из CueDeck: ⚙ Настройки → Внешнее управление → «Страница Companion…».
 
@@ -176,3 +176,11 @@ npx vite-node companion/build.ts
 ```
 
 Раскладка и подписи — `companion/build.ts`; переменные — `src/main/remote/companion-vars.ts`; отправка из CueDeck — `src/main/remote/companion-push.ts`. Формат — экспорт Companion 5.0.6 (JSON, version 12). В Companion 5 кегль текста — **% от высоты элемента**: подписи 25–36, иначе «Shrink to fit» режет слова пополам.
+
+## Новые команды CueDeck 0.13
+
+В модуле 0.4.1 раздел «Выходы и проект» содержит Syphon/Spout, показ окна зала, тестовый экран, сохранение проекта и три выхода OMT. Раздел «TAKE и режимы выдачи» содержит Fade и поведение ролика/слайдов при выдаче. Цикл ролика находится в разделе «Ролик в эфире».
+
+Сохранение с деки работает для проекта с выбранным именем файла. Первый раз сохраните его в CueDeck. Зелёный Syphon/Spout означает работающий выход; жёлтый сообщает о блокировке или ошибке. При активном OMT «Зал» или трансляции эти выходы имеют приоритет.
+
+После импорта пакета выберите Module Version 0.4.1 в подключении. Уже созданные страницы не обновляются: новые кнопки перетащите из Presets на свободные места.

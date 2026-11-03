@@ -338,6 +338,7 @@ const api: PresenterApi = {
     startup: () => ipcRenderer.invoke('session:startup'),
     hasLast: () => ipcRenderer.invoke('session:has-last'),
     restore: () => ipcRenderer.invoke('session:restore'),
+    restoreBackup: () => ipcRenderer.invoke('session:restore-backup'),
   },
   fonts: {
     info: () => ipcRenderer.invoke('fonts:info'),

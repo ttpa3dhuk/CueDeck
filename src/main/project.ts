@@ -115,6 +115,15 @@ export async function loadProjectFile(path: string): Promise<LoadedProject> {
 
 let saveChain: Promise<void> = Promise.resolve()
 
+/** Wait for queued writes before app.exit; each caller still receives its error. */
+export async function flushProjectWrites(): Promise<void> {
+  let pending: Promise<void>
+  do {
+    pending = saveChain
+    await pending
+  } while (pending !== saveChain)
+}
+
 /** Manual saves and autosaves share one queue; atomic renames cannot race. */
 export function saveProjectFile(
   path: string,

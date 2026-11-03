@@ -9,6 +9,13 @@ export type ActionsSchema = {
 	program_prev: { options: Record<string, never> }
 	program_goto: { options: { slide: number } }
 	take: { options: Record<string, never> }
+	take_fade: { options: Record<string, never> }
+	take_fade_ms: { options: { milliseconds: number } }
+	take_video_mode: { options: { mode: string } }
+	take_slide_mode: { options: { mode: string } }
+	output: { options: { target: string; mode: OnOff } }
+	omt_output: { options: { target: string; mode: OnOff } }
+	project_save: { options: Record<string, never> }
 	blackout: { options: { mode: OnOff } }
 	stream: { options: { mode: OnOff } }
 	video: { options: { cmd: string } }
@@ -51,6 +58,98 @@ export function UpdateActions(self: ModuleInstance): void {
 	}
 
 	const actions: CompanionActionDefinitions<ActionsSchema> = {
+		output: {
+			name: 'Outputs: Syphon / Spout, audience window, test screen',
+			options: [
+				{
+					id: 'target',
+					type: 'dropdown',
+					label: 'Output',
+					default: 'audience-output',
+					choices: [
+						{ id: 'audience-output', label: 'Audience window' },
+						{ id: 'syphon', label: 'Syphon (Mac) / Spout (Windows)' },
+						{ id: 'test-screen', label: 'Test screen' },
+					],
+				},
+				{ id: 'mode', type: 'dropdown', label: 'Mode', default: 'toggle', choices: onOffChoices },
+			],
+			callback: async (e) => run(e.actionId, e.options),
+		},
+		omt_output: {
+			name: 'OMT: Enable / disable output',
+			options: [
+				{
+					id: 'target',
+					type: 'dropdown',
+					label: 'Output',
+					default: 'program',
+					choices: [
+						{ id: 'program', label: 'Audience' },
+						{ id: 'timer', label: 'Timer' },
+						{ id: 'prompter', label: 'Prompter' },
+					],
+				},
+				{ id: 'mode', type: 'dropdown', label: 'Mode', default: 'toggle', choices: onOffChoices },
+			],
+			callback: async (e) => run(e.actionId, e.options),
+		},
+		project_save: {
+			name: 'Project: Save',
+			description:
+				'Saves the named project. Choose its filename once in CueDeck before using this button; it never opens a file dialog during a show.',
+			options: [],
+			callback: async (e) => run(e.actionId, e.options),
+		},
+		take_fade: { name: 'Program: TAKE with Fade', options: [], callback: async (e) => run(e.actionId, e.options) },
+		take_fade_ms: {
+			name: 'Program: Fade duration',
+			options: [
+				{
+					id: 'milliseconds',
+					type: 'number',
+					label: 'Milliseconds',
+					default: 400,
+					min: 100,
+					max: 400,
+					asInteger: true,
+				},
+			],
+			callback: async (e) => run(e.actionId, e.options),
+		},
+		take_video_mode: {
+			name: 'Program: Video behavior on TAKE',
+			options: [
+				{
+					id: 'mode',
+					type: 'dropdown',
+					label: 'Mode',
+					default: 'play-start',
+					choices: [
+						{ id: 'play-start', label: 'Play from start' },
+						{ id: 'play-resume', label: 'Resume' },
+						{ id: 'hold-first', label: 'Hold first selected frame' },
+					],
+				},
+			],
+			callback: async (e) => run(e.actionId, e.options),
+		},
+		take_slide_mode: {
+			name: 'Program: Slide behavior on TAKE',
+			options: [
+				{
+					id: 'mode',
+					type: 'dropdown',
+					label: 'Mode',
+					default: 'from-start',
+					choices: [
+						{ id: 'from-start', label: 'From first slide' },
+						{ id: 'from-current', label: 'From selected slide' },
+					],
+				},
+			],
+			callback: async (e) => run(e.actionId, e.options),
+		},
 		// ── Эфир ──
 		program_next: {
 			name: 'Program: Next',

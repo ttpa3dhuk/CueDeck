@@ -52,7 +52,7 @@ PATH=/opt/homebrew/bin:$PATH corepack yarn package
 
 ### Поставить в Companion без каталога
 
-**Скачать:** [модуль CueDeck 0.3.0 (.tgz)](https://github.com/ttpa3dhuk/CueDeck/releases/download/v0.12.0/cuedeck-cuedeck-0.3.0.tgz). Пакет приложен к релизу CueDeck 0.12.0. Для готовых страниц `.companionconfig` и их установки есть [отдельная инструкция](../companion/README.md#где-взять-файлы).
+**Скачать:** [модуль CueDeck 0.4.1 (.tgz)](https://github.com/ttpa3dhuk/CueDeck/releases/download/v0.13.0/cuedeck-cuedeck-0.4.1.tgz). Пакет приложен к релизу CueDeck 0.13.0. Для готовых страниц `.companionconfig` и их установки есть [отдельная инструкция](../companion/README.md#где-взять-файлы).
 
 Companion → **Modules** → **Import module package** → выбрать `.tgz`. Потом **Connections** → **+ Add connection** → CueDeck. Так же модуль можно отдавать клиентам, пока он не в каталоге.
 

@@ -1,3 +1,4 @@
+import { isRemoteControlEvent } from './remote/event.js'
 /**
  * Operator-only IPC for the Syphon output setting.
  *
@@ -17,8 +18,8 @@ export interface SyphonIpcTarget {
 
 function requireOperator(event: IpcMainInvokeEvent): void {
   const operator = getOperatorWindow()
-  if (!operator || operator.isDestroyed() || event.sender !== operator.webContents ||
-    event.senderFrame !== operator.webContents.mainFrame) throw new Error('Operator window required')
+  if (!isRemoteControlEvent(event) && (!operator || operator.isDestroyed() || event.sender !== operator.webContents ||
+    event.senderFrame !== operator.webContents.mainFrame)) throw new Error('Operator window required')
 }
 
 export function registerSyphonIpc(target: SyphonIpcTarget): void {

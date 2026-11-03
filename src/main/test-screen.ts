@@ -1,3 +1,4 @@
+import { isRemoteControlEvent } from './remote/event.js'
 import { app, ipcMain, screen, type IpcMainInvokeEvent } from 'electron'
 import { store } from './state.js'
 import { getOperatorWindow } from './windows.js'
@@ -7,8 +8,8 @@ import { currentDisplayMode } from './display-mode.js'
 export function registerTestScreenIpc(): void {
   const requireOperator = (event: IpcMainInvokeEvent): void => {
     const operator = getOperatorWindow()
-    if (!operator || operator.isDestroyed() || event.sender !== operator.webContents ||
-      event.senderFrame !== operator.webContents.mainFrame) throw new Error('Operator window required')
+    if (!isRemoteControlEvent(event) && (!operator || operator.isDestroyed() || event.sender !== operator.webContents ||
+      event.senderFrame !== operator.webContents.mainFrame)) throw new Error('Operator window required')
   }
   ipcMain.handle('test-screen:set-enabled', (event, enabled: unknown) => {
     requireOperator(event)

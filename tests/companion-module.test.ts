@@ -1,4 +1,5 @@
 import { createAudienceTimer } from '../src/shared/audience-timer'
+import { defaultSyphonStatus } from '../src/shared/types'
 import { describe, expect, it } from 'vitest'
 import { resolveRemote, type RemoteStateView } from '../src/main/remote/commands'
 import {
@@ -27,6 +28,10 @@ const entry = (id: string) =>
 
 /** Состояние, в котором любая команда исполнима: ролик в эфире, превью заряжено, спикеры есть и до, и после. */
 const busy: RemoteStateView = {
+  audienceOutputEnabled: true,
+  testScreen: { manual: false, automatic: false },
+  syphon: defaultSyphonStatus(),
+  projectPath: '/x/show.pdpres',
   audienceTimer: createAudienceTimer(),
   timer: { durationMs: 600_000, startedAt: null, elapsedMs: 0, running: false, cycles: 0 },
   timerPosition: 'top-right',
@@ -80,6 +85,13 @@ const ALL: [string, Record<string, unknown>][] = [
   ['program_prev', {}],
   ['program_goto', { slide: 3 }],
   ['take', {}],
+  ['take_fade', {}],
+  ['take_fade_ms', {milliseconds: 400}],
+  ...['play-start','play-resume','hold-first'].map(mode => ['take_video_mode', {mode}] as [string,Record<string,unknown>]),
+  ...['from-start','from-current'].map(mode => ['take_slide_mode', {mode}] as [string,Record<string,unknown>]),
+  ...['syphon','audience-output','test-screen'].flatMap(target => each(ON_OFF,mode => ['output',{target,mode}])),
+  ...['timer','program','prompter'].flatMap(target => each(ON_OFF,mode => ['omt_output',{target,mode}])),
+  ['project_save', {}],
   ...each(ON_OFF, (mode) => ['blackout', { mode }]),
   ...each(ON_OFF, (mode) => ['stream', { mode }]),
   ...each(VIDEO_CMDS, (cmd) => ['video', { cmd }]),

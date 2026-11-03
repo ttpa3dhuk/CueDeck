@@ -1,3 +1,4 @@
+import { initialState } from '../src/main/state'
 import { describe, expect, it } from 'vitest'
 import { createAudienceTimer } from '../src/shared/audience-timer'
 import { createAudienceTimerCommands } from '../src/main/audience-timer'
@@ -6,6 +7,7 @@ import { audienceTimerStatus, companionOfflineVars, companionVars, type Companio
 
 const hall = () => createAudienceTimer({ durationMs: 90_000, loop: true, tickEnabled: true, gongEnabled: true })
 const state = (): CompanionStateView => ({
+  projectPath: null, audienceOutputEnabled: true, testScreen: { manual: false, automatic: false }, syphon: initialState().syphon,
   audienceTimer: hall(),
   timer: { durationMs: 600_000, elapsedMs: 0, startedAt: null, running: false, cycles: 0 },
   timerMode: 'countdown', timerPosition: 'top-right', timerPresets: [5, 10, 15], speakerMsgPresets: [],
@@ -14,7 +16,7 @@ const state = (): CompanionStateView => ({
   videoLoop: false, playlist: [], currentPlaylistId: null, speakerMessage: null,
   preview: { path: null } as RemoteStateView['preview'],
   stream: { running: false, destinations: [] } as unknown as RemoteStateView['stream'],
-  omt: { outputs: { program: { state: 'off', receivers: 0 } } } as unknown as RemoteStateView['omt'],
+  omt: initialState().omt,
   timerLoop: true, timerTickEnabled: true, timerGongEnabled: true,
 })
 const resolve = (route: string, s = state(), args: (string | number | boolean)[] = []) => resolveRemote(route.split('/'), args, s)

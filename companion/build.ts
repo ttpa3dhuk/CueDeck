@@ -651,6 +651,11 @@ function build(lang: Lang, file: string): void {
   ]
   setLang(lang)
   const extraLabels: Record<string, [string, string]> = {
+    'syphon': ['SYPHON / SPOUT', 'SYPHON / SPOUT'],
+    'audience-output': ['ОКНО ЗАЛА', 'AUDIENCE'],
+    'test-screen': ['ТЕСТ ЭКРАН', 'TEST SCREEN'],
+    'project/save': ['СОХРАНИТЬ\nПРОЕКТ', 'SAVE\nPROJECT'],
+    'video/loop': ['РОЛИК\nЦИКЛ', 'VIDEO\nLOOP'],
     'take/fade': ['FADE', 'FADE'],
     'take/fade-ms': ['FADE\nмс', 'FADE\nms'],
     'take/video-mode': ['РОЛИК', 'VIDEO'],
@@ -678,12 +683,20 @@ function build(lang: Lang, file: string): void {
   }
   const additions = REMOTE_COMMANDS.filter((c) =>
     c.path.startsWith('take/') || c.path.startsWith('omt/') ||
+    /^(syphon|audience-output|test-screen|project)\//.test(c.path) || c.path.startsWith('video/loop/') ||
     /^(timer\/(loop|tick|gong)|preview\/video\/(forward|back))/.test(c.path),
   ).flatMap((c) => (c.values ?? [c.example ?? '']).map((value) => ({
     cmd: c.path + (value ? `/${value}` : ''),
     label: extraLabel(c.path, value),
     size: 20,
     notes: commandTitle(c),
+    ...(() => {
+      const base = c.path.replace(/\/(toggle|on|off)$/, '')
+      const variable = base === 'syphon' ? 'cuedeck_syphon_state' : base === 'audience-output' ? 'cuedeck_audience_output'
+        : base === 'test-screen' ? 'cuedeck_test_screen' : base === 'video/loop' ? 'cuedeck_video_loop' : base === 'omt/program' ? 'cuedeck_omt_on'
+        : base === 'omt/timer' ? 'cuedeck_omt_timer_on' : base === 'omt/prompter' ? 'cuedeck_omt_prompter_on' : null
+      return variable ? { bg: x(`(${online}) && ${cv(variable as keyof typeof COMPANION_VARS)} == '${base === 'syphon' ? 'on' : '1'}' ? '${C.greenBg}' : '${C.black}'`) } : {}
+    })(),
   })))
   for (let offset = 0; offset < additions.length; offset += 32) {
     const extraGrid: Record<number, Record<number, ReturnType<typeof button>>> = {}

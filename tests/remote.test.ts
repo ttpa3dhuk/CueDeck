@@ -1,3 +1,4 @@
+import { initialState } from '../src/main/state'
 import { describe, expect, it } from 'vitest'
 import { createAudienceTimer } from '../src/shared/audience-timer'
 import { encodeOscBundle, encodeOscMessage, parseOscPacket } from '../src/main/remote/osc'
@@ -21,6 +22,7 @@ const entry = (id: string, kind = 'pdf') =>
   ({ id, kind, filePath: `/x/${id}`, fileName: id, durationMs: 0 }) as unknown as RemoteStateView['playlist'][number]
 
 const state = (over: Partial<RemoteStateView> = {}): RemoteStateView => ({
+  projectPath: null, audienceOutputEnabled: true, testScreen: { manual: false, automatic: false }, syphon: initialState().syphon,
   audienceTimer: createAudienceTimer(),
   timer: { durationMs: 600_000, startedAt: null, elapsedMs: 0, running: false, cycles: 0 },
   timerPosition: 'top-right',
@@ -498,5 +500,22 @@ describe('новые команды пульта', () => {
     expect(run(`omt/${id}/on`, [], { omt })).toMatchObject({ ok: true, calls: [] })
     expect(run(`omt/${id}/toggle`, [], { omt })).toMatchObject({ ok: true, calls: [{ channel: 'omt:configure', args: [{ enabled: { [id]: false } }] }] })
     expect(run(`omt/${id}/off`, [false], { omt })).toMatchObject({ ok: true, ignored: true })
+  })
+})
+
+describe('output and project commands', () => {
+  it('retries explicitly requested but unavailable GPU output and always permits off', () => {
+    const s = state({ syphon: { ...initialState().syphon, enabled: true, state: 'unavailable' } })
+    expect(resolveRemote(seg('syphon/on'), [], s)).toMatchObject({ ok: true, calls: [{ channel: 'syphon:configure', args: [{ enabled: true }] }] })
+    expect(resolveRemote(seg('syphon/toggle'), [], s)).toMatchObject({ calls: [{ args: [{ enabled: false }] }] })
+    expect(resolveRemote(seg('syphon/off'), [], state())).toMatchObject({ calls: [{ args: [{ enabled: false }] }] })
+  })
+  it('switches hall and test output without touching blackout', () => {
+    expect(resolveRemote(seg('audience-output/toggle'), [], state())).toMatchObject({ calls: [{ channel: 'audience-output:set-enabled', args: [false] }] })
+    expect(resolveRemote(seg('test-screen/off'), [], state({ testScreen: { manual: false, automatic: true } }))).toMatchObject({ calls: [{ channel: 'test-screen:set-enabled', args: [false] }] })
+  })
+  it('requires a named project so a remote save never opens a blocking picker', () => {
+    expect(resolveRemote(seg('project/save'), [], state())).toMatchObject({ ok: false })
+    expect(resolveRemote(seg('project/save'), [], state({ projectPath: '/show.pdpres' }))).toMatchObject({ calls: [{ channel: 'project:save', args: [] }] })
   })
 })

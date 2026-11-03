@@ -403,6 +403,7 @@ export interface PresenterApi {
     startup(): Promise<OpenPdfResult & { hadSession: boolean; recovery: boolean }>
     hasLast(): Promise<boolean>
     restore(): Promise<OpenPdfResult & { hadSession: boolean }>
+    restoreBackup(): Promise<OpenPdfResult & { cancelled?: boolean }>
   }
   fonts: {
     info(): Promise<{ supported: boolean; added: number }>

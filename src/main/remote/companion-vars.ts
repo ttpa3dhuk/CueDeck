@@ -17,6 +17,14 @@ import { neighbour, programHasVideo, type RemoteStateView } from './commands.js'
  */
 
 export const COMPANION_VARS = {
+  cuedeck_omt_prompter_on: 'OMT prompter включён: 1 / 0',
+  cuedeck_omt_timer_on: 'OMT timer включён: 1 / 0',
+  cuedeck_video_loop: 'Цикл ролика включён: 1 / 0',
+  cuedeck_audience_output: 'Окно зала включено: 1 / 0',
+  cuedeck_test_screen: 'Тестовый экран включён: 1 / 0',
+  cuedeck_syphon_enabled: 'Syphon / Spout запрошен: 1 / 0',
+  cuedeck_syphon_state: 'Состояние Syphon / Spout',
+
   cuedeck_audience_timer: 'Таймер зала: текст текущего отсчёта, секундомера или часов',
   cuedeck_audience_timer_color: 'Состояние таймера зала: green / yellow / red / neutral',
   cuedeck_audience_timer_over: 'Время таймера зала вышло: 1 / 0',
@@ -70,6 +78,14 @@ export type CompanionVarName = keyof typeof COMPANION_VARS
 
 /** Те же описания для английской страницы Companion (companion/build.ts). */
 export const COMPANION_VARS_EN: Record<CompanionVarName, string> = {
+  cuedeck_omt_prompter_on: 'OMT prompter enabled: 1 / 0',
+  cuedeck_omt_timer_on: 'OMT timer enabled: 1 / 0',
+  cuedeck_video_loop: 'Video loop enabled: 1 / 0',
+  cuedeck_audience_output: 'Audience window enabled: 1 / 0',
+  cuedeck_test_screen: 'Test screen enabled: 1 / 0',
+  cuedeck_syphon_enabled: 'Syphon / Spout requested: 1 / 0',
+  cuedeck_syphon_state: 'Syphon / Spout runtime state',
+
   cuedeck_audience_timer: 'Hall timer: current countdown, stopwatch or clock text',
   cuedeck_audience_timer_color: 'Hall timer status: green / yellow / red / neutral',
   cuedeck_audience_timer_over: 'Hall timer has expired: 1 / 0',
@@ -176,6 +192,13 @@ export function companionVars(s: CompanionStateView, now: number, videoPosSec: n
     return typeof m === 'number' ? String(m) : ''
   }
   return {
+    cuedeck_omt_prompter_on: flag(s.omt.outputs.prompter.state === 'on'),
+    cuedeck_omt_timer_on: flag(s.omt.outputs.timer.state === 'on'),
+    cuedeck_video_loop: flag(s.videoLoop),
+    cuedeck_audience_output: flag(s.audienceOutputEnabled),
+    cuedeck_test_screen: flag(s.testScreen.manual || s.testScreen.automatic),
+    cuedeck_syphon_enabled: flag(s.syphon.enabled),
+    cuedeck_syphon_state: s.syphon.state,
     cuedeck_online: '1',
     cuedeck_seen: String(Math.floor(now / 1000)),
     cuedeck_timer: view.text,
@@ -227,6 +250,9 @@ export function companionVars(s: CompanionStateView, now: number, videoPosSec: n
 /** Что отправить, когда CueDeck закрывается: кнопки не должны врать старым временем. */
 export function companionOfflineVars(): Partial<CompanionVars> {
   return {
+    cuedeck_omt_prompter_on: '0',
+    cuedeck_omt_timer_on: '0',
+    cuedeck_video_loop: '0', cuedeck_audience_output: '0', cuedeck_test_screen: '0', cuedeck_syphon_enabled: '0', cuedeck_syphon_state: 'off',
     cuedeck_online: '0',
     cuedeck_timer: '',
     cuedeck_timer_over: '0',
