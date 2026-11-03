@@ -10,7 +10,7 @@ import { audienceTimerConfig, createAudienceTimer } from '../shared/audience-tim
 import { createAudienceTimerCommands } from './audience-timer.js'
 import { getAudienceTimer, setAudienceTimer } from './display-mapping.js'
 import { createClickerShortcutManager } from './clicker-shortcuts.js'
-import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders, duplicatePlaylistEntry } from '../shared/playlist-folders.js'
+import { normalizeFolderPlaylist, reorderFolderPlaylist, insertPlaylistEntries, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders, duplicatePlaylistEntry, type PlaylistInsertPosition } from '../shared/playlist-folders.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { sanitizeTakeFadeMs, type TakeTransition } from '../shared/take-transition.js'
 import {
@@ -1587,7 +1587,7 @@ export function registerIpcHandlers(): void {
     return [entry]
   }
 
-  function appendToPlaylist(paths: string[]): PlaylistEntry[] {
+  function appendToPlaylist(paths: string[], position?: PlaylistInsertPosition): PlaylistEntry[] {
     const existing = store.get().playlist
     const defaultDur = store.get().materialSettings.defaultDurationMs
     const newEntries: PlaylistEntry[] = []
@@ -1607,9 +1607,12 @@ export function registerIpcHandlers(): void {
       })
     }
     if (newEntries.length > 0) {
-      store.patch({ playlist: [...existing, ...newEntries] })
+      const playlist = insertPlaylistEntries(existing, newEntries, store.get().playlistFolders, position)
+      store.patch({ playlist })
       persistPlaylist()
       void refreshMissingFiles()
+      const addedIds = new Set(newEntries.map((entry) => entry.id))
+      return playlist.filter((entry) => addedIds.has(entry.id))
     }
     return newEntries
   }
@@ -1747,9 +1750,9 @@ export function registerIpcHandlers(): void {
   })
 
   // Drag & drop из Finder/Explorer: пути приходят из рендерера (webUtils).
-  ipcMain.handle('playlist:add-paths', (_e, paths: string[]): PlaylistEntry[] => {
+  ipcMain.handle('playlist:add-paths', (_e, paths: string[], position?: PlaylistInsertPosition): PlaylistEntry[] => {
     if (!Array.isArray(paths)) return []
-    return appendToPlaylist(paths)
+    return appendToPlaylist(paths, position && typeof position === 'object' ? position : undefined)
   })
 
   /**

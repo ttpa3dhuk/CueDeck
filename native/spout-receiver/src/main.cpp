@@ -3,12 +3,12 @@
  *
  * It receives a Spout sender on the GPU, draws the shared texture through a
  * full-screen triangle and shows counters in the window title. It does not use
- * Resolume, OBS, Electron, a browser, or a CPU pixel readback path.
+ * Resolume, OBS, Electron or a browser. Optional --sample reads four pixels
+ * every half second for QA; leave it off for performance measurements.
  *
  * Build requirements: Visual Studio 2022 (C++/Win32), CMake, official Spout2
- * 2.007.018 source (see README.md). This source has NOT been compiled in the
- * authoring environment (no Windows toolchain); do not call the binary verified
- * until it runs on the Shuttle.
+ * 2.007.018 source (see README.md). Cross-built with Zig/MinGW; runtime results
+ * are recorded separately from the build.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -36,6 +36,7 @@ constexpr wchar_t kClassName[] = L"CueDeckSpoutReceiver";
 
 struct FrameStats {
     unsigned long long frames = 0;
+    unsigned long long newFrames = 0;
     double started = 0;
     double fps = 0;
     unsigned long long errors = 0;
@@ -61,6 +62,41 @@ FrameStats g_stats;
 std::string g_sender_filter;
 double g_last_stats_at = 0;
 std::string g_adapter;
+FILE* g_report = nullptr;
+bool g_sample = false;
+double g_seconds = 0;
+
+std::string SamplePixels() {
+    if (!g_sample || !g_sender_texture || !g_receiver.IsConnected()) return "null";
+    D3D11_TEXTURE2D_DESC desc{};
+    g_sender_texture->GetDesc(&desc);
+    if (desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM && desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM) return "null";
+    D3D11_TEXTURE2D_DESC sample{};
+    sample.Width = 4; sample.Height = 1; sample.MipLevels = 1; sample.ArraySize = 1;
+    sample.Format = desc.Format; sample.SampleDesc.Count = 1;
+    sample.Usage = D3D11_USAGE_STAGING; sample.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    ComPtr<ID3D11Texture2D> staging;
+    if (FAILED(g_device->CreateTexture2D(&sample, nullptr, &staging))) return "null";
+    for (UINT i = 0; i < 4; ++i) {
+        const UINT x = desc.Width * (i % 2 == 0 ? 1 : 3) / 4;
+        const UINT y = desc.Height * (i < 2 ? 1 : 3) / 4;
+        const D3D11_BOX box{x, y, 0, x + 1, y + 1, 1};
+        g_context->CopySubresourceRegion(staging.Get(), 0, i, 0, 0, g_sender_texture, 0, &box);
+    }
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if (FAILED(g_context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped))) return "null";
+    std::string result = "[";
+    const auto* pixels = static_cast<const unsigned char*>(mapped.pData);
+    for (int i = 0; i < 4; ++i) {
+        const auto* p = pixels + i * 4;
+        const bool bgra = desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM;
+        char text[64];
+        std::snprintf(text, sizeof(text), "%s[%u,%u,%u,%u]", i ? "," : "", p[bgra ? 2 : 0], p[1], p[bgra ? 0 : 2], p[3]);
+        result += text;
+    }
+    g_context->Unmap(staging.Get(), 0);
+    return result + "]";
+}
 
 double NowSeconds() {
     LARGE_INTEGER f, t;
@@ -180,7 +216,7 @@ void UpdateTitle(HWND hwnd) {
     line += " | sender: ";
     line += g_receiver.IsConnected() ? g_receiver.GetSenderName() : "(waiting)";
     char buffer[512]{};
-    std::snprintf(buffer, sizeof(buffer), " | %ux%u %s | %.1f fps | frames %llu | err %llu | %s",
+    std::snprintf(buffer, sizeof(buffer), " | %ux%u %s | %.1f draw fps | draws %llu | err %llu | %s",
         g_sender_width, g_sender_height,
         g_sender_format == DXGI_FORMAT_B8G8R8A8_UNORM ? "BGRA8" :
         g_sender_format == DXGI_FORMAT_R8G8B8A8_UNORM ? "RGBA8" : "fmt?",
@@ -200,6 +236,7 @@ void Render(HWND hwnd) {
     const float clear[4] = {0.02f, 0.02f, 0.02f, 1.0f};
     g_context->ClearRenderTargetView(g_rtv, clear);
     if (g_receiver.ReceiveTexture() && g_receiver.IsConnected()) {
+        if (g_receiver.IsFrameCountEnabled() && g_receiver.IsFrameNew()) g_stats.newFrames++;
         if (g_receiver.IsUpdated()) g_stats.reconnects++;
         if (RefreshSenderTexture() && g_sender_srv && g_vs && g_ps && g_sampler) {
             D3D11_VIEWPORT vp{};
@@ -227,6 +264,15 @@ void Render(HWND hwnd) {
         g_stats.fps = g_stats.frames / std::max(0.001, now - g_stats.started);
         g_last_stats_at = now;
         UpdateTitle(hwnd);
+        if (g_report) {
+            const auto samples = SamplePixels();
+            std::fprintf(g_report, "{\"elapsed\":%.3f,\"connected\":%s,\"width\":%u,\"height\":%u,\"format\":%u,\"draws\":%llu,\"newFrames\":%llu,\"frameCounting\":%s,\"senderFrame\":%ld,\"errors\":%llu,\"reconnects\":%llu,\"rgba\":%s}\n",
+                now - g_stats.started, g_receiver.IsConnected() ? "true" : "false",
+                g_sender_width, g_sender_height, static_cast<unsigned>(g_sender_format),
+                g_stats.frames, g_stats.newFrames, g_receiver.IsFrameCountEnabled() ? "true" : "false",
+                g_receiver.GetSenderFrame(), g_stats.errors, g_stats.reconnects, samples.c_str());
+            std::fflush(g_report);
+        }
     }
 }
 
@@ -266,10 +312,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv) {
-        for (int i = 1; i + 1 < argc; i++) {
-            if (std::wstring(argv[i]) == L"--sender") {
+        for (int i = 1; i < argc; i++) {
+            if (std::wstring(argv[i]) == L"--sample") g_sample = true;
+            else if (std::wstring(argv[i]) == L"--seconds" && i + 1 < argc) g_seconds = _wtof(argv[++i]);
+            else if (std::wstring(argv[i]) == L"--report" && i + 1 < argc) {
+                g_report = _wfopen(argv[++i], L"wb");
+                if (!g_report) { LocalFree(argv); return 4; }
+            }
+            else if (std::wstring(argv[i]) == L"--sender" && i + 1 < argc) {
                 char name[256]{};
-                WideCharToMultiByte(CP_UTF8, 0, argv[i + 1], -1, name, sizeof(name), nullptr, nullptr);
+                WideCharToMultiByte(CP_UTF8, 0, argv[++i], -1, name, sizeof(name), nullptr, nullptr);
                 g_sender_filter = name;
             }
         }
@@ -310,9 +362,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int) {
             DispatchMessageW(&msg);
         }
         if (msg.message != WM_QUIT) Render(hwnd);
+        if (g_seconds > 0 && NowSeconds() - g_stats.started >= g_seconds) break;
     }
     ReleaseAll();
     DestroyWindow(hwnd);
     UnregisterClassW(kClassName, hInstance);
+    if (g_report) std::fclose(g_report);
     return 0;
 }

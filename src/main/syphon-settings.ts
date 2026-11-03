@@ -1,5 +1,5 @@
 /**
- * Persisted Syphon setting and the single runtime manager.
+ * Persisted local GPU output (Syphon / Spout) and its single runtime manager.
  *
  * Kept separate from the GPU producer so the class can be tested without the
  * settings store, and so renderer input never reaches native paths/environment.
@@ -7,7 +7,7 @@
 import { app } from 'electron'
 import log from 'electron-log/main'
 import { existsSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { localGpuNativePath, macSyphonSupported } from './local-gpu-path.js'
 import { store } from './state.js'
 import {
   getSyphonSettings,
@@ -39,9 +39,7 @@ import { registerSyphonIpc as registerSettingsIpc } from './syphon-settings-ipc.
 const DEFAULT_NAME = DEFAULT_SYPHON_SETTINGS.name
 
 function nativePath(): string {
-  const configured = process.env.CUEDECK_SYPHON_GPU_NATIVE
-  if (configured) return isAbsolute(configured) ? configured : resolve(app.getAppPath(), configured)
-  return join(app.getAppPath(), 'native', 'syphon-probe', 'build', 'libcuedeck_syphon_gpu.dylib')
+  return localGpuNativePath(process.platform, app.isPackaged, app.getAppPath(), process.resourcesPath, process.env)
 }
 function numericEnv(name: string, fallback: number, min: number, max: number): number {
   const value = Number(process.env[name] ?? fallback)
@@ -61,6 +59,7 @@ export interface SyphonModeLike {
 export interface SyphonManagerDeps {
   platform: NodeJS.Platform
   packaged: boolean
+  macosSupported?: boolean
   env: NodeJS.ProcessEnv
   nativePath: string
   nativeExists: (path: string) => boolean
@@ -74,6 +73,7 @@ function defaultDeps(): SyphonManagerDeps {
   return {
     platform: process.platform,
     packaged: app.isPackaged,
+    macosSupported: macSyphonSupported(),
     env: process.env,
     nativePath: nativePath(),
     nativeExists: existsSync,
@@ -103,10 +103,12 @@ export function startupSyphonSettings(
   packaged: boolean,
   platform: NodeJS.Platform,
 ): SyphonSettings {
-  if (packaged || platform !== 'darwin' || env.CUEDECK_SYPHON_GPU_AUDIENCE !== '1') return { ...stored }
+  const enabled = platform === 'win32' ? env.CUEDECK_SPOUT_GPU_AUDIENCE : env.CUEDECK_SYPHON_GPU_AUDIENCE
+  if (packaged || !['darwin', 'win32'].includes(platform) || enabled !== '1') return { ...stored }
   return {
     enabled: true,
-    name: cleanSyphonName(env.CUEDECK_SYPHON_GPU_NAME, stored.name || DEFAULT_NAME),
+    name: cleanSyphonName(platform === 'win32' ? env.CUEDECK_SPOUT_GPU_NAME : env.CUEDECK_SYPHON_GPU_NAME,
+      stored.name || DEFAULT_NAME),
   }
 }
 
@@ -245,10 +247,10 @@ export class SyphonGpuManager {
     this.setState('starting')
     const mode = this.deps.createMode({
       name: this.settings.name,
-      // Public + flipped is the working audience orientation. Only an explicit
-      // '0' turns it off, so QA can still probe the private/unflipped source.
-      isPublic: this.deps.env.CUEDECK_SYPHON_GPU_PUBLIC !== '0',
-      flipY: this.deps.env.CUEDECK_SYPHON_GPU_FLIP_Y !== '0',
+      // Spout frames already have the top-left origin. Syphon uses the tested
+      // flip; its env overrides remain available for macOS QA.
+      isPublic: this.deps.platform === 'win32' || this.deps.env.CUEDECK_SYPHON_GPU_PUBLIC !== '0',
+      flipY: this.deps.platform === 'win32' ? false : this.deps.env.CUEDECK_SYPHON_GPU_FLIP_Y !== '0',
       timeoutMs: numericEnv('CUEDECK_SYPHON_GPU_TIMEOUT_MS', 5000, 500, 15000),
       firstTextureMs: numericEnv('CUEDECK_SYPHON_GPU_FIRST_TEXTURE_MS', 5000, 1000, 20000),
       nativePath: this.deps.nativePath,
@@ -263,7 +265,7 @@ export class SyphonGpuManager {
     if (result.ok) return true
     this.mode = null
     void mode.stop('start-refused')
-    const unavailableStates: SyphonReason[] = ['packaged', 'platform', 'native-missing', 'synthetic', 'cpu-bridge']
+    const unavailableStates: SyphonReason[] = ['packaged', 'platform', 'macos-version', 'native-missing', 'synthetic', 'cpu-bridge']
     if (result.reason === 'runtime') {
       this.setState('error', 'runtime', result.detail)
     } else {
@@ -344,8 +346,8 @@ export class SyphonGpuManager {
   }
 
   private unavailableReason(): SyphonReason | null {
-    if (this.deps.packaged) return 'packaged'
-    if (this.deps.platform !== 'darwin') return 'platform'
+    if (!['darwin', 'win32'].includes(this.deps.platform)) return 'platform'
+    if (this.deps.platform === 'darwin' && this.deps.macosSupported === false) return 'macos-version'
     if (this.deps.env.CUEDECK_SYPHON_GPU === '1') return 'synthetic'
     if (this.deps.env.CUEDECK_SYPHON_BRIDGE === '1') return 'cpu-bridge'
     if (!this.deps.nativeExists(this.deps.nativePath)) return 'native-missing'
@@ -355,7 +357,8 @@ export class SyphonGpuManager {
   private unavailableDetail(reason: SyphonReason): string | null {
     switch (reason) {
       case 'packaged': return 'dev build only; packaged native resource is not ready'
-      case 'platform': return 'macOS only'
+      case 'platform': return 'macOS or Windows only'
+      case 'macos-version': return 'Syphon requires macOS 13 or later'
       case 'synthetic': return 'CUEDECK_SYPHON_GPU=1 is active'
       case 'cpu-bridge': return 'CUEDECK_SYPHON_BRIDGE=1 is active'
       case 'native-missing': return `native publisher not found: ${this.deps.nativePath}`

@@ -23,14 +23,14 @@ describe('GPU runtime source has no CPU pixel path', () => {
   })
 })
 
-describe('normal consumers explicitly release the GPU audience branch', () => {
-  it('stream, OMT program, and physical layout call the arbiter before normal audience use', () => {
+describe('GPU audience arbitration', () => {
+  it('stream and OMT program release GPU before taking a normal audience renderer', () => {
     expect(readFileSync('src/main/stream/streamer.ts', 'utf8'))
       .toContain("stopGpuAudienceForNormalOutput('stream')")
     expect(readFileSync('src/main/omt/outputs.ts', 'utf8'))
       .toContain("stopGpuAudienceForNormalOutput('omt')")
     expect(readFileSync('src/main/windows.ts', 'utf8'))
-      .toContain("stopGpuAudienceForNormalOutput('layout')")
+      .toContain("entry: 'gpu-view', role: 'audience-gpu-view'")
     expect(readFileSync('src/main/syphon-gpu-audience.ts', 'utf8'))
       .toContain('createGpuAudienceWindow')
     expect(readFileSync('src/main/syphon-gpu-audience.ts', 'utf8'))

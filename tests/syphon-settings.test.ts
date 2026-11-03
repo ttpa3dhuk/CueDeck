@@ -209,22 +209,63 @@ describe('Syphon runtime manager', () => {
     expect(manager.getStatus().reason).toBe('stop-timeout')
   })
 
-  it('reports packaged builds as unavailable and never creates a producer', async () => {
-    const { deps, created } = makeDeps({ packaged: true })
+  it('reports missing packaged native resources as unavailable and never creates a producer', async () => {
+    const { deps, created } = makeDeps({ packaged: true, nativeExists: () => false })
     const manager = new SyphonGpuManager(deps)
     await manager.init()
-    expect(manager.getStatus()).toMatchObject({ state: 'unavailable', reason: 'packaged' })
+    expect(manager.getStatus()).toMatchObject({ state: 'unavailable', reason: 'native-missing' })
 
     const result = await manager.configure({ enabled: true })
     expect(result.ok).toBe(false)
     expect(manager.getStatus()).toMatchObject({
-      state: 'unavailable', reason: 'packaged', enabled: true,
+      state: 'unavailable', reason: 'native-missing', enabled: true,
     })
     expect(created).toHaveLength(0)
   })
 
-  it('reports non-macOS as unavailable and hides no state from the UI contract', async () => {
-    const { deps, created } = makeDeps({ platform: 'win32' })
+  it('allows a packaged Mac producer with its bundled library on supported macOS', async () => {
+    const { deps, created } = makeDeps({ packaged: true, macosSupported: true })
+    const manager = new SyphonGpuManager(deps)
+    await manager.init()
+    expect(await manager.configure({ enabled: true })).toMatchObject({ ok: true })
+    created[0].first()
+    expect(manager.getStatus().state).toBe('on')
+  })
+
+  it('blocks only the native feature on older macOS, before opening a producer', async () => {
+    const { deps, created } = makeDeps({ packaged: true, macosSupported: false })
+    const manager = new SyphonGpuManager(deps)
+    await manager.init()
+    expect(manager.getStatus()).toMatchObject({ state: 'unavailable', reason: 'macos-version' })
+    expect(created).toHaveLength(0)
+  })
+
+  it('uses the same bounded producer lifecycle on Windows, without the macOS Y flip', async () => {
+    const { deps, created } = makeDeps({
+      platform: 'win32', packaged: true,
+      env: { CUEDECK_SYPHON_GPU_PUBLIC: '0', CUEDECK_SYPHON_GPU_FLIP_Y: '1' },
+    })
+    const manager = new SyphonGpuManager(deps)
+    await manager.init()
+    expect(manager.getStatus().state).toBe('off')
+    await manager.configure({ enabled: true })
+    expect(created[0].options).toMatchObject({ isPublic: true, flipY: false })
+    created[0].first()
+    expect(manager.getStatus().state).toBe('on')
+    await manager.configure({ enabled: false })
+    expect(created[0].stopped).toBe(1)
+  })
+
+  it('reports a missing Windows native module before creating any producer', async () => {
+    const { deps, created } = makeDeps({ platform: 'win32', nativeExists: () => false })
+    const manager = new SyphonGpuManager(deps)
+    await manager.init()
+    expect(manager.getStatus()).toMatchObject({ state: 'unavailable', reason: 'native-missing' })
+    expect(created).toHaveLength(0)
+  })
+
+  it('reports unsupported platforms as unavailable', async () => {
+    const { deps, created } = makeDeps({ platform: 'linux' })
     const manager = new SyphonGpuManager(deps)
     await manager.init()
     expect(manager.getStatus()).toMatchObject({ state: 'unavailable', reason: 'platform' })

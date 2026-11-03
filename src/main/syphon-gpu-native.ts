@@ -1,10 +1,9 @@
 /**
- * Koffi binding for the in-process macOS Syphon GPU publisher.
+ * Koffi binding for in-process Syphon (macOS) and Spout (Windows) publishers.
  *
- * The raw IOSurface* in textureInfo.sharedTextureHandle is passed only within
- * the Electron main process. There is no IOSurface ID, no global surface and
- * no cross-process handle. CuedeckGpuNative.submit returns before the Metal
- * command buffer completes; the caller must keep the OffscreenSharedTexture
+ * The IOSurface pointer / NT handle stays inside Electron main. Neither is a
+ * portable ID for another process. Submit returns before the native GPU work
+ * completes; the caller must keep the OffscreenSharedTexture
  * alive until poll() reports that frame.
  */
 import { createRequire } from 'node:module'
@@ -28,7 +27,9 @@ export class NativeGpuPublisher {
   private readonly submitFn: Fn
   private readonly pollFn: Fn
   private readonly pendingFn: Fn
-  private readonly strideFn: Fn
+  private readonly strideFn: Fn | null
+  private readonly closeFn: Fn | null
+  private readonly closedFn: Fn | null
   private readonly handle: unknown
   private destroyed = false
 
@@ -42,7 +43,12 @@ export class NativeGpuPublisher {
     )
     this.pollFn = lib.func('int cuedeck_gpu_publisher_poll(void *publisher, uint8_t *out, uint64_t length)')
     this.pendingFn = lib.func('int cuedeck_gpu_publisher_pending(void *publisher)')
-    this.strideFn = lib.func('uint32_t cuedeck_gpu_surface_stride(const uint8_t *handle, uint64_t length)')
+    this.strideFn = process.platform === 'win32' ? null
+      : lib.func('uint32_t cuedeck_gpu_surface_stride(const uint8_t *handle, uint64_t length)')
+    this.closeFn = process.platform === 'win32'
+      ? lib.func('void cuedeck_gpu_publisher_request_close(void *publisher)') : null
+    this.closedFn = process.platform === 'win32'
+      ? lib.func('int cuedeck_gpu_publisher_poll_closed(void *publisher)') : null
   }
 
   static load(path: string, name: string, isPrivate: boolean, flipY: boolean): NativeGpuPublisher {
@@ -58,8 +64,11 @@ export class NativeGpuPublisher {
     return new NativeGpuPublisher(handle, lib)
   }
 
-  surfaceStride(handle: Buffer): number | null {
+  surfaceStride(handle: Buffer, width?: number): number | null {
     if (this.destroyed || !Buffer.isBuffer(handle) || handle.length !== 8) return null
+    // D3D textures have no mapped row stride. This ABI field is informational
+    // on Windows; native validates the actual texture descriptor, without Map.
+    if (!this.strideFn) return width && width > 0 ? width * 4 : null
     try {
       const value = Number(this.strideFn(handle, handle.length))
       return value > 0 ? value : null
@@ -98,6 +107,14 @@ export class NativeGpuPublisher {
   pending(): number {
     if (this.destroyed) return 0
     try { return Number(this.pendingFn(this.handle)) } catch { return 0 }
+  }
+
+  requestClose(): void {
+    if (!this.destroyed) this.closeFn?.(this.handle)
+  }
+
+  isClosed(): boolean {
+    return this.destroyed || !this.closedFn || Number(this.closedFn(this.handle)) === 1
   }
 
   destroy(): void {

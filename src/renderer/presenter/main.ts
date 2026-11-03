@@ -8,7 +8,7 @@ import { paddingBox } from '../shared/element-box'
 import { SlidePaintTracker, overlayFrameReady } from '../shared/slide-paint'
 import { safeDisplayLayout } from '../../shared/display-safety'
 import { FADE_MAX_MS, sanitizeTakeFadeMs } from '../../shared/take-transition'
-import { nextPlaylistFolderName } from '../../shared/playlist-folders'
+import { nextPlaylistFolderName, type PlaylistInsertPosition } from '../../shared/playlist-folders'
 import { initBus, getState, subscribe } from '../shared/bus'
 import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
@@ -3134,6 +3134,30 @@ function setupFileDrop(): void {
   if (!isOperator) return
   const playlistEl = document.querySelector<HTMLElement>('.playlist')
   const isFileDrag = (e: DragEvent): boolean => Boolean(e.dataTransfer?.types.includes('Files'))
+  const positionAt = (e: DragEvent): PlaylistInsertPosition | undefined => {
+    const target = e.target instanceof Element ? e.target : null
+    if (!target || !playlistEl?.contains(target)) return undefined
+    const zone = target.closest<HTMLElement>('.playlist-insertion-drop')
+    if (zone) return { beforeId: zone.dataset.beforeId || null, folderId: zone.dataset.folderId || null }
+    const folder = target.closest<HTMLElement>('.playlist-folder')
+    if (folder?.dataset.folderId) {
+      const folderId = folder.dataset.folderId
+      return { beforeId: getState().playlist.find((entry) => entry.folderId === folderId)?.id ?? null, folderId }
+    }
+    const item = target.closest<HTMLElement>('.playlist-item')
+    if (item?.dataset.id) {
+      const entries = getState().playlist
+      const index = entries.findIndex((entry) => entry.id === item.dataset.id)
+      if (index >= 0) {
+        const rect = item.getBoundingClientRect()
+        const below = e.clientY >= rect.top + rect.height / 2
+        return { beforeId: below ? entries[index + 1]?.id ?? null : entries[index].id,
+          folderId: entries[index].folderId ?? null }
+      }
+    }
+    if (target.closest('.playlist-list, .playlist-empty')) return { beforeId: null, folderId: null }
+    return undefined
+  }
 
   window.addEventListener('dragover', (e) => {
     if (!isFileDrag(e)) return
@@ -3152,9 +3176,8 @@ function setupFileDrop(): void {
     const files = Array.from(e.dataTransfer?.files ?? [])
     const paths = files.map((f) => window.api.files.pathFor(f)).filter(Boolean)
     if (paths.length === 0) return
-    const folderId = (e.target as HTMLElement).closest<HTMLElement>('.playlist-folder')?.dataset.folderId
-    window.api.playlist.addPaths(paths).then(async (added) => {
-      if (folderId) for (const entry of added) await window.api.playlist.setFolder(entry.id, folderId)
+    const position = positionAt(e)
+    window.api.playlist.addPaths(paths, position).then((added) => {
       if (added.length > 0) {
         showBanner(t('В плейлист добавлено: {n}', { n: added.length }), 3000)
       } else {
@@ -5758,9 +5781,10 @@ function omtLabel(id: OmtOutputId): string {
 
 function syphonReasonText(reason: SyphonReason | null): string {
   switch (reason) {
-    case 'packaged': return t('в этой сборке Syphon ещё не готов')
-    case 'platform': return t('только macOS')
-    case 'native-missing': return t('не найден модуль Syphon')
+    case 'packaged': return t('в этой сборке видеовыход ещё не готов')
+    case 'platform': return t('только macOS и Windows')
+    case 'macos-version': return t('для Syphon нужна macOS 13 или новее')
+    case 'native-missing': return t('не найден модуль видеовыхода')
     case 'synthetic': return t('включён тестовый GPU-режим')
     case 'cpu-bridge': return t('включён CPU-мост')
     case 'layout': return t('нужна раскладка Solo')
@@ -5779,7 +5803,9 @@ function syphonReasonText(reason: SyphonReason | null): string {
 function renderSyphonStatus(syphon: SyphonStatus): void {
   const card = document.getElementById('syphon-settings')
   if (!card) return
-  card.classList.toggle('hidden', window.api.platform !== 'darwin')
+  card.classList.toggle('hidden', !['darwin', 'win32'].includes(window.api.platform))
+  $('local-gpu-title').textContent = window.api.platform === 'win32' ? 'Spout' : 'Syphon'
+  $('local-gpu-platform').textContent = window.api.platform === 'win32' ? 'Windows' : 'macOS'
   const enabled = $<HTMLInputElement>('syphon-enabled')
   const name = $<HTMLInputElement>('syphon-name')
   const status = $('syphon-status')
@@ -5825,7 +5851,7 @@ function wireSyphonSection(syphon: SyphonStatus): void {
         renderSyphonStatus(result.status)
       } catch {
         renderSyphonStatus(getState().syphon)
-        showBanner(t('Не удалось изменить настройку Syphon'), 5000)
+        showBanner(t('Не удалось изменить настройку видеовыхода'), 5000)
       }
     })()
   }
@@ -5842,7 +5868,7 @@ function wireSyphonSection(syphon: SyphonStatus): void {
         renderSyphonStatus(result.status)
       } catch {
         renderSyphonStatus(getState().syphon)
-        showBanner(t('Не удалось изменить имя Syphon'), 5000)
+        showBanner(t('Не удалось изменить имя видеовыхода'), 5000)
       }
     })()
   }

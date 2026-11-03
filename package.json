@@ -17,14 +17,20 @@
     "test:release-qa": "python3 -m unittest discover -s scripts/release-qa -p 'test_*.py'",
     "prepare:ffprobe": "node scripts/prepare-ffprobe.cjs --target=all",
     "verify:ffprobe": "node scripts/prepare-ffprobe.cjs --verify-only --target=all",
-    "package:mac": "node scripts/prepare-ffprobe.cjs --target=darwin-arm64,darwin-x64 && node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --mac --publish=never && node scripts/rename-mac.cjs",
+    "package:mac": "node scripts/prepare-syphon.cjs && node scripts/prepare-ffprobe.cjs --target=darwin-arm64,darwin-x64 && node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --mac --publish=never && node scripts/rename-mac.cjs",
     "package:win": "node scripts/prepare-ffprobe.cjs --target=win32-x64 && node scripts/fetch-omt.cjs --strict && electron-vite build && electron-builder --win --config.electronVersion=44.7.2 --publish=never",
     "package:all": "npm run package:mac && npm run package:win",
-    "fetch:omt": "node scripts/fetch-omt.cjs"
+    "fetch:omt": "node scripts/fetch-omt.cjs",
+    "prepare:spout": "node scripts/prepare-spout.cjs",
+    "prepare:syphon": "node scripts/prepare-syphon.cjs",
+    "verify:syphon": "node scripts/prepare-syphon.cjs --verify-only",
+    "test:syphon-build": "node --test tests/prepare-syphon.test.cjs",
+    "verify:spout": "node scripts/prepare-spout.cjs --verify-only",
+    "test:spout-build": "node --test tests/prepare-spout.test.cjs tests/verify-spout-package.test.cjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "electron": "^33.3.0",
+    "electron": "44.7.2",
     "electron-builder": "^26.8.1",
     "electron-vite": "^2.3.0",
     "typescript": "^5.7.2",
@@ -38,6 +44,7 @@
     "pdfjs-dist": "^4.10.38"
   },
   "build": {
+    "beforePack": "scripts/verify-native-package.cjs",
     "appId": "com.azat.cue-deck",
     "productName": "CueDeck",
     "directories": {
@@ -72,6 +79,14 @@
       },
       "extraResources": [
         {
+          "from": "native/syphon-probe/build/darwin-${arch}/libcuedeck_syphon_gpu.dylib",
+          "to": "syphon/libcuedeck_syphon_gpu.dylib"
+        },
+        {
+          "from": "native/syphon-probe/build/darwin-${arch}/Syphon.framework",
+          "to": "syphon/Syphon.framework"
+        },
+        {
           "from": "vendor/ffprobe/${os}-${arch}",
           "to": "ffprobe"
         },
@@ -85,7 +100,9 @@
         }
       ],
       "binaries": [
-        "Contents/Resources/ffprobe/ffprobe"
+        "Contents/Resources/ffprobe/ffprobe",
+        "Contents/Resources/syphon/libcuedeck_syphon_gpu.dylib",
+        "Contents/Resources/syphon/Syphon.framework/Versions/A/Syphon"
       ],
       "hardenedRuntime": false,
       "gatekeeperAssess": false
@@ -106,6 +123,14 @@
         }
       ],
       "extraResources": [
+        {
+          "from": "native/spout-sender/build/cuedeck_spout_gpu.dll",
+          "to": "spout/cuedeck_spout_gpu.dll"
+        },
+        {
+          "from": "native/spout-receiver/third-party-notes/SPOUT2-LICENSE.txt",
+          "to": "spout/Spout2-LICENSE.txt"
+        },
         {
           "from": "vendor/ffprobe/${os}-${arch}",
           "to": "ffprobe"
@@ -134,5 +159,8 @@
     "asarUnpack": [
       "**/node_modules/koffi/build/**"
     ]
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

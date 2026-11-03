@@ -42,6 +42,32 @@ export function reorderFolderPlaylist(entries: PlaylistEntry[], ids: string[], f
   return normalizeFolderPlaylist(ordered, folders)
 }
 
+/** Optional placement for external file drops; absent placement keeps legacy append. */
+export interface PlaylistInsertPosition {
+  beforeId?: string | null
+  folderId?: string | null
+}
+
+export function insertPlaylistEntries(entries: PlaylistEntry[], added: PlaylistEntry[],
+                                      folders: PlaylistFolder[], position?: PlaylistInsertPosition): PlaylistEntry[] {
+  if (!added.length) return entries
+  if (!position) return [...entries, ...added]
+  const beforeId = position.beforeId
+  const at = beforeId ? entries.findIndex((entry) => entry.id === beforeId) : -1
+  // A stale drop target must not rearrange existing material or guess a folder.
+  if (beforeId && at < 0) return [...entries, ...added]
+  const folderId = typeof position.folderId === 'string' && folders.some((folder) => folder.id === position.folderId)
+    ? position.folderId : null
+  const batch = added.map((entry) => folderId ? { ...entry, folderId } : entry)
+  const next = [...entries]
+  const lastMember = folderId ? entries.map((entry) => entry.folderId).lastIndexOf(folderId) : -1
+  const firstMember = folderId ? entries.findIndex((entry) => entry.folderId === folderId) : -1
+  const insertion = at >= 0 ? (firstMember >= 0 && (at < firstMember || at > lastMember + 1) ? lastMember + 1 : at)
+    : lastMember >= 0 ? lastMember + 1 : entries.length
+  next.splice(insertion, 0, ...batch)
+  return normalizeFolderPlaylist(next, folders)
+}
+
 /** Clone one playlist record after its source, keeping media paths but not object identity. */
 export function duplicatePlaylistEntry(entries: PlaylistEntry[], id: string, newId: string): PlaylistEntry[] {
   const at = entries.findIndex((entry) => entry.id === id)

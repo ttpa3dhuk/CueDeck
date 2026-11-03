@@ -52,7 +52,7 @@ export function startOutputMonitor(): void {
       .then((image) => {
         if (op.isDestroyed() || image.isEmpty()) return
         const scaled =
-          image.getSize().width > FRAME_WIDTH ? image.resize({ width: FRAME_WIDTH }) : image
+          image.getSize().width > FRAME_WIDTH ? image.resize({ width: FRAME_WIDTH, quality: 'better' }) : image
         const dataUrl = `data:image/jpeg;base64,${scaled.toJPEG(JPEG_QUALITY).toString('base64')}`
         op.webContents.send('monitor:frame', { role, dataUrl })
       })

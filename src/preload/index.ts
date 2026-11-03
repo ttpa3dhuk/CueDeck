@@ -34,11 +34,13 @@ const gpuApi = (require('electron') as { sharedTexture?: {
 if (gpuApi) gpuApi.setSharedTextureReceiver(async ({ importedSharedTexture }, metadata) => {
   const frame = importedSharedTexture.getVideoFrame()
   importedSharedTexture.release()
-  try { window.postMessage({ type: 'cuedeck-omt-gpu', frame, metadata }, '*', [frame]) }
+  const kind = (metadata as { kind?: string })?.kind
+  try { window.postMessage({ type: kind === 'audience-gpu' ? 'cuedeck-audience-gpu' : 'cuedeck-omt-gpu', frame, metadata }, '*', [frame]) }
   catch (error) { frame.close(); throw error }
 })
 
 const api: PresenterApi = {
+  gpuMirror: { ready: result => ipcRenderer.send('gpu-view:ready', result) },
   programMirror: {
     available: () => ipcRenderer.invoke('program-mirror:available'),
     forced: () => ipcRenderer.invoke('program-mirror:forced'),
@@ -223,7 +225,7 @@ const api: PresenterApi = {
   playlist: {
     revealSource: (id, itemPath) => ipcRenderer.invoke('playlist:reveal-source', id, itemPath),
     add: () => ipcRenderer.invoke('playlist:add'),
-    addPaths: (paths) => ipcRenderer.invoke('playlist:add-paths', paths),
+    addPaths: (paths, position) => ipcRenderer.invoke('playlist:add-paths', paths, position),
     addLive: (src) => ipcRenderer.invoke('playlist:add-live', src),
     updateLive: (id, src) => ipcRenderer.invoke('playlist:update-live', { id, src }),
     createFolder: (name) => ipcRenderer.invoke('playlist:folder-create', name),

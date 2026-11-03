@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => {
     on = vi.fn()
     once = vi.fn()
     close = vi.fn()
+    destroy = vi.fn()
     getBounds = vi.fn(() => ({ x: 0, y: 0, width: 1920, height: 1080 }))
     isFullScreen = vi.fn(() => false)
     setAlwaysOnTop = vi.fn()
@@ -23,7 +24,10 @@ const mocks = vi.hoisted(() => {
   return {
     MockBrowserWindow,
     registerWindow: vi.fn(),
-    getState: vi.fn(() => ({ audienceOutputEnabled: true })),
+    unregisterWindow: vi.fn(),
+    registeredWindow: vi.fn(() => undefined as any),
+    getState: vi.fn(() => ({ audienceOutputEnabled: true, audienceWindowed: false,
+      audienceAlwaysOnTop: true, displayMap: { operator: 1, audience: 2 }, layout: 'presenter-audience' })),
   }
 })
 
@@ -44,14 +48,15 @@ vi.mock('electron', () => ({
 vi.mock('../src/main/state.js', () => ({
   store: {
     registerWindow: mocks.registerWindow,
+    registeredWindow: mocks.registeredWindow,
     get: mocks.getState,
     patch: vi.fn(),
-    unregisterWindow: vi.fn(),
+    unregisterWindow: mocks.unregisterWindow,
   },
 }))
 vi.mock('../src/main/audience-close-guard.js', () => ({ attachAudienceCloseGuard: vi.fn() }))
 
-import { acquireGhost, applyLayout, createGpuAudienceWindow, createHiddenAudienceWindow, releaseGhost } from '../src/main/windows'
+import { acquireGhost, applyLayout, createGpuAudienceWindow, createHiddenAudienceWindow, getActiveWindows, reconcileGpuAudienceDisplay, releaseGhost } from '../src/main/windows'
 import { clearGpuAudienceGuard, setGpuAudienceGuard } from '../src/main/gpu-audience-arbiter'
 
 beforeEach(() => {
@@ -69,7 +74,8 @@ describe('real GPU audience window factory', () => {
     expect(win.options.show).toBe(false)
     expect(win.options.useContentSize).toBe(true)
     expect(win.options.enableLargerThanScreen).toBe(true)
-    expect(win.options.webPreferences.offscreen).toEqual({ useSharedTexture: true })
+    expect(win.options.webPreferences.offscreen).toEqual({ useSharedTexture: true, deviceScaleFactor: 2 })
+    expect(win.webContents.setFrameRate).toHaveBeenCalledWith(30)
     expect(win.options.webPreferences.preload).toContain('preload/index.cjs')
     expect(win.options.webPreferences.backgroundThrottling).toBe(false)
     expect(win.loadFile).toHaveBeenCalledOnce()
@@ -98,13 +104,21 @@ describe('real GPU audience window factory', () => {
     clearGpuAudienceGuard(guard)
   })
 
-  it('stops the GPU audience before physical layout creates its audience window', () => {
-    const guard = { stop: vi.fn() }
+  it('uses a display-only mirror in physical layout and retains the GPU producer through solo', () => {
+    const guard = { stop: vi.fn(), attachPhysical: vi.fn() }
     setGpuAudienceGuard(guard)
-    applyLayout('presenter-audience', { operator: 1, audience: 2 })
-    expect(guard.stop).toHaveBeenCalledWith('layout')
+    const physical = applyLayout('presenter-audience', { operator: 1, audience: 2 }).get('audience') as any
+    expect(physical.loadFile.mock.calls[0][0]).toContain('renderer/gpu-view/index.html')
+    expect(guard.attachPhysical).toHaveBeenCalledWith(physical)
+    expect(mocks.registerWindow).not.toHaveBeenCalledWith('audience', physical)
+    expect(guard.stop).not.toHaveBeenCalled()
     applyLayout('solo', { operator: 1 })
+    expect(getActiveWindows().has('audience')).toBe(false)
+    expect(guard.stop).not.toHaveBeenCalled()
+    const reopened = applyLayout('presenter-audience', { operator: 1, audience: 2 }).get('audience') as any
+    expect(reopened.loadFile.mock.calls[0][0]).toContain('renderer/gpu-view/index.html')
     clearGpuAudienceGuard(guard)
+    applyLayout('solo', { operator: 1 })
   })
 
   it('destroys a stale GPU ghost instead of returning it if the guard is gone', () => {
@@ -120,11 +134,50 @@ describe('real GPU audience window factory', () => {
   it('does not reuse the normal hidden-audience factory options', () => {
     const gpu = createGpuAudienceWindow() as any
     expect(gpu.options.transparent).not.toBe(true)
-    expect(gpu.options.webPreferences.offscreen).toEqual({ useSharedTexture: true })
+    expect(gpu.options.webPreferences.offscreen).toEqual({ useSharedTexture: true, deviceScaleFactor: 2 })
     expect(gpu.options.title).toContain('GPU audience')
 
     const normal = createHiddenAudienceWindow(960, 540) as any
     expect(normal.options.webPreferences.offscreen).toBeUndefined()
     expect(normal.options.title).toBe('CueDeck (hidden audience)')
+  })
+
+  it('replaces an existing physical audience with mirror then restores the normal renderer', () => {
+    const normal = applyLayout('presenter-audience', { operator: 1, audience: 2 }).get('audience') as any
+    expect(normal.loadFile.mock.calls[0][0]).toContain('renderer/audience/index.html')
+    const guard = { stop: vi.fn(), attachPhysical: vi.fn() }
+    setGpuAudienceGuard(guard)
+    reconcileGpuAudienceDisplay()
+    const mirror = getActiveWindows().get('audience') as any
+    expect(normal.destroy).toHaveBeenCalledOnce()
+    expect(mirror).not.toBe(normal)
+    expect(mirror.loadFile.mock.calls[0][0]).toContain('renderer/gpu-view/index.html')
+    expect(mocks.registerWindow).not.toHaveBeenCalledWith('audience', mirror)
+    clearGpuAudienceGuard(guard)
+    reconcileGpuAudienceDisplay()
+    const restored = getActiveWindows().get('audience') as any
+    expect(mirror.destroy).toHaveBeenCalledOnce()
+    expect(restored.loadFile.mock.calls[0][0]).toContain('renderer/audience/index.html')
+    expect(mocks.registerWindow).toHaveBeenCalledWith('audience', restored)
+    applyLayout('solo', { operator: 1 })
+  })
+
+  it('keeps the OSR audience registered while replacing and closing physical mirrors', () => {
+    const source = { id: 999 }
+    mocks.registeredWindow.mockReturnValue(source)
+    const guard = { stop: vi.fn(), attachPhysical: vi.fn() }
+    setGpuAudienceGuard(guard)
+    const first = applyLayout('presenter-audience', { operator: 1, audience: 2 }, true).get('audience') as any
+    const second = applyLayout('presenter-audience', { operator: 1, audience: 2 }, false).get('audience') as any
+    expect(second).not.toBe(first)
+    expect(first.destroy).toHaveBeenCalledOnce()
+    expect(mocks.registerWindow).not.toHaveBeenCalledWith('audience', first)
+    expect(mocks.registerWindow).not.toHaveBeenCalledWith('audience', second)
+    applyLayout('solo', { operator: 1 })
+    expect(mocks.registeredWindow()).toBe(source)
+    expect(mocks.unregisterWindow).not.toHaveBeenCalledWith('audience')
+    expect(mocks.registerWindow).not.toHaveBeenCalledWith('audience', expect.anything())
+    clearGpuAudienceGuard(guard)
+    mocks.registeredWindow.mockReturnValue(undefined)
   })
 })

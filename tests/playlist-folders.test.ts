@@ -2,12 +2,46 @@ import { describe, it, expect } from 'vitest'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { normalizeFolderPlaylist, reorderFolderPlaylist, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders, sanitizePlaylistFolders, duplicatePlaylistEntry } from '../src/shared/playlist-folders'
+import { normalizeFolderPlaylist, reorderFolderPlaylist, insertPlaylistEntries, removePlaylistFolder, nextPlaylistFolderName, assignPlaylistFolders, sanitizePlaylistFolders, duplicatePlaylistEntry } from '../src/shared/playlist-folders'
 import { loadProjectFile, saveProjectFile } from '../src/main/project'
 import type { PlaylistEntry } from '../src/shared/types'
 const entry = (id: string, folderId?: string): PlaylistEntry => ({ id, folderId, kind: 'pdf', filePath: `/media/${id}.pdf`, fileName: `${id}.pdf`, displayName: '', speakerName: '', durationMs: 1000 })
 const folders = [{ id: 'a', name: 'Андрей', collapsed: true }, { id: 'b', name: 'Мария' }]
 describe('organizational folders', () => {
+  it('inserts an ordered external batch above, below and into an empty playlist', () => {
+    const old = [entry('one'), entry('two')]
+    const batch = [entry('new1'), entry('new2')]
+    expect(insertPlaylistEntries(old, batch, [], { beforeId: 'one' }).map((e) => e.id)).toEqual(['new1', 'new2', 'one', 'two'])
+    expect(insertPlaylistEntries(old, batch, [], { beforeId: 'two' }).map((e) => e.id)).toEqual(['one', 'new1', 'new2', 'two'])
+    expect(insertPlaylistEntries(old, batch, [], { beforeId: null }).map((e) => e.id)).toEqual(['one', 'two', 'new1', 'new2'])
+    expect(insertPlaylistEntries([], batch, [], { beforeId: null }).map((e) => e.id)).toEqual(['new1', 'new2'])
+    expect(old.map((e) => e.id)).toEqual(['one', 'two'])
+  })
+  it('places a batch inside a folder and keeps the existing group contiguous', () => {
+    const old = [entry('outside'), entry('a1', 'a'), entry('a2', 'a'), entry('after')]
+    const batch = [entry('new1'), entry('new2')]
+    const inside = insertPlaylistEntries(old, batch, folders, { beforeId: 'a2', folderId: 'a' })
+    expect(inside.map((e) => e.id)).toEqual(['outside', 'a1', 'new1', 'new2', 'a2', 'after'])
+    expect(inside.slice(2, 4).map((e) => e.folderId)).toEqual(['a', 'a'])
+    const end = insertPlaylistEntries(old, batch, folders, { beforeId: 'after', folderId: 'a' })
+    expect(end.map((e) => e.id)).toEqual(['outside', 'a1', 'a2', 'new1', 'new2', 'after'])
+    const start = insertPlaylistEntries(old, batch, folders, { beforeId: 'a1', folderId: 'a' })
+    expect(start.map((e) => e.id)).toEqual(['outside', 'new1', 'new2', 'a1', 'a2', 'after'])
+    const emptyGroup = insertPlaylistEntries(old, batch, [...folders, { id: 'empty', name: 'Empty' }], { beforeId: null, folderId: 'empty' })
+    expect(emptyGroup.slice(-2).map((e) => e.folderId)).toEqual(['empty', 'empty'])
+  })
+  it('preserves legacy append and old order when batch or anchor is invalid', () => {
+    const old = [entry('a1', 'a'), entry('a2', 'a'), entry('last')]
+    expect(insertPlaylistEntries(old, [], folders, { beforeId: 'a2' })).toBe(old)
+    expect(insertPlaylistEntries(old, [entry('new')], folders).map((e) => e.id)).toEqual(['a1', 'a2', 'last', 'new'])
+    const stale = insertPlaylistEntries(old, [entry('new')], folders, { beforeId: 'removed', folderId: 'a' })
+    expect(stale.map((e) => e.id)).toEqual(['a1', 'a2', 'last', 'new'])
+    expect(stale[3].folderId).toBeUndefined()
+    const invalidFolder = insertPlaylistEntries(old, [entry('new')], folders, { beforeId: 'last', folderId: 'removed' })
+    expect(invalidFolder.map((e) => e.id)).toEqual(['a1', 'a2', 'new', 'last'])
+    expect(invalidFolder[2].folderId).toBeUndefined()
+    expect(old.map((e) => e.id)).toEqual(['a1', 'a2', 'last'])
+  })
   it('duplicates a list after its source with independent nested items and identical settings', () => {
     const original: PlaylistEntry = {
       ...entry('1', 'a'), kind: 'list', filePath: '', fileName: 'Photos', displayName: 'Break',

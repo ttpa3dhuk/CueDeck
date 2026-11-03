@@ -1,8 +1,8 @@
 /**
- * Narrow arbitration between the DEV-ONLY GPU audience producer and consumers
- * that need a normal hidden audience window (stream, OMT program capture,
- * physical layout). No Electron imports, so windows/streamer/OMT can call it
- * without cycles.
+ * Narrow arbitration between the GPU audience producer and consumers that
+ * need a normal audience renderer (stream and OMT program capture). Physical
+ * layout uses attachPhysical for a display-only mirror. No runtime Electron
+ * imports, so windows/streamer/OMT can call it without cycles.
  *
  * The GPU producer registers one stop hook. A normal consumer calls
  * stopGpuAudienceForNormalOutput() BEFORE acquiring/creating its own normal
@@ -11,6 +11,8 @@
  */
 export interface GpuAudienceGuard {
   stop(reason: string): void
+  attachPhysical?(win: import('electron').BrowserWindow): void
+  detachPhysical?(): void
 }
 
 let guard: GpuAudienceGuard | null = null
@@ -20,9 +22,12 @@ export function clearGpuAudienceGuard(current: GpuAudienceGuard): void {
   if (guard === current) guard = null
 }
 export function isGpuAudienceActive(): boolean { return guard !== null }
+export function gpuAudiencePhysicalGuard(): GpuAudienceGuard | null {
+  return guard?.attachPhysical ? guard : null
+}
 
 /**
- * Stop the experimental GPU audience before a normal audience consumer takes
+ * Stop the GPU audience before a normal audience consumer takes
  * over. Returns true when a GPU branch was asked to stop.
  */
 export function stopGpuAudienceForNormalOutput(reason: string): boolean {

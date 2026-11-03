@@ -453,7 +453,7 @@ export interface AppState {
   stream: StreamStatus
   /** Выходы OMT (Open Media Transport) в сеть: настройки + живой статус. */
   omt: OmtStatus
-  /** Syphon для Resolume/OBS на macOS: запрошенная настройка + фактический статус. */
+  /** Syphon/Spout для Resolume/OBS: настройка + фактический статус. */
   syphon: SyphonStatus
 }
 
@@ -534,7 +534,7 @@ export const DEFAULT_OMT_SETTINGS: OmtSettings = {
 
 /**
  * Syphon (main/syphon-settings.ts, main/syphon-gpu-audience.ts) — локальный видеовыход зала для
- * Resolume/OBS на macOS. Только картинка, без звука. Настройка живёт в
+ * Resolume/OBS: Syphon на macOS, Spout на Windows. Только картинка, без звука. Настройка живёт в
  * electron-store; runtime-состояние отдельное: requested enabled может быть
  * true, пока выход заблокирован физическим залом, OMT «Зал» или стримом.
  */
@@ -542,6 +542,7 @@ export type SyphonRuntimeState = 'off' | 'starting' | 'on' | 'blocked' | 'error'
 
 export type SyphonReason =
   | 'packaged'
+  | 'macos-version'
   | 'platform'
   | 'native-missing'
   | 'synthetic'

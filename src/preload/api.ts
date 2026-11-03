@@ -41,6 +41,7 @@ import type {
   FrameTimecode,
 } from '../shared/types.js'
 import type { LiveSource } from '../shared/live.js'
+import type { PlaylistInsertPosition } from '../shared/playlist-folders.js'
 
 export { DONATE_URL, SUPPORT_URL } from '../shared/types.js'
 export type { LiveSource } from '../shared/live.js'
@@ -96,6 +97,7 @@ export type {
 export type Unsubscribe = () => void
 
 export interface PresenterApi {
+  gpuMirror: { ready(result: { error?: string; adapter?: string }): void }
   programMirror: {
     available(): Promise<boolean>
     forced(): Promise<boolean>
@@ -302,7 +304,7 @@ export interface PresenterApi {
     /** Окно звука OMT: кусок звука зала, 32 бит float по каналам подряд. */
     sendAudio(chunk: { sampleRate: number; channels: number; frames: number; data: Float32Array }): void
   }
-  /** Syphon для Resolume/OBS (macOS, dev): настройки + фактический статус. */
+  /** Syphon (macOS) / Spout (Windows): настройки + фактический статус. */
   syphon: {
     status(): Promise<SyphonStatus>
     configure(settings: Partial<SyphonSettings>): Promise<
@@ -317,8 +319,8 @@ export interface PresenterApi {
     /** Reveal the original media; list items must name a path belonging to this entry. */
     revealSource(id: string, itemPath?: string): Promise<{ ok: boolean; error?: string }>
     add(): Promise<PlaylistEntry[]>
-    /** Append files by path (drag & drop); unsupported paths are skipped. */
-    addPaths(paths: string[]): Promise<PlaylistEntry[]>
+    /** Add external files at an optional playlist position; omitted position appends. */
+    addPaths(paths: string[], position?: PlaylistInsertPosition): Promise<PlaylistEntry[]>
     /** Живой вход (2.13): устройство приходит метками, main склеит псевдо-путь. */
     addLive(src: LiveSource): Promise<PlaylistEntry[]>
     /** Переназначить устройства у живого входа без пересоздания записи. */

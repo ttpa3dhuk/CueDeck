@@ -8,7 +8,7 @@ import { safeDisplayLayout } from '../shared/display-safety.js'
 import { store } from './state.js'
 import { WINDOW_TITLES } from '../shared/window-titles.js'
 import { getLang } from '../shared/i18n.js'
-import { stopGpuAudienceForNormalOutput } from './gpu-audience-arbiter.js'
+import { gpuAudiencePhysicalGuard, stopGpuAudienceForNormalOutput } from './gpu-audience-arbiter.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -24,14 +24,15 @@ const readyWindows = new WeakSet<BrowserWindow>()
 // fullscreen by 1px when another window on that monitor becomes active.
 const desktopDisplayWindows = new WeakSet<BrowserWindow>()
 const layoutClosingWindows = new WeakSet<BrowserWindow>()
+const gpuViewWindows = new WeakSet<BrowserWindow>()
 
 function isOutputFullscreen(win: BrowserWindow): boolean {
   return desktopDisplayWindows.has(win) || win.isFullScreen()
 }
 
 interface RendererTarget {
-  entry: 'presenter' | 'audience' | 'stream' | 'overlay' | 'omt-audio'
-  role: Role | 'stream' | 'omt-timer' | 'omt-audio'
+  entry: 'presenter' | 'audience' | 'stream' | 'overlay' | 'omt-audio' | 'gpu-view'
+  role: Role | 'stream' | 'omt-timer' | 'omt-audio' | 'audience-gpu-view'
 }
 
 function rendererForRole(role: Role): RendererTarget {
@@ -81,7 +82,7 @@ function tilePosition(role: Role): Electron.Rectangle {
   return positions[role]
 }
 
-function createWindow(role: Role, displayId: number | undefined, fullscreen: boolean, windowed = false, audienceAlwaysOnTop = true): BrowserWindow {
+function createWindow(role: Role, displayId: number | undefined, fullscreen: boolean, windowed = false, audienceAlwaysOnTop = true, gpuView = false): BrowserWindow {
   const fillDisplay = fullscreen && !DEV_TILE && !windowed
   const macDisplayWindow = process.platform === 'darwin' && fillDisplay
   const winAudienceDisplay = process.platform === 'win32' && role === 'audience' && fillDisplay
@@ -130,6 +131,7 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
       backgroundThrottling: false,
     },
   })
+  if (gpuView) gpuViewWindows.add(win)
   if (role === 'audience' && windowed) {
     attachAudienceCloseGuard(win, () => activeWindows.get('audience') === win && !layoutClosingWindows.has(win))
   }
@@ -152,7 +154,8 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
   // живёт вверху экрана и окна не трогает).
   if (role !== 'operator' && process.platform !== 'darwin') win.removeMenu()
 
-  loadRenderer(win, rendererForRole(role))
+  if (gpuView) gpuAudiencePhysicalGuard()?.attachPhysical?.(win)
+  loadRenderer(win, gpuView ? { entry: 'gpu-view', role: 'audience-gpu-view' } : rendererForRole(role))
 
   win.once('ready-to-show', () => {
     if (win.isDestroyed()) return
@@ -176,7 +179,7 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
     if (role === 'operator') win.focus()
   })
 
-  store.registerWindow(role, win)
+  if (!gpuView) store.registerWindow(role, win)
   if (role === 'audience') win.once('closed', () => {
     if (activeWindows.get('audience') === win && !layoutClosingWindows.has(win)) {
       store.patch({ audienceOutputEnabled: false })
@@ -200,6 +203,24 @@ export function setOperatorWindowHook(fn: (win: BrowserWindow) => void): void {
 
 let activeWindows = new Map<Role, BrowserWindow>()
 
+function unregisterIfOwned(role: Role, win: BrowserWindow): void {
+  if (store.registeredWindow?.(role) === win) store.unregisterWindow(role)
+}
+
+/** Replace only the physical audience surface; the OSR audience keeps state/audio. */
+export function reconcileGpuAudienceDisplay(): void {
+  const existing = activeWindows.get('audience')
+  if (!existing || existing.isDestroyed()) return
+  const gpuView = gpuAudiencePhysicalGuard() !== null
+  if (gpuViewWindows.has(existing) === gpuView) return
+  const state = store.get()
+  unregisterIfOwned('audience', existing)
+  layoutClosingWindows.add(existing)
+  existing.destroy()
+  const windowed = state.audienceWindowed
+  activeWindows.set('audience', createWindow('audience', state.displayMap.audience, !windowed,
+    windowed, state.audienceAlwaysOnTop, gpuView))
+}
 
 export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWindowed = false, audienceAlwaysOnTop = true): Map<Role, BrowserWindow> {
   if (!DEV_TILE) {
@@ -207,15 +228,13 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
     layout = safe.layout
     displayMap = safe.displayMap
   }
-  // Never keep the experimental GPU audience alive while a physical audience
-  // is being created. Stop it before window reconciliation.
-  if (layout !== 'solo') stopGpuAudienceForNormalOutput('layout')
+  const gpuView = gpuAudiencePhysicalGuard() !== null
   const desiredRoles = new Set<Role>(rolesForLayout(layout))
 
   // Close windows whose role is no longer active
   for (const [role, win] of activeWindows) {
     if (!desiredRoles.has(role)) {
-      store.unregisterWindow(role)
+      unregisterIfOwned(role, win)
       if (!win.isDestroyed()) { layoutClosingWindows.add(win); win.close() }
       activeWindows.delete(role)
     }
@@ -227,7 +246,7 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
       (role === 'speaker' && displayMap.speaker === displayMap.operator)
     const fullscreen = (role === 'audience' || role === 'speaker') && !windowed
     const existing = activeWindows.get(role)
-    if (existing && !existing.isDestroyed()) {
+    if (existing && !existing.isDestroyed() && (role !== 'audience' || gpuViewWindows.has(existing) === gpuView)) {
       if (!DEV_TILE) {
         const target = windowed
           ? windowedAudienceBounds(displayMap[role])
@@ -241,10 +260,10 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
           // macOS Spaces возвращает окно на прежний дисплей даже после
           // 'leave-full-screen'. Пересоздаём окно на целевом экране — тот же
           // путь, что при старте, работает детерминированно.
-          store.unregisterWindow(role)
+          unregisterIfOwned(role, existing)
           layoutClosingWindows.add(existing)
           existing.destroy()
-          activeWindows.set(role, createWindow(role, displayMap[role], fullscreen, windowed, audienceAlwaysOnTop))
+          activeWindows.set(role, createWindow(role, displayMap[role], fullscreen, windowed, audienceAlwaysOnTop, role === 'audience' && gpuView))
         } else if (!isOutputFullscreen(existing)) {
           existing.setBounds(target)
         }
@@ -254,7 +273,12 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
         }
       }
     } else {
-      const win = createWindow(role, displayMap[role], fullscreen, windowed, audienceAlwaysOnTop)
+      if (existing && !existing.isDestroyed()) {
+        unregisterIfOwned(role, existing)
+        layoutClosingWindows.add(existing)
+        existing.destroy()
+      }
+      const win = createWindow(role, displayMap[role], fullscreen, windowed, audienceAlwaysOnTop, role === 'audience' && gpuView)
       activeWindows.set(role, win)
     }
   }
@@ -387,7 +411,7 @@ export function loadGpuAudiencePage(win: BrowserWindow): void {
 }
 
 /**
- * DEV-ONLY real audience GPU producer: the actual audience renderer, offscreen
+ * Real audience GPU producer: the actual audience renderer, offscreen
  * with a shared texture. Never shown and never used as a normal hidden audience
  * for stream/OMT/capture. One instance is registered in store as `audience` by
  * the GPU audience mode through the ghost lease. Target is PHYSICAL texture
@@ -414,11 +438,31 @@ export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080,
       nodeIntegration: false,
       backgroundThrottling: false,
       autoplayPolicy: 'no-user-gesture-required',
-      offscreen: { useSharedTexture: true },
+      offscreen: { useSharedTexture: true, deviceScaleFactor: scaleFactor },
     },
   })
+  win.webContents.setFrameRate(30)
   if (load) loadGpuAudiencePage(win)
   return win
+}
+
+/** A display-only GPU consumer: no audience state registration or media load. */
+export function createGpuViewWindow(load = true): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 960, height: 540, show: false, backgroundColor: '#000000',
+    title: WINDOW_TITLES.audience,
+    webPreferences: {
+      preload: PRELOAD, contextIsolation: true, sandbox: true,
+      nodeIntegration: false, backgroundThrottling: false,
+    },
+  })
+  win.once('ready-to-show', () => win.showInactive())
+  if (load) loadGpuViewPage(win)
+  return win
+}
+
+export function loadGpuViewPage(win: BrowserWindow): void {
+  loadRenderer(win, { entry: 'gpu-view', role: 'audience-gpu-view' })
 }
 
 /**

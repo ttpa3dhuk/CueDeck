@@ -11,7 +11,7 @@ const h = vi.hoisted(() => {
     id: 7,
     webContents: {
       isOffscreen: () => true, getType: () => 'offscreen',
-      on: vi.fn(), once: vi.fn(), startPainting: vi.fn(), invalidate: vi.fn(),
+      on: vi.fn(), once: vi.fn(), startPainting: vi.fn(), stopPainting: vi.fn(), invalidate: vi.fn(),
     },
     isDestroyed: vi.fn(() => false),
     destroy: vi.fn(),
@@ -22,6 +22,9 @@ const h = vi.hoisted(() => {
     acquireGhost: vi.fn((_role: string, _holder: string, create: () => any) => create()),
     createGpuAudienceWindow: vi.fn(() => win),
     getActiveWindows: vi.fn(() => new Map()),
+    registeredWindow: vi.fn(() => undefined as any),
+    reconcileGpuAudienceDisplay: vi.fn(),
+    mirrorAttach: vi.fn(), mirrorDetach: vi.fn(), mirrorConsume: vi.fn(async () => undefined),
     ghostWindow: vi.fn(() => null as any),
     releaseGhost: vi.fn(),
   loadGpuAudiencePage: vi.fn(),
@@ -35,10 +38,18 @@ vi.mock('electron', () => ({
   BrowserWindow: class {},
 }))
 vi.mock('electron-log/main', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock('../src/main/gpu-audience-mirror.js', () => ({
+  GpuAudienceMirror: class {
+    static available = () => true
+    attach = h.mirrorAttach
+    detach = h.mirrorDetach
+    consume = h.mirrorConsume
+  },
+}))
 vi.mock('../src/main/state.js', () => ({
   store: {
     get: () => h.state,
-    registeredWindow: () => undefined,
+    registeredWindow: h.registeredWindow,
     onChange: (fn: (s: any) => void) => { h.listeners.add(fn); return () => h.listeners.delete(fn) },
     registerWindow: h.registerWindow,
   },
@@ -47,6 +58,7 @@ vi.mock('../src/main/windows.js', () => ({
   acquireGhost: h.acquireGhost,
   createGpuAudienceWindow: h.createGpuAudienceWindow,
   getActiveWindows: h.getActiveWindows,
+  reconcileGpuAudienceDisplay: h.reconcileGpuAudienceDisplay,
   ghostWindow: h.ghostWindow,
   releaseGhost: h.releaseGhost,
   loadGpuAudiencePage: h.loadGpuAudiencePage,
@@ -70,7 +82,7 @@ vi.mock('../src/main/syphon-gpu-publisher.js', () => ({
 }))
 
 import { GpuAudienceMode } from '../src/main/syphon-gpu-audience'
-import { isGpuAudienceActive, stopGpuAudienceForNormalOutput } from '../src/main/gpu-audience-arbiter'
+import { isGpuAudienceActive, stopGpuAudienceForNormalOutput, gpuAudiencePhysicalGuard } from '../src/main/gpu-audience-arbiter'
 import { GpuTexturePublisher } from '../src/main/syphon-gpu-publisher'
 
 const Publisher = GpuTexturePublisher as unknown as { instances: any[] }
@@ -85,7 +97,15 @@ function reset(): void {
   h.createGpuAudienceWindow.mockClear()
   h.releaseGhost.mockClear()
   h.loadGpuAudiencePage.mockClear()
+  h.reconcileGpuAudienceDisplay.mockClear()
+  h.mirrorAttach.mockClear()
+  h.mirrorDetach.mockClear()
+  h.mirrorConsume.mockClear()
+  h.getActiveWindows.mockReturnValue(new Map())
+  h.registeredWindow.mockReturnValue(undefined)
   h.win.destroy.mockClear()
+  h.win.webContents.startPainting.mockClear()
+  h.win.webContents.stopPainting.mockClear()
   h.win.isDestroyed.mockReturnValue(false)
   Publisher.instances = []
   process.env.CUEDECK_SYPHON_GPU_AUDIENCE = '1'
@@ -98,6 +118,17 @@ function reset(): void {
 beforeEach(reset)
 
 describe('GPU audience mode', () => {
+  it('refreshes the existing capture when a physical display attaches to a static scene', async () => {
+    const mode = new GpuAudienceMode()
+    expect(mode.start()).toEqual({ ok: true })
+    const display = {} as any
+    gpuAudiencePhysicalGuard()!.attachPhysical!(display)
+    expect(h.mirrorAttach).toHaveBeenCalledWith(display)
+    expect(h.win.webContents.stopPainting).toHaveBeenCalledOnce()
+    expect(h.win.webContents.startPainting).toHaveBeenCalledOnce()
+    expect(h.createGpuAudienceWindow).toHaveBeenCalledOnce()
+    await mode.stop('test')
+  })
   it('uses the single audience ghost, actual audience factory, and explicit 1920x1080 target', async () => {
     const mode = new GpuAudienceMode()
     expect(mode.start()).toEqual({ ok: true })
@@ -106,6 +137,8 @@ describe('GPU audience mode', () => {
     expect(h.releaseGhost).not.toHaveBeenCalled()
     expect(Publisher.instances).toHaveLength(1)
     expect(Publisher.instances[0].options.targetSize).toEqual({ width: 1920, height: 1080 })
+    await Publisher.instances[0].options.consumeFrame({ pixelFormat: 'bgra' })
+    expect(h.mirrorConsume).toHaveBeenCalledOnce()
     expect(Publisher.instances[0].source().webContents).toBe(h.win.webContents)
     expect(h.loadGpuAudiencePage).toHaveBeenCalledWith(h.win)
     expect(isGpuAudienceActive()).toBe(true)
@@ -113,14 +146,29 @@ describe('GPU audience mode', () => {
     await mode.stop('test')
     expect(Publisher.instances[0].stopAndWait).toHaveBeenCalled()
     expect(h.releaseGhost).toHaveBeenCalledWith('audience', 'gpu-audience')
+    expect(h.reconcileGpuAudienceDisplay).toHaveBeenCalledTimes(2)
+    expect(h.mirrorDetach).toHaveBeenCalledOnce()
     expect(isGpuAudienceActive()).toBe(false)
     expect(mode.status().active).toBe(false)
   })
 
-  it('refuses a physical layout, running stream, running OMT program, or existing ghost', () => {
+  it('accepts a physical layout but refuses a running stream, OMT program, or existing ghost', async () => {
     h.state.layout = 'presenter-audience'
-    expect(new GpuAudienceMode().start().ok).toBe(false)
+    const physical = { id: 55 }
+    h.getActiveWindows.mockReturnValue(new Map([['audience', physical]]))
+    h.registeredWindow.mockReturnValue(physical)
+    const mode = new GpuAudienceMode()
+    expect(mode.start().ok).toBe(true)
+    expect(h.reconcileGpuAudienceDisplay).toHaveBeenCalledOnce()
+    await mode.stop('test')
+    expect(h.reconcileGpuAudienceDisplay).toHaveBeenCalledTimes(2)
+    h.getActiveWindows.mockReturnValue(new Map())
+    h.registeredWindow.mockReturnValue(undefined)
+    h.acquireGhost.mockClear()
     h.state.layout = 'solo'
+    h.registeredWindow.mockReturnValue({ id: 77 })
+    expect(new GpuAudienceMode().start().ok).toBe(false)
+    h.registeredWindow.mockReturnValue(undefined)
     h.state.stream.running = true
     expect(new GpuAudienceMode().start().ok).toBe(false)
     h.state.stream.running = false
@@ -145,13 +193,13 @@ describe('GPU audience mode', () => {
     expect(h.win.destroy).toHaveBeenCalled()
   })
 
-  it('stops on layout/stream/OMT state changes after startup', () => {
+  it('retains on layout changes but stops on stream/OMT state changes', () => {
     const mode = new GpuAudienceMode()
     expect(mode.start().ok).toBe(true)
     h.state.layout = 'operator-speaker-audience'
     for (const fn of h.listeners) fn(h.state)
-    expect(Publisher.instances[0].stopAndWait).toHaveBeenCalled()
-    expect(isGpuAudienceActive()).toBe(false)
+    expect(Publisher.instances[0].stopAndWait).not.toHaveBeenCalled()
+    expect(isGpuAudienceActive()).toBe(true)
 
     reset()
     const streamMode = new GpuAudienceMode()
