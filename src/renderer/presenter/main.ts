@@ -5740,10 +5740,11 @@ function wireOmtSection(omt: OmtStatus): void {
   message.checked = omt.timerMessage
   renderOmtStatus(omt)
   const commit = async (): Promise<void> => {
-    const enabled = { ...omt.enabled }
-    const names = { ...omt.names }
-    const sizes = { ...omt.sizes }
-    const fps = { ...omt.fps }
+    const current = getState().omt
+    const enabled = { ...current.enabled }
+    const names = { ...current.names }
+    const sizes = { ...current.sizes }
+    const fps = { ...current.fps }
     for (const r of rows) {
       enabled[r.id] = r.on.checked
       names[r.id] = r.name.value
@@ -5778,6 +5779,10 @@ function wireOmtSection(omt: OmtStatus): void {
 function renderOmtStatus(o: OmtStatus): void {
   for (const r of omtRows()) {
     const st = o.outputs[r.id]
+    r.on.checked = o.enabled[r.id]
+    if (document.activeElement !== r.name) r.name.value = o.names[r.id]
+    if (document.activeElement !== r.size) r.size.value = String(o.sizes[r.id])
+    if (document.activeElement !== r.fps) r.fps.value = String(o.fps[r.id])
     r.row.classList.toggle('off', !o.enabled[r.id])
     r.status.className = 'omt-status remote-status'
     r.status.title = st.address ?? ''
@@ -5797,6 +5802,8 @@ function renderOmtStatus(o: OmtStatus): void {
     else if (st.preview) parts.push(t('в превью'))
     r.status.textContent = parts.join(' · ')
   }
+  $<HTMLInputElement>('omt-program-audio').checked = o.programAudio
+  $<HTMLInputElement>('omt-timer-message').checked = o.timerMessage
   document.querySelector('.omt-sub[data-sub="timer"]')?.classList.toggle('off', !o.enabled.timer)
   document.querySelector('.omt-sub[data-sub="program"]')?.classList.toggle('off', !o.enabled.program)
   const err = document.getElementById('omt-error')
