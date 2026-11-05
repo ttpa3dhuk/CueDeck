@@ -78,6 +78,7 @@ const api: PresenterApi = {
     setGlobalArrows: (value) => ipcRenderer.invoke('clicker:set-global-arrows', Boolean(value)),
   },
   preview: {
+    toggleSourceMuted: (identity) => ipcRenderer.invoke('preview:toggle-source-muted', identity),
     openDialog: () => ipcRenderer.invoke('preview:open-dialog'),
     openPath: (path) => ipcRenderer.invoke('preview:open-path', path),
     read: () => ipcRenderer.invoke('preview:read'),
@@ -223,6 +224,7 @@ const api: PresenterApi = {
     pathFor: (file) => webUtils.getPathForFile(file),
   },
   playlist: {
+    prepare: (id) => ipcRenderer.invoke('playlist:prepare', id),
     revealSource: (id, itemPath) => ipcRenderer.invoke('playlist:reveal-source', id, itemPath),
     add: () => ipcRenderer.invoke('playlist:add'),
     addPaths: (paths, position) => ipcRenderer.invoke('playlist:add-paths', paths, position),

@@ -134,6 +134,7 @@ export interface PresenterApi {
    * entry lands here; `take()` promotes it to the program (audience) feed.
    */
   preview: {
+    toggleSourceMuted(identity: FrameStepIdentity): Promise<void>
     openDialog(): Promise<OpenPdfResult>
     openPath(path: string): Promise<OpenPdfResult>
     read(): Promise<{ bytes: Uint8Array; mime: string } | null>
@@ -316,6 +317,7 @@ export interface PresenterApi {
     pathFor(file: File): string
   }
   playlist: {
+    prepare(id: string): Promise<void>
     /** Reveal the original media; list items must name a path belonging to this entry. */
     revealSource(id: string, itemPath?: string): Promise<{ ok: boolean; error?: string }>
     add(): Promise<PlaylistEntry[]>

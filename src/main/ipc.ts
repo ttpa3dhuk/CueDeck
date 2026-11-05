@@ -8,6 +8,7 @@ import { slideNavigationPatch, sanitizeSlideFadeMs } from '../shared/slide-trans
 import { clearSessionDecks, restoreSessionDecks } from './session-restore.js'
 import { assertSessionIdle, waitForSessionRestore, beginSessionRestore, finishSessionRestore, beginEmptyProject, finishEmptyProject, configureStartup, flushSessionCheckpoint, initSessionLifecycle, shouldRestoreAtStartup } from './session-lifecycle.js'
 import { recoveryTakeFrame } from '../shared/recovery-take.js'
+import { togglePreviewSourceMute } from '../shared/source-audio.js'
 import { createClickerNavigation } from './clicker-navigation.js'
 import { audienceTimerConfig, createAudienceTimer } from '../shared/audience-timer.js'
 import { createAudienceTimerCommands } from './audience-timer.js'
@@ -115,13 +116,13 @@ import {
 } from './display-mapping.js'
 import { indexFolder, pickBestCandidate } from './project-files.js'
 import { countPdfPages } from './pdf-pages.js'
-import { cachedPdfPathFor, convertPptxToPdf, findSoffice, LibreOfficeMissingError, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
+import { cachedPdfPathFor, findSoffice, LibreOfficeMissingError, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
 import { beginProjectTransfer, endProjectTransfer, isProjectTransferRunning, transferProject } from './project-transfer.js'
 import { runPptxWork } from './pptx-work.js'
+import { preparePresentation, cancelPresentationPreparations, cancelPresentationPreparation, onPreparationStatus } from './presentation-preparation.js'
+import { PreparationUiState } from './preparation-ui-state.js'
 import type { ProjectTransferStatus } from '../shared/types.js'
-import { clearLocalCache, exportProjectCache, forgetProjectCache, localCacheStats, localPptxCacheDir, useProjectCache } from './project-cache.js'
-import { preparePptxMedia } from './pptx-media.js'
-import { substitutedFonts } from './pptx-fonts.js'
+import { clearLocalCache, exportProjectCache, localCacheStats, localPptxCacheDir } from './project-cache.js'
 import { log, setRecoveryStager } from './diag.js'
 import { adjustPatch } from '../renderer/shared/timer.js'
 import { addFonts, addedFontsCount, removeAddedFonts, type FontHooks } from './user-fonts.js'
@@ -235,6 +236,19 @@ function setFontIssues(filePath: string, fonts: string[]): void {
 }
 
 /** Read a file's identity + page count + sidecar notes. Shared by both decks. */
+const preparationUi = new PreparationUiState(store, preparePresentation, cancelPresentationPreparations,
+  (path, prepared, options) => {
+    if (options.reportFontIssues !== false) setFontIssues(path, prepared.fonts)
+  })
+let programOpenGeneration = 0
+let previewOpenGeneration = 0
+let pendingDeckLoads = 0
+function resetPreparation(): void {
+  programOpenGeneration++
+  previewOpenGeneration++
+  preparationUi.reset()
+}
+
 async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; cacheSourcePath?: string; cacheProjectPath?: string | null; reportFontIssues?: boolean } = {}): Promise<InspectedFile> {
   if (store.get().testScreen.automatic) store.patch({ testScreen: { ...store.get().testScreen, automatic: false } })
   const kind = kindOf(filePath)
@@ -258,24 +272,15 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     sha1 = sha1FromBuffer(buf)
     totalSlides = countPdfPages(buf)
   } else if (kind === 'pptx') {
-    sha1 = await computePdfSha1(filePath)
-    await runPptxWork(async () => {
-      if (!opts.forceLocalCache) await useProjectCache(sha1, opts.cacheSourcePath ?? filePath, opts.cacheProjectPath === undefined ? store.get().projectPath : opts.cacheProjectPath)
-      // Вшитые видео (2.10): извлечь ролики + manifest, LibreOffice получает
-      // копию без видеофайлов — иначе он зашивает mp4 внутрь PDF целиком.
-      const prepared = await preparePptxMedia(filePath, sha1)
-      slideMedia = prepared.slideMedia
-      pptxNotes = prepared.pageNotes
-      pptxNotesBySha1.set(sha1, pptxNotes)
-      try {
-        const cachedPath = await convertPptxToPdf(prepared.convertSource, sha1, filePath)
-        const buf = await readFile(cachedPath)
-        totalSlides = countPdfPages(buf)
-        if (opts.reportFontIssues !== false) setFontIssues(filePath, substitutedFonts(prepared.fonts, buf))
-      } finally {
-        if (prepared.temporary) await rm(prepared.convertSource, { force: true }).catch(() => undefined)
-      }
+    const prepared = await preparationUi.prepare(filePath, {
+      ...opts, priority: 'foreground',
+      cacheProjectPath: opts.cacheProjectPath === undefined ? store.get().projectPath : opts.cacheProjectPath,
     })
+    sha1 = prepared.sha1
+    totalSlides = prepared.totalSlides
+    slideMedia = prepared.slideMedia
+    pptxNotes = prepared.pageNotes
+    pptxNotesBySha1.set(sha1, pptxNotes)
   } else if (kind === 'video') {
     // video: don't read the whole (possibly multi-GB) file — id from stat only
     sha1 = await computeStatSha1(filePath)
@@ -446,12 +451,16 @@ async function openFile(
   filePath: string,
   opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; startOnTake?: boolean; transition?: TakeTransition; restorePaused?: boolean } = {},
 ): Promise<OpenPdfResult> {
+  const generation = ++programOpenGeneration
+  pendingDeckLoads++
   // Любая загрузка в эфир мимо проигрывателя снимает список с эфира — иначе
   // его таймер продолжил бы подменять картинку под уже другим материалом.
   if (!opts.fromList) stopListPlayback()
   const previousFramePath = store.get().fileKind === 'video' ? store.get().pdfPath : null
   try {
     const info = await inspectFile(filePath)
+    if (generation !== programOpenGeneration) return { ok: false, cancelled: true }
+    if (opts.playlistId && !store.get().playlist.some(e => e.id === opts.playlistId)) return { ok: false, cancelled: true }
     const playlistId = opts.playlistId ?? null
     const timerPatch: Partial<import('./state.js').TimerState> = {
       startedAt: null,
@@ -491,6 +500,7 @@ async function openFile(
       notes: info.notes,
       slideMedia: info.slideMedia,
       currentPlaylistId: playlistId,
+      sourceMuted: entry?.sourceMuted === true,
       // Reset the playback clock for every file load; keep audience-mute preference.
       video: {
         playing: false,
@@ -523,7 +533,10 @@ async function openFile(
       kind: info.kind,
     }
   } catch (err) {
-    return { ok: false, error: openErrorMessage(err, filePath), needsLibreOffice: err instanceof LibreOfficeMissingError }
+    if (generation !== programOpenGeneration) return { ok: false, cancelled: true }
+    return { ok: false, error: openErrorMessage(err, filePath), needsLibreOffice: err instanceof LibreOfficeMissingError || (err as { code?: string }).code === 'libreoffice_missing' }
+  } finally {
+    pendingDeckLoads--
   }
 }
 
@@ -532,9 +545,13 @@ async function loadPreview(
   filePath: string,
   opts: { playlistId?: string | null } = {},
 ): Promise<OpenPdfResult> {
+  const generation = ++previewOpenGeneration
+  pendingDeckLoads++
   const previousFramePath = store.get().preview.kind === 'video' ? store.get().preview.path : null
   try {
     const info = await inspectFile(filePath)
+    if (generation !== previewOpenGeneration) return { ok: false, cancelled: true }
+    if (opts.playlistId && !store.get().playlist.some(e => e.id === opts.playlistId)) return { ok: false, cancelled: true }
     const playlistId = opts.playlistId ?? null
     const entry = playlistId ? store.get().playlist.find((e) => e.id === playlistId) : undefined
     const beforePreview = store.get().preview
@@ -551,6 +568,7 @@ async function loadPreview(
       currentSlide: 1,
       notes: info.notes,
       playlistId,
+      sourceMuted: entry?.sourceMuted === true,
       slideMedia: info.slideMedia,
       video: {
         playing: false,
@@ -571,7 +589,10 @@ async function loadPreview(
       kind: info.kind,
     }
   } catch (err) {
-    return { ok: false, error: openErrorMessage(err, filePath), needsLibreOffice: err instanceof LibreOfficeMissingError }
+    if (generation !== previewOpenGeneration) return { ok: false, cancelled: true }
+    return { ok: false, error: openErrorMessage(err, filePath), needsLibreOffice: err instanceof LibreOfficeMissingError || (err as { code?: string }).code === 'libreoffice_missing' }
+  } finally {
+    pendingDeckLoads--
   }
 }
 
@@ -787,6 +808,7 @@ async function restoreLastSession(backupId?: string): Promise<OpenPdfResult & { 
   let saved: ReturnType<typeof beginSessionRestore>
   try { saved = beginSessionRestore(backupId) }
   catch (error) { return { ok: false, hadSession: false, error: error instanceof Error ? error.message : String(error) } }
+  resetPreparation()
   let success = false
   try {
     stopListPlayback()
@@ -814,11 +836,21 @@ async function restoreLastSession(backupId?: string): Promise<OpenPdfResult & { 
     return { ...result, hadSession: Boolean(path || playlist.length || folders.length) }
   } finally {
     finishSessionRestore(success)
+    if (success) preparationUi.background(store.get().playlist, store.get().projectPath)
     if (success && backupId) flushSessionCheckpoint()
   }
 }
 
 export function registerIpcHandlers(): void {
+  onPreparationStatus((path, status) => preparationUi.phase(path, status))
+  ipcMain.handle('playlist:prepare', async (event, id: unknown) => {
+    const operator = getOperatorWindow()
+    if (!operator || event.sender !== operator.webContents || event.senderFrame !== operator.webContents.mainFrame) throw new Error('Operator window required')
+    if (typeof id !== 'string') return
+    const entry = store.get().playlist.find(e => e.id === id && e.kind === 'pptx')
+    if (!entry) return
+    await preparationUi.prepare(entry.filePath, { priority: 'background', forceLocalCache: true, cacheProjectPath: store.get().projectPath })
+  })
   initSessionLifecycle(async () => {
     const state = store.get()
     if (!state.projectPath) return
@@ -1032,6 +1064,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('preview:clear', () => {
+    previewOpenGeneration++
     const path = store.get().preview.kind === 'video' ? store.get().preview.path : null
     store.patch({ preview: initialDeckState() })
     cancelFrameProbeIfUnused(path)
@@ -1045,6 +1078,8 @@ export function registerIpcHandlers(): void {
     const state = store.get()
     const p = state.preview
     if (!p.path) return
+    programOpenGeneration++
+    previewOpenGeneration++
     const transition: TakeTransition = {
       id: randomUUID(),
       durationMs: mode === 'fade' ? sanitizeTakeFadeMs(state.takeFadeMs) : 0,
@@ -1112,6 +1147,7 @@ export function registerIpcHandlers(): void {
     // takes ping-pong the two decks. If program was empty, preview becomes empty.
     const oldProgramPos = store.videoPositionSec()
     const newPreview: DeckState = {
+      sourceMuted: state.sourceMuted === true,
       recoveryTake: false,
       path: state.pdfPath,
       sha1: state.pdfSha1,
@@ -1142,6 +1178,7 @@ export function registerIpcHandlers(): void {
       pdfPath: p.path,
       pdfSha1: p.sha1,
       fileKind: p.kind,
+      sourceMuted: p.sourceMuted === true,
       totalSlides: p.totalSlides,
       currentSlide: takeSlide,
       notes: p.notes,
@@ -1180,7 +1217,17 @@ export function registerIpcHandlers(): void {
   })
 
   // Preview video transport — mirrors the program clock helpers on preview.video.
-  // Preview audio is always muted (the operator monitors it silently).
+  ipcMain.handle('preview:toggle-source-muted', (event, identity: import('../shared/types.js').FrameStepIdentity) => {
+    const operator = getOperatorWindow()
+    if (!operator || operator.isDestroyed() || event.sender !== operator.webContents ||
+      event.senderFrame !== operator.webContents.mainFrame) throw new Error('Operator window required')
+    const patch = togglePreviewSourceMute(store.get(), identity)
+    if (!patch) return
+    store.patch(patch)
+    if (patch.playlist) persistPlaylist()
+  })
+
+  // Preview monitoring stays independent of the input's program mute.
   ipcMain.handle('preview:video:pause', () => {
     if (!store.get().preview.video.playing) return
     store.patchPreviewVideo({ playing: false, anchorSec: store.previewVideoPositionSec(), anchorAt: null })
@@ -1668,6 +1715,7 @@ export function registerIpcHandlers(): void {
       const playlist = insertPlaylistEntries(existing, newEntries, store.get().playlistFolders, position)
       store.patch({ playlist })
       persistPlaylist()
+      preparationUi.background(newEntries, store.get().projectPath)
       void refreshMissingFiles()
       const addedIds = new Set(newEntries.map((entry) => entry.id))
       return playlist.filter((entry) => addedIds.has(entry.id))
@@ -1883,6 +1931,12 @@ export function registerIpcHandlers(): void {
     const state = store.get()
     const removedIds = new Set(removed.map((entry) => entry.id))
     const patch: Partial<import('./state.js').AppState> = { ...extra, playlist: next }
+    for (const path of new Set(removed.filter(e => e.kind === 'pptx').map(e => e.filePath))) {
+      if (!next.some(e => e.filePath === path) && state.pdfPath !== path && state.preview.path !== path) {
+        preparationUi.forget(path)
+        cancelPresentationPreparation(path)
+      }
+    }
     if (state.currentPlaylistId && removedIds.has(state.currentPlaylistId)) {
       if (removed.some((entry) => entry.id === state.currentPlaylistId && entry.kind === 'list')) stopListPlayback()
       patch.currentPlaylistId = null
@@ -2082,6 +2136,8 @@ export function registerIpcHandlers(): void {
     }
   })
   ipcMain.handle('pptx-cache:clear', async () => {
+    const preparing = (): boolean => pendingDeckLoads > 0 || Object.values(store.get().preparations).some(s => s.phase === 'queued' || s.phase === 'preparing')
+    if (preparing()) return { ok: false, error: t('Дождись окончания подготовки презентаций перед очисткой кэша') }
     if (isProjectTransferRunning()) return { ok: false, error: t('Дождись окончания сборки проекта перед очисткой кэша') }
     const stats = await runPptxWork(() => localCacheStats(activePptxHashes()))
     if (stats.bytes === stats.protectedBytes) return { ok: true, clearedBytes: 0, remainingBytes: stats.protectedBytes }
@@ -2094,8 +2150,10 @@ export function registerIpcHandlers(): void {
       detail: t('Удалённые PPTX при следующем выборе конвертируются заново. Открытые сейчас презентации и кэш собранных проектов останутся.'),
     })
     if (response !== 1) return { ok: false, cancelled: true }
+    if (preparing()) return { ok: false, error: t('Дождись окончания подготовки презентаций перед очисткой кэша') }
     try {
       const cleared = await runPptxWork(() => clearLocalCache(activePptxHashes()))
+      preparationUi.reset()
       return { ok: true, clearedBytes: cleared.bytes, remainingBytes: cleared.protectedBytes }
     } catch (err) {
       return { ok: false, error: (err as Error).message }
@@ -2111,9 +2169,7 @@ export function registerIpcHandlers(): void {
     try {
       if (isProjectTransferRunning()) return { ok: false, error: t('Дождись окончания сборки проекта перед пересборкой презентации') }
       if (kindOf(filePath) !== 'pptx') return { ok: false, error: t('Это не PPTX') }
-      const sha1 = await computePdfSha1(filePath)
-      forgetProjectCache(sha1)
-      await rm(cachedPdfPathFor(sha1), { force: true })
+      // Rebuild into a new generation. Open decks keep their old files intact.
       await inspectFile(filePath, { forceLocalCache: true })
       return { ok: true, remaining: store.get().fontIssues[filePath] ?? [] }
     } catch (err) {
@@ -2240,6 +2296,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('project:new', () => {
+    resetPreparation()
     beginEmptyProject()
     stopListPlayback()
     // Intentionally do NOT clear persistent storage (lastPdfPath, playlist,
@@ -2252,6 +2309,7 @@ export function registerIpcHandlers(): void {
       keyVisualPath: null,
       projectPath: null,
       pdfPath: null,
+      sourceMuted: false,
       pdfSha1: null,
       fileKind: null,
       totalSlides: 0,
@@ -2294,6 +2352,7 @@ export function registerIpcHandlers(): void {
         assertSessionIdle()
         if (store.get().testScreen.automatic) store.patch({ testScreen: { ...store.get().testScreen, automatic: false } })
         const loaded = await loadProjectFile(path)
+        resetPreparation()
         beginEmptyProject()
         store.patch({
           playlist: loaded.playlist,
@@ -2305,6 +2364,7 @@ export function registerIpcHandlers(): void {
           pdfPath: null,
           pdfSha1: null,
           fileKind: null,
+          sourceMuted: false,
           totalSlides: 0,
           currentSlide: 1,
           notes: {},
@@ -2312,6 +2372,7 @@ export function registerIpcHandlers(): void {
           preview: initialDeckState(),
         })
         persistPlaylist()
+        preparationUi.background(loaded.playlist, path)
         setKeyVisualPath(loaded.keyVisualPath)
         if (loaded.audienceTimer) setAudienceTimer(loaded.audienceTimer)
         setCurrentPlaylistId(null)

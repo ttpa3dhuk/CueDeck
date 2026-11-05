@@ -225,6 +225,8 @@ export interface PlaylistFolder {
 }
 
 export interface PlaylistEntry {
+  /** Per-input audio switch, independent of the program mix mute. Missing = audible. */
+  sourceMuted?: boolean
   folderId?: string
   id: string
   kind: FileKind
@@ -278,6 +280,8 @@ export interface PlaylistEntry {
  * program fields. Keeping program top-level avoids touching audience/speaker code.
  */
 export interface DeckState {
+  /** Applied input mute, retained even if its playlist card is removed. */
+  sourceMuted?: boolean
   /** Transient staging of a report snapshot; never a venue/project preference. */
   recoveryTake?: boolean
   path: string | null
@@ -302,6 +306,10 @@ export interface ProjectTransferStatus {
 }
 
 export interface AppState {
+  /** Runtime conversion status by source path; never stored in project/session files. */
+  preparations: Record<string, { phase: 'queued' | 'preparing' | 'ready' | 'error'; error?: string }>
+  /** Applied program input mute; video.muted remains the independent mix switch. */
+  sourceMuted?: boolean
   startup: StartupSettings
   recoveryStartup: boolean
   autosaveError: string | null
@@ -585,7 +593,7 @@ export const SYPHON_NAME_MAX = 64
 
 export const DEFAULT_SYPHON_SETTINGS: SyphonSettings = {
   enabled: false,
-  name: 'CueDeck Audience',
+  name: 'CueDeck Program',
 }
 
 export function defaultSyphonStatus(): SyphonStatus {

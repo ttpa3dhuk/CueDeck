@@ -1,14 +1,107 @@
 import { app } from 'electron'
-import { existsSync, readdirSync, lstatSync } from 'node:fs'
+import { existsSync, readdirSync, lstatSync, readFileSync } from 'node:fs'
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, rmdir } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { t } from '../shared/i18n.js'
 import type { TransferFile } from './project-transfer.js'
+import { PPTX_MANIFEST_VERSION, PREPARED_CACHE_FOLDER, PREPARED_METADATA_FILE, PREPARED_METADATA_VERSION, PREPARED_VERSION_PREFIX } from '../shared/presentation-preparation.js'
+import { configurePptxMediaRoots } from './pptx-media.js'
 
-export const PPTX_MANIFEST_VERSION = 7
+export { PPTX_MANIFEST_VERSION } from '../shared/presentation-preparation.js'
 export const PROJECT_CACHE_FOLDER = 'pptx-cache'
 const projectRoots = new Map<string, string>()
 const discoveredPdfPaths = new Map<string, string>()
+/** Готовые versioned-root, уже проверенные в этом запуске. */
+const preparedRoots = new Map<string, string>()
+/** Roots, которые нельзя удалять очисткой: живые деки/transfer держат lease. */
+const retainedRoots = new Map<string, number>()
+
+function versionNumber(name: string): number | null {
+  if (!name.startsWith(PREPARED_VERSION_PREFIX)) return null
+  const value = Number(name.slice(PREPARED_VERSION_PREFIX.length))
+  return Number.isSafeInteger(value) && value > 0 ? value : null
+}
+
+/** Один versioned-root: PDF + метаданные + (для pptx) manifest и все media. */
+function validPreparedRoot(root: string, sha1: string): boolean {
+  try {
+    if (!lstatSync(root).isDirectory()) return false
+    if (!lstatSync(`${root}/${sha1}.pdf`).isFile()) return false
+    const metadata = JSON.parse(readFileSync(`${root}/${PREPARED_METADATA_FILE}`, 'utf8'))
+    if (metadata.version !== PREPARED_METADATA_VERSION || metadata.sha1 !== sha1) return false
+    if (!metadata.hasManifest) return true
+    const manifestPath = `${root}/${sha1}.media.json`
+    if (!lstatSync(manifestPath).isFile()) return false
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    if (manifest.version !== PPTX_MANIFEST_VERSION || typeof manifest.rebuilt !== 'boolean' ||
+        !Array.isArray(manifest.slideMedia) || !Array.isArray(manifest.fonts) ||
+        !manifest.pageNotes || typeof manifest.pageNotes !== 'object' || Array.isArray(manifest.pageNotes) ||
+        !Object.values(manifest.pageNotes).every((note) => typeof note === 'string')) return false
+    if (manifest.slideMedia.length && !lstatSync(`${root}/${sha1}.media`).isDirectory()) return false
+    for (const media of manifest.slideMedia) {
+      if (!media || typeof media.file !== 'string' || !media.file || /[/\\\0]/.test(media.file) ||
+          !Number.isInteger(media.slide) || media.slide < 1 ||
+          !media.rect || !['x', 'y', 'w', 'h'].every((key: string) => Number.isFinite(media.rect[key]))) return false
+      if (!lstatSync(`${root}/${sha1}.media/${media.file}`).isFile()) return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Самый новый целостный versioned-root внутри произвольного cache root. */
+function preparedVersionRootFor(root: string, sha1: string): string | null {
+  const base = `${root}/${PREPARED_CACHE_FOLDER}/${sha1}`
+  let names: string[]
+  try {
+    names = readdirSync(base).filter((name) => versionNumber(name) !== null)
+  } catch {
+    return null
+  }
+  names.sort((a, b) => (versionNumber(b) ?? 0) - (versionNumber(a) ?? 0))
+  for (const name of names) {
+    const versionRoot = `${base}/${name}`
+    if (validPreparedRoot(versionRoot, sha1)) return versionRoot
+  }
+  return null
+}
+
+/** Зарегистрировать опубликованный целостный root (main делает это после rename). */
+export function registerPreparedRoot(sha1: string, root: string): void {
+  preparedRoots.set(sha1, root)
+}
+
+export function forgetPreparedRoot(sha1: string): void {
+  preparedRoots.delete(sha1)
+}
+
+/** Root для чтения нового формата; после рестарта находится сканированием. */
+export function preparedRootFor(sha1: string): string | null {
+  const registered = preparedRoots.get(sha1)
+  if (registered && validPreparedRoot(registered, sha1)) return registered
+  if (registered) preparedRoots.delete(sha1)
+  const found = preparedVersionRootFor(localPptxCacheDir(), sha1)
+  if (found) preparedRoots.set(sha1, found)
+  return found
+}
+
+/** Держать root, пока жива дека/transfer: очистка кэша его не тронет. */
+export function retainPreparedRoot(root: string): () => void {
+  retainedRoots.set(root, (retainedRoots.get(root) ?? 0) + 1)
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    const count = (retainedRoots.get(root) ?? 1) - 1
+    if (count > 0) retainedRoots.set(root, count)
+    else retainedRoots.delete(root)
+  }
+}
+
+export function isPreparedRootRetained(root: string): boolean {
+  return retainedRoots.has(root)
+}
 
 export function localPptxCacheDir(): string {
   return join(app.getPath('userData'), 'pptx-cache')
@@ -45,6 +138,13 @@ export function pdfCachePath(root: string, sha1: string): string | null {
   } catch {
     // No cache under the legacy hash folder.
   }
+  // Новый формат: <root>/prepared/<sha>/v-<generation>/<sha>.pdf.
+  const prepared = preparedVersionRootFor(root, sha1)
+  if (prepared) {
+    const path = join(prepared, `${sha1}.pdf`)
+    discoveredPdfPaths.set(key, path)
+    return path
+  }
   try {
     for (const name of readdirSync(root).sort()) {
       const dir = join(root, name)
@@ -65,8 +165,10 @@ export function pdfCachePath(root: string, sha1: string): string | null {
 
 /** Keep the binding for decks already on air when another project is opened. */
 export function pptxReadCacheDir(sha1: string): string {
-  const root = projectRoots.get(sha1)
-  return root && pdfCachePath(root, sha1) ? root : localPptxCacheDir()
+  const project = projectRoots.get(sha1)
+  if (project && pdfCachePath(project, sha1)) return project
+  const prepared = preparedRootFor(sha1)
+  return prepared ?? localPptxCacheDir()
 }
 
 export function forgetProjectCache(sha1: string): void {
@@ -92,6 +194,16 @@ async function localCacheItems(): Promise<LocalCacheItem[]> {
     if (entry.isFile() && file) items.push({ path, sha1: file[1], directory: false })
     else if (entry.isDirectory() && (media || tmp)) {
       items.push({ path, sha1: (media || tmp)![1], directory: true })
+    } else if (entry.isDirectory() && entry.name === PREPARED_CACHE_FOLDER) {
+      for (const shaDir of await readdir(path, { withFileTypes: true })) {
+        if (!shaDir.isDirectory() || !SHA1.test(shaDir.name)) continue
+        const versions = await readdir(join(path, shaDir.name), { withFileTypes: true })
+        for (const version of versions) {
+          if (version.isDirectory() && versionNumber(version.name) !== null) {
+            items.push({ path: join(path, shaDir.name, version.name), sha1: shaDir.name, directory: true })
+          }
+        }
+      }
     } else if (entry.isDirectory()) {
       for (const nested of await readdir(path, { withFileTypes: true })) {
         const name = entry.name
@@ -122,7 +234,7 @@ export async function localCacheStats(protectedHashes: ReadonlySet<string> = new
   for (const item of items) {
     const size = await cacheBytes(item.path)
     bytes += size
-    if (protectedHashes.has(item.sha1)) protectedBytes += size
+    if (protectedHashes.has(item.sha1) || retainedRoots.has(item.path)) protectedBytes += size
   }
   return { bytes, files: items.length, protectedBytes }
 }
@@ -134,7 +246,7 @@ export async function clearLocalCache(protectedHashes: ReadonlySet<string>): Pro
   let protectedBytes = 0
   for (const item of items) {
     const size = await cacheBytes(item.path)
-    if (protectedHashes.has(item.sha1)) { protectedBytes += size; continue }
+    if (protectedHashes.has(item.sha1) || retainedRoots.has(item.path)) { protectedBytes += size; continue }
     const info = await lstat(item.path)
     if (item.directory ? !info.isDirectory() : !info.isFile()) continue
     await rm(item.path, { recursive: item.directory })
@@ -144,7 +256,27 @@ export async function clearLocalCache(protectedHashes: ReadonlySet<string>): Pro
   // Remove only empty folders; a live PDF or an unknown user file keeps its folder.
   const folders = await readdir(localPptxCacheDir(), { withFileTypes: true }).catch(() => [])
   for (const entry of folders) {
-    if (entry.isDirectory()) await rmdir(join(localPptxCacheDir(), entry.name)).catch(() => undefined)
+    if (!entry.isDirectory()) continue
+    const folder = join(localPptxCacheDir(), entry.name)
+    if (entry.name === PREPARED_CACHE_FOLDER) {
+      const shas = await readdir(folder, { withFileTypes: true }).catch(() => [])
+      for (const shaDir of shas) {
+        if (!shaDir.isDirectory()) continue
+        const shaFolder = join(folder, shaDir.name)
+        const versions = await readdir(shaFolder, { withFileTypes: true }).catch(() => [])
+        for (const version of versions) {
+          if (version.isDirectory()) await rmdir(join(shaFolder, version.name)).catch(() => undefined)
+        }
+        await rmdir(shaFolder).catch(() => undefined)
+      }
+      const remaining = await readdir(folder).catch(() => [])
+      if (!remaining.some((name) => name !== 'index.json')) {
+        await rm(join(folder, 'index.json'), { force: true }).catch(() => undefined)
+        await rmdir(folder).catch(() => undefined)
+      }
+    } else {
+      await rmdir(folder).catch(() => undefined)
+    }
   }
   return { bytes, files, protectedBytes }
 }
@@ -262,3 +394,17 @@ export async function exportProjectCache(sha1: string, filePath: string, project
   }
   return transferred
 }
+
+// main-обвязка для pptx-media: сам модуль остаётся без Electron.
+configurePptxMediaRoots(() => {
+  const cacheRoot = localPptxCacheDir()
+  const readDir = (sha1: string): string => pptxReadCacheDir(sha1)
+  return {
+    writeDir: cacheRoot,
+    readDir,
+    pdfPath: (sha1: string): string => {
+      const root = readDir(sha1)
+      return pdfCachePath(root, sha1) ?? join(root, `${sha1}.pdf`)
+    },
+  }
+})

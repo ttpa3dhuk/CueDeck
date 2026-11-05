@@ -5,6 +5,22 @@ import { sessionCheckpoint } from '../src/shared/startup-settings'
 import { restoreSessionDecks } from '../src/main/session-restore'
 
 beforeEach(() => { store.patch(initialState()) })
+it('restores independent input mute for both loose decks and clears it with an empty show', async () => {
+  store.patch({ pdfPath: '/program.pdf', sourceMuted: true })
+  store.patchPreview({ path: '/preview.pdf', sourceMuted: true })
+  const saved = sessionCheckpoint(store.get())
+  store.patch(initialState())
+  await restoreSessionDecks(saved, {
+    program: async path => { store.patch({ pdfPath: path }); return { ok: true } },
+    preview: async path => { store.patchPreview({ path }); return { ok: true } },
+  })
+  expect(store.get().sourceMuted).toBe(true)
+  expect(store.get().preview.sourceMuted).toBe(true)
+  expect(store.get().video.muted).toBe(false)
+  await restoreSessionDecks(sessionCheckpoint(initialState()), { program: vi.fn(), preview: vi.fn() })
+  expect(store.get().sourceMuted).toBe(false)
+  expect(store.get().preview.sourceMuted).toBe(false)
+})
 function playingShow() {
   store.patch({ pdfPath: '/old.mp4', fileKind: 'video', currentPlaylistId: 'old',
     video: { ...store.get().video, playing: true, anchorAt: Date.now() } })

@@ -182,8 +182,13 @@ export function audioRole(layout: Layout, streaming = false): Role {
  * hall never keeps blasting the video's audio (playback itself keeps running —
  * un-blackout brings the sound back at the live position).
  */
-export function shouldMute(state: AppState, role: Role): boolean {
+export function shouldMuteMix(state: AppState, role: Role): boolean {
   return role !== audioRole(state.layout, programCaptured(state)) || state.video.muted || state.blackout || state.testScreen?.manual === true
+}
+
+/** Input mute also gates clips embedded in presentations and live input audio. */
+export function shouldMute(state: AppState, role: Role): boolean {
+  return shouldMuteMix(state, role) || state.sourceMuted === true
 }
 
 /**

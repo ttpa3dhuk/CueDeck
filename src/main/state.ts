@@ -44,6 +44,7 @@ export function initialVideoState(): VideoState {
 
 export function initialDeckState(): DeckState {
   return {
+    sourceMuted: false,
     recoveryTake: false,
     path: null,
     sha1: null,
@@ -59,6 +60,8 @@ export function initialDeckState(): DeckState {
 
 export function initialState(): AppState {
   return {
+    preparations: {},
+    sourceMuted: false,
     startup: { ...DEFAULT_STARTUP_SETTINGS },
     recoveryStartup: false,
     autosaveError: null,

@@ -74,6 +74,7 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
     ...(typeof v.folderId === 'string' ? { folderId: v.folderId } : {}),
     ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
     ...(v.loop ? { loop: true } : {}),
+    ...(typeof v.sourceMuted === 'boolean' ? { sourceMuted: v.sourceMuted } : {}),
     ...(typeof v.slideFadeMs === 'number' ? { slideFadeMs: sanitizeSlideFadeMs(v.slideFadeMs) } : {}),
     ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
     ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),

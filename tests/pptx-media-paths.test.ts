@@ -21,6 +21,7 @@ vi.mock('../src/main/project-cache', () => ({
   PPTX_MANIFEST_VERSION: 7,
   localPptxCacheDir: () => '/fixture/cache',
   pptxReadCacheDir: () => '/fixture/cache',
+  pdfCachePath: (root: string, sha: string) => disk.files.has(`${root}/${sha}.pdf`) ? `${root}/${sha}.pdf` : null,
 }))
 vi.mock('../src/main/pptx-converter', () => ({
   cachedPdfPathFor: (sha: string) => `/fixture/cache/${sha}.pdf`,

@@ -13,6 +13,7 @@ generated/presentation/
 generated/youtube/
 
 # User content — never commit presentations or notes
+resources/private-regression/
 *.pdf
 *.pptx
 *.ppt

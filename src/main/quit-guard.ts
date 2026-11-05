@@ -6,6 +6,7 @@ import { markCleanExit } from './diag.js'
 import { finishSessionCleanly } from './session-lifecycle.js'
 import { t } from '../shared/i18n.js'
 import { isProjectTransferRunning } from './project-transfer.js'
+import { stopPresentationPreparations } from './presentation-preparation.js'
 
 /**
  * Подтверждение при закрытии.
@@ -92,6 +93,7 @@ export async function requestQuit(opts: { relaunch?: boolean } = {}): Promise<vo
   // Погасить таймер на кнопках Stream Deck (Companion), пока сеть ещё жива.
   shutdownStream()
   await companionGoodbye()
+  await stopPresentationPreparations()
   await flushPendingWrites()
   finishSessionCleanly()
   markCleanExit()

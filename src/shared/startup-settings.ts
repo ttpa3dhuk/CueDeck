@@ -16,8 +16,8 @@ export interface SessionCheckpoint {
   playlistFolders: AppState['playlistFolders']
   keyVisualPath: string | null
   projectPath: string | null
-  program: { path: string | null; playlistId: string | null; slide: number; video: VideoState }
-  preview: { path: string | null; playlistId: string | null; slide: number; video: VideoState }
+  program: { path: string | null; playlistId: string | null; slide: number; video: VideoState; sourceMuted?: boolean }
+  preview: { path: string | null; playlistId: string | null; slide: number; video: VideoState; sourceMuted?: boolean }
   timer: TimerState
   audienceTimer: AppState['audienceTimer']
 }
@@ -33,8 +33,8 @@ export function sessionCheckpoint(state: AppState, now = Date.now()): SessionChe
   return {
     playlist: state.playlist, playlistFolders: state.playlistFolders,
     keyVisualPath: state.keyVisualPath, projectPath: state.projectPath,
-    program: { path: state.pdfPath, playlistId: state.currentPlaylistId, slide: state.currentSlide, video: pausedVideo(state.video, now) },
-    preview: { path: state.preview.path, playlistId: state.preview.playlistId, slide: state.preview.currentSlide, video: pausedVideo(state.preview.video, now) },
+    program: { path: state.pdfPath, playlistId: state.currentPlaylistId, slide: state.currentSlide, video: pausedVideo(state.video, now), sourceMuted: state.sourceMuted === true },
+    preview: { path: state.preview.path, playlistId: state.preview.playlistId, slide: state.preview.currentSlide, video: pausedVideo(state.preview.video, now), sourceMuted: state.preview.sourceMuted === true },
     timer: pausedTimer(state.timer, now), audienceTimer: { ...state.audienceTimer, ...pausedTimer(state.audienceTimer, now) },
   }
 }

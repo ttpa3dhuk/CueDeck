@@ -10,6 +10,7 @@ import { safeDisplayLayout } from '../../shared/display-safety'
 import { FADE_MAX_MS, sanitizeTakeFadeMs } from '../../shared/take-transition'
 import { nextPlaylistFolderName, type PlaylistInsertPosition } from '../../shared/playlist-folders'
 import { initBus, getState, subscribe } from '../shared/bus'
+import { PreparationProgress } from '../shared/preparation-progress'
 import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
 import {
@@ -172,6 +173,7 @@ const videoRestartBtn = role === 'operator' ? $<HTMLButtonElement>('video-restar
 const videoScrub = role === 'operator' ? $<HTMLInputElement>('video-scrub') : null
 const videoTime = role === 'operator' ? $('video-time') : null
 const videoMuteBtn = role === 'operator' ? $<HTMLButtonElement>('video-mute') : null
+const previewSourceMuteBtn = role === 'operator' ? $<HTMLButtonElement>('preview-source-mute') : null
 const videoError = $('video-error')
 
 interface TimelineRefs {
@@ -870,6 +872,7 @@ function updateVideoUI(state: AppState): void {
   document.getElementById('video-loop-btn')?.classList.toggle('on', state.videoLoop)
   if (videoMuteBtn) {
     videoMuteBtn.textContent = v.muted ? '🔇' : '🔊'
+    videoMuteBtn.setAttribute('aria-pressed', String(v.muted))
     videoControls?.classList.toggle('muted', v.muted)
   }
   const pos = videoPosition(v)
@@ -1011,6 +1014,12 @@ async function renderPreview(): Promise<void> {
 function updatePreviewUI(state: AppState): void {
   if (!isOperator) return
   const p = state.preview
+  if (previewSourceMuteBtn) {
+    previewSourceMuteBtn.classList.toggle('hidden', !p.path)
+    const muted = p.sourceMuted === true
+    previewSourceMuteBtn.textContent = muted ? '🔇' : '🔊'
+    previewSourceMuteBtn.setAttribute('aria-pressed', String(muted))
+  }
   paintVideoTimecode('preview', state)
   if (takeBtn) takeBtn.disabled = !p.path
   if (fadeBtn) fadeBtn.disabled = !p.path
@@ -1419,6 +1428,18 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   removeBtn.addEventListener('dblclick', (e) => e.stopPropagation())
 
   row1.append(kindBadge, loopBadge, name)
+  const preparation = document.createElement('button')
+  preparation.className = 'preparation-status hidden'
+  preparation.type = 'button'
+  preparation.addEventListener('click', (event) => {
+    event.stopPropagation()
+    if (getState().preparations?.[fresh().filePath]?.phase === 'error') {
+      void window.api.playlist.prepare(entry.id).catch((error) => showBanner(String(error), 6000))
+    }
+  })
+  preparation.addEventListener('dblclick', (event) => event.stopPropagation())
+  preparation.addEventListener('mousedown', (event) => event.stopPropagation())
+  row1.append(preparation)
 
   // Список правится на месте: порядок, удаление, добавление, секунды на фото.
   if (entry.kind === 'list') {
@@ -1858,6 +1879,15 @@ function renderPlaylist(state: AppState): void {
     let node = playlistNodes.get(entry.id)
     if (!node) { node = createPlaylistItem(entry); playlistNodes.set(entry.id, node) }
     updatePlaylistItem(node, entry)
+    const preparation = node.querySelector<HTMLButtonElement>('.preparation-status')!
+    const status = entry.kind === 'pptx' ? state.preparations?.[entry.filePath] : undefined
+    preparation.classList.toggle('hidden', !status || status.phase === 'ready')
+    preparation.dataset.phase = status?.phase ?? ''
+    preparation.disabled = status?.phase !== 'error'
+    preparation.textContent = status?.phase === 'queued' ? t('Ожидает подготовки')
+      : status?.phase === 'preparing' ? t('Подготовка…')
+      : status?.phase === 'error' ? t('Повторить подготовку') : ''
+    preparation.title = status?.error ? t('Ошибка подготовки: {error}', { error: status.error }) : preparation.textContent
     node.querySelector<HTMLElement>('.row')!.dataset.number = String(idx + 1)
     node.classList.toggle('folder-member', Boolean(entry.folderId))
     node.classList.toggle('hidden', Boolean(folders.find((f) => f.id === entry.folderId)?.collapsed))
@@ -2035,7 +2065,7 @@ const fontWarned = new Set<string>()
 
 /**
  * Подмена шрифтов в PPTX: на карточке плейлиста значок ⚠ с названиями, а при
- * первом открытии файла с проблемой — баннер. Узнать об этом надо на
+ * завершении фоновой подготовки файла с проблемой — баннер. Узнать об этом надо на
  * подготовке, а не когда слайд с уехавшим текстом уже в зале.
  */
 function updateFontNotice(state: AppState): void {
@@ -2136,8 +2166,13 @@ function applyProjectTransfer(state: AppState): void {
   row.title = status.path ?? text.textContent
 }
 
+const preparationProgress = new PreparationProgress()
 function applyState(state: AppState): void {
   if (isOperator) {
+    const progress = preparationProgress.update(state.preparations)
+    const label = $('preparation-progress')
+    label.classList.toggle('hidden', !progress)
+    label.textContent = progress ? t('Готово {ready} из {total}', progress) : ''
     const outputButton = $<HTMLButtonElement>('audience-output-toggle')
     const outputOn = state.layout !== 'solo' && state.audienceOutputEnabled
     outputButton.textContent = outputOn ? t('Зал вкл') : t('Зал выкл')
@@ -3025,6 +3060,9 @@ function setupKeyboard(): void {
   window.addEventListener('click', () => {
     const el = document.activeElement
     if (!(el instanceof HTMLElement) || el === document.body) return
+    // Native selects and editable fields must keep focus inside player stages too.
+    // Moving focus on the opening click immediately dismisses the select popup.
+    if (isTypingTarget(el)) return
     const player = el.closest<HTMLElement>('[data-frame-player]')
     if (player) {
       // Controls/timeline must not keep the button focused (Space would press it
@@ -3032,7 +3070,7 @@ function setupKeyboard(): void {
       if (el !== player) player.focus({ preventScroll: true })
       return
     }
-    if (!isTypingTarget(el) && !el.closest('.modal')) el.blur()
+    if (!el.closest('.modal')) el.blur()
   })
 
   // Frame stepping owns Left/Right only while a player surface has focus. The
@@ -3641,6 +3679,9 @@ function setupOperatorControls(): void {
   })
   videoTakeModeSelect!.addEventListener('change', () => {
     window.api.preview.setVideoTakeMode(videoTakeModeSelect!.value as VideoTakeMode)
+  })
+  previewSourceMuteBtn!.addEventListener('click', () => {
+    void window.api.preview.toggleSourceMuted(frameStepIdentity('preview'))
   })
   previewPrevBtn!.addEventListener('click', () => window.api.preview.prev())
   previewNextBtn!.addEventListener('click', () => window.api.preview.next())

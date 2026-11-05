@@ -233,6 +233,7 @@
             <span id="preview-video-time" class="video-time">00:00 / 00:00</span>
             <button id="preview-loop-btn" class="loop-btn" title="Зациклить этот ролик: доиграв, начинается заново. Настройка сохраняется у записи плейлиста"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button>
           </div>
+          <button id="preview-source-mute" class="source-mute hidden" title="Звук этого источника в эфире вкл/выкл" aria-label="Звук этого источника в эфире вкл/выкл" aria-pressed="false">🔊</button>
           <div class="preview-nav">
             <button id="preview-prev" title="Превью: предыдущий слайд">◀</button>
             <input id="preview-goto-input" class="goto-input" type="number" min="1" placeholder="№" title="Перейти к слайду превью: номер + Enter" />
@@ -331,6 +332,7 @@
         <div class="bottombar-left">
           <button id="stream-btn" class="stream-btn" title="Трансляция: площадки, ключи, качество"><span class="stream-btn-label">STREAM</span><span id="stream-btn-time" class="stream-btn-time"></span></button>
           <button id="omt-btn" class="omt-btn"><span class="omt-btn-label">OMT</span><span id="omt-btn-tally" class="omt-btn-tally"></span></button>
+          <span id="preparation-progress" class="hidden" role="status" aria-live="polite" title="Подготовка презентаций"></span>
 
         </div>
         <div id="program-nav" class="program-nav" role="group" aria-label="Листание эфира">

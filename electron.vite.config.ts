@@ -5,7 +5,8 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/main/index.ts'), 'input-worker': resolve(__dirname, 'src/main/omt/input-worker.ts') },
+        input: { index: resolve(__dirname, 'src/main/index.ts'), 'input-worker': resolve(__dirname, 'src/main/omt/input-worker.ts'),
+          'presentation-preparation-worker': resolve(__dirname, 'src/main/presentation-preparation-worker.ts') },
         // Нативный модуль (FFI к libomt) — не бандлится, грузится из node_modules.
         external: ['koffi'],
       },

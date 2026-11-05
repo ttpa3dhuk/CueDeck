@@ -2,9 +2,8 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { deflateRawSync, inflateRawSync } from 'node:zlib'
 import { join } from 'node:path'
-import { localPptxCacheDir, pptxReadCacheDir, PPTX_MANIFEST_VERSION } from './project-cache.js'
+import { PPTX_MANIFEST_VERSION } from '../shared/presentation-preparation.js'
 import type { SlideMedia } from '../shared/types.js'
-import { cachedPdfPathFor } from './pptx-converter.js'
 import { requestedFonts } from './pptx-fonts.js'
 
 /**
@@ -75,15 +74,63 @@ export interface PreparedPptxMedia {
   temporary: boolean
 }
 
-const cacheDir = localPptxCacheDir
+/**
+ * Куда писать артефакты и откуда читать manifest. В main это локальный кэш
+ * (с учётом project-cache), в utilityProcess — приватный stage текущего job.
+ * Модуль не знает про Electron: пути передаются снаружи.
+ */
+export interface PptxMediaRoots {
+  /** Пересобранная копия и извлечённые ролики нового разбора. */
+  writeDir: string
+  /** Где искать manifest/media (может быть project-cache или versioned-root). */
+  readDir(sha1: string): string
+  /** Готовый PDF для этого sha1, если он уже есть. */
+  pdfPath(sha1: string): string
+}
+
+type PptxMediaRootsResolver = () => PptxMediaRoots
+let configuredRoots: PptxMediaRootsResolver | null = null
+let fallbackRoots: PptxMediaRoots | null = null
+
+/**
+ * Main регистрирует резолвер один раз (project-cache). Worker передаёт roots
+ * аргументом и сюда не попадает; импорт модуля сам по себе Electron не тянет.
+ */
+export function configurePptxMediaRoots(resolver: PptxMediaRootsResolver): void {
+  configuredRoots = resolver
+}
+
+function currentRoots(): PptxMediaRoots | null {
+  return configuredRoots ? configuredRoots() : fallbackRoots
+}
+
+/** Ленивый резолвер для main/старых тестов: динамический импорт, не статический. */
+async function resolveRoots(roots?: PptxMediaRoots): Promise<PptxMediaRoots> {
+  if (roots) return roots
+  const ready = currentRoots()
+  if (ready) return ready
+  const pc = await import('./project-cache.js') as typeof import('./project-cache.js')
+  const pdfPath: (sha1: string) => string = (sha1) => {
+    const root = pc.pptxReadCacheDir(sha1)
+    return pc.pdfCachePath(root, sha1) ?? join(root, `${sha1}.pdf`)
+  }
+  fallbackRoots = {
+    writeDir: pc.localPptxCacheDir(),
+    readDir: (sha1) => pc.pptxReadCacheDir(sha1),
+    pdfPath,
+  }
+  return fallbackRoots
+}
 
 /** Папка с извлечёнными роликами данного PPTX (раздаётся через cuedeck-media://). */
 export function mediaDirFor(sha1: string): string {
-  return join(pptxReadCacheDir(sha1), `${sha1}.media`)
+  const roots = currentRoots()
+  if (!roots) throw new Error('pptx-media: roots are not configured')
+  return join(roots.readDir(sha1), `${sha1}.media`)
 }
 
-function manifestPathFor(sha1: string): string {
-  return join(pptxReadCacheDir(sha1), `${sha1}.media.json`)
+function manifestPathFor(sha1: string, roots: PptxMediaRoots): string {
+  return join(roots.readDir(sha1), `${sha1}.media.json`)
 }
 
 function extOf(name: string): string {
@@ -914,9 +961,10 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
  */
 async function readManifest(
   sha1: string,
+  roots: PptxMediaRoots,
 ): Promise<{ current: MediaManifest | null; pdfValid: boolean }> {
   try {
-    const raw = await readFile(manifestPathFor(sha1), 'utf8')
+    const raw = await readFile(manifestPathFor(sha1, roots), 'utf8')
     const parsed = JSON.parse(raw) as MediaManifest
     if (!Array.isArray(parsed.slideMedia)) return { current: null, pdfValid: false }
     const current =
@@ -933,9 +981,9 @@ async function readManifest(
 }
 
 /** Прогнать трансформацию и положить пересобранную копию в кэш; вернуть её путь. */
-async function writeRebuilt(sha1: string, zip: Buffer): Promise<string> {
-  const out = join(cacheDir(), `${sha1}.rebuilt.pptx`)
-  await mkdir(cacheDir(), { recursive: true })
+async function writeRebuilt(sha1: string, zip: Buffer, roots: PptxMediaRoots): Promise<string> {
+  const out = join(roots.writeDir, `${sha1}.rebuilt.pptx`)
+  await mkdir(roots.writeDir, { recursive: true })
   await writeFile(out, zip)
   return out
 }
@@ -946,7 +994,11 @@ async function writeRebuilt(sha1: string, zip: Buffer): Promise<string> {
  * развёрнутыми шаг-страницами анимаций). Любая ошибка разбора → деградация к
  * старому поведению (конвертируем оригинал, без оверлеев и шагов).
  */
-export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<PreparedPptxMedia> {
+export async function preparePptxMedia(
+  pptxPath: string,
+  sha1: string,
+  rootsOverride?: PptxMediaRoots,
+): Promise<PreparedPptxMedia> {
   const original: PreparedPptxMedia = {
     slideMedia: [],
     pageNotes: {},
@@ -957,8 +1009,9 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
   // Парсим только настоящие .pptx: ppt — OLE-бинарь, odp/key — другой XML.
   if (extOf(pptxPath) !== 'pptx') return original
 
+  const roots = await resolveRoots(rootsOverride)
   try {
-    const { current: cached, pdfValid } = await readManifest(sha1)
+    const { current: cached, pdfValid } = await readManifest(sha1, roots)
     if (cached) {
       const fromCache = {
         ...original,
@@ -966,7 +1019,7 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
         pageNotes: cached.pageNotes,
         fonts: cached.fonts,
       }
-      if (!cached.rebuilt || existsSync(cachedPdfPathFor(sha1))) return fromCache
+      if (!cached.rebuilt || existsSync(roots.pdfPath(sha1))) return fromCache
       // PDF из кэша пропал — пересобираем копию заново.
       const data = await readFile(pptxPath)
       const t = transformPptx(data, parseZip(data))
@@ -975,7 +1028,7 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
         slideMedia: t.slideMedia,
         pageNotes: t.pageNotes,
         fonts: t.fonts,
-        convertSource: await writeRebuilt(sha1, t.zip),
+        convertSource: await writeRebuilt(sha1, t.zip, roots),
         temporary: true,
       }
     }
@@ -986,7 +1039,7 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
 
     // Извлечь ролики (для оверлеев), даже если пересборка не нужна.
     if (t.videos.length > 0) {
-      const dir = join(cacheDir(), `${sha1}.media`)
+      const dir = join(roots.writeDir, `${sha1}.media`)
       await mkdir(dir, { recursive: true })
       const byName = new Map(entries.map((e) => [e.name, e]))
       for (const v of t.videos) {
@@ -995,7 +1048,7 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
       }
     }
 
-    await mkdir(cacheDir(), { recursive: true })
+    await mkdir(roots.writeDir, { recursive: true })
     const manifest: MediaManifest = {
       version: MANIFEST_VERSION,
       rebuilt: t.zip !== null,
@@ -1003,16 +1056,16 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
       pageNotes: t.pageNotes,
       fonts: t.fonts,
     }
-    await writeFile(join(cacheDir(), `${sha1}.media.json`), JSON.stringify(manifest))
+    await writeFile(join(roots.writeDir, `${sha1}.media.json`), JSON.stringify(manifest))
 
     const parsed = { ...original, slideMedia: t.slideMedia, pageNotes: t.pageNotes, fonts: t.fonts }
     if (!t.zip) return parsed
     // Манифест прошлой версии: PDF собран от такой же пересборки — годен.
-    if (pdfValid && existsSync(cachedPdfPathFor(sha1))) return parsed
+    if (pdfValid && existsSync(roots.pdfPath(sha1))) return parsed
 
     // PDF в кэше сделан до пересборки (без шагов, с видео внутри) — пересоздать.
-    await rm(cachedPdfPathFor(sha1), { force: true }).catch(() => undefined)
-    return { ...parsed, convertSource: await writeRebuilt(sha1, t.zip), temporary: true }
+    await rm(roots.pdfPath(sha1), { force: true }).catch(() => undefined)
+    return { ...parsed, convertSource: await writeRebuilt(sha1, t.zip, roots), temporary: true }
   } catch (err) {
     console.warn('[pptx-media] разбор не удался, конвертирую оригинал:', (err as Error).message)
     return original
