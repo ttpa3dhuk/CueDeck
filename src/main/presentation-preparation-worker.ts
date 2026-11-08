@@ -160,6 +160,7 @@ function resultOf(value: {
   sha1: string
   totalSlides: number
   slideMedia: PreparationWorkerResult['slideMedia']
+  slideTransitions?: Record<number, number>
   pageNotes: Record<number, string>
   fonts: string[]
 }): PreparationWorkerResult {
@@ -167,6 +168,7 @@ function resultOf(value: {
     sha1: value.sha1,
     totalSlides: value.totalSlides,
     slideMedia: value.slideMedia,
+    slideTransitions: value.slideTransitions ?? {},
     pageNotes: value.pageNotes,
     fonts: value.fonts,
   }

@@ -29,6 +29,11 @@ pptx-cache/
 *.wav
 *.srt
 
+# Synthetic CueDeck demo, generated from scripts/demo-pptx (no user content).
+!demos/powerpoint/CueDeck-demo.pptx
+!demos/powerpoint/media/clip-a.mp4
+!demos/powerpoint/media/clip-b.mp4
+
 # OS / IDE / temp
 .idea/
 .vscode/

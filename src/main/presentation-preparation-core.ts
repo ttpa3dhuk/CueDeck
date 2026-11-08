@@ -119,6 +119,7 @@ function rootsFor(artifactsDir: string): PptxMediaRoots {
 export async function validateArtifacts(artifactsDir: string, sha1: string): Promise<{
   hasManifest: boolean
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
   pageNotes: Record<number, string>
   fonts: string[]
 }> {
@@ -133,6 +134,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
     version?: unknown
     rebuilt?: unknown
     slideMedia?: unknown
+    slideTransitions?: Record<number, number>
     pageNotes?: unknown
     fonts?: unknown
   }
@@ -146,7 +148,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
       !Array.isArray(manifest.fonts) || !manifest.fonts.every((font) => typeof font === 'string') ||
       !manifest.pageNotes || typeof manifest.pageNotes !== 'object' || Array.isArray(manifest.pageNotes) ||
       !Object.values(manifest.pageNotes).every((note) => typeof note === 'string')) {
-    throw new PreparationFailure('invalid_cache', 'Manifest version is not 7', 'validate') // i18n-ok: worker/main error
+    throw new PreparationFailure('invalid_cache', 'Unsupported manifest version', 'validate') // i18n-ok: worker/main error
   }
   const mediaDir = join(artifactsDir, `${sha1}.media`)
   if (manifest.slideMedia.length && !(await stat(mediaDir).catch(() => null))?.isDirectory()) {
@@ -165,6 +167,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
   return {
     hasManifest: true,
     slideMedia: manifest.slideMedia as SlideMedia[],
+    slideTransitions: manifest.slideTransitions ?? {},
     pageNotes: manifest.pageNotes as Record<number, string>,
     fonts: manifest.fonts as string[],
   }
@@ -282,6 +285,7 @@ export async function prepareStagedArtifacts(options: PrepareArtifactsOptions): 
     sha1,
     totalSlides,
     slideMedia: validated.slideMedia,
+    slideTransitions: validated.slideTransitions ?? {},
     pageNotes: validated.pageNotes,
     fonts,
     artifactsDir,
@@ -313,6 +317,7 @@ export async function inspectCachedArtifacts(options: InspectCacheOptions): Prom
     sha1,
     totalSlides: countPdfPages(pdf),
     slideMedia: validated.slideMedia,
+    slideTransitions: validated.slideTransitions ?? {},
     pageNotes: validated.pageNotes,
     fonts: substitutedFonts(validated.fonts, pdf),
     artifactsDir: cacheRoot,

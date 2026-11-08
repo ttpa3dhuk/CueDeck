@@ -15,6 +15,19 @@ const entry = (id: string, path: string, kind: PlaylistEntry['kind'] = 'pptx'): 
 })
 
 describe('preparation UI state', () => {
+  it('never shows queued/preparing while a cached result is being read', async () => {
+    const store = new StateStore()
+    const patches: unknown[] = []
+    const patch = store.patch.bind(store)
+    vi.spyOn(store, 'patch').mockImplementation(value => { patches.push(value.preparations); patch(value) })
+    const pending = deferred<string>()
+    const tracker = new PreparationUiState(store, () => pending.promise, vi.fn())
+    const result = tracker.prepare('/cached.pptx')
+    expect(store.get().preparations['/cached.pptx']).toBeUndefined()
+    pending.resolve('from disk')
+    await result
+    expect(patches).toEqual([{ '/cached.pptx': { phase: 'ready' } }])
+  })
   it('reports background font metadata before ready without loading either deck', async () => {
     const store = new StateStore()
     const before = store.get()
@@ -25,6 +38,7 @@ describe('preparation UI state', () => {
     })
     const tracker = new PreparationUiState(store, () => pending.promise, vi.fn(), accepted)
     tracker.background([entry('a', '/a.pptx')], null)
+    tracker.phase('/a.pptx', { phase: 'queued' })
     pending.resolve({ fonts: ['Missing Test Font'] })
     await pending.promise; await Promise.resolve()
     expect(accepted).toHaveBeenCalledOnce()
@@ -88,6 +102,8 @@ describe('preparation UI state', () => {
     const tracker = new PreparationUiState(store, prepare, vi.fn())
     tracker.background([entry('a', '/a.pptx'), entry('duplicate', '/a.pptx'), entry('b', '/b.pdf', 'pdf')], '/show.pdpres')
     expect(prepare).toHaveBeenCalledExactlyOnceWith('/a.pptx', { priority: 'background', cacheProjectPath: '/show.pdpres' })
+    expect(store.get().preparations['/a.pptx']).toBeUndefined()
+    tracker.phase('/a.pptx', { phase: 'queued' })
     expect(store.get().preparations['/a.pptx']).toEqual({ phase: 'queued' })
     tracker.phase('/a.pptx', { phase: 'preparing' })
     expect(store.get().preparations['/a.pptx'].phase).toBe('preparing')

@@ -60,7 +60,7 @@ export function initSessionLifecycle(save: () => Promise<void>): void {
   store.patch({ startup: getStartupSettings(), recoveryStartup: crashes >= 2 })
   store.onChange((state, patch) => {
     if (suspended) return
-    if (!['playlist', 'playlistFolders', 'pdfPath', 'currentPlaylistId', 'currentSlide', 'preview', 'video', 'timer', 'audienceTimer', 'keyVisualPath', 'projectPath'].some(key => key in patch)) return
+    if (!['playlist', 'playlistFolders', 'pdfPath', 'currentPlaylistId', 'currentSlide', 'preview', 'video', 'timer', 'audienceTimer', 'keyVisualPath', 'projectPath', 'programOverlay'].some(key => key in patch)) return
     // Empty startup/settings updates must never replace the last real session.
     if (['playlist', 'playlistFolders', 'pdfPath', 'preview', 'keyVisualPath', 'projectPath'].some(key => key in patch) &&
       (state.playlist.length || state.playlistFolders.length || state.pdfPath || state.preview.path || state.keyVisualPath || state.projectPath)) armed = true

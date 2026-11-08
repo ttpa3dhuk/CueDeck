@@ -1,4 +1,5 @@
 import { rejectAudioOnlyVideo } from '../shared/video-content'
+import { SlideGifs } from '../shared/slide-gifs'
 import { configureProgramMirror, loadProgramVideo, releaseProgramVideo, programVideoCanvas, programVideoReady } from '../shared/program-mirror'
 import { setupTestScreen } from '../shared/test-screen-controller'
 import { ProgramTimerAudio } from '../shared/program-timer-audio'
@@ -34,6 +35,7 @@ import type { AppState } from '../../preload/api'
 document.title = WINDOW_TITLES.audience
 
 const canvas = document.getElementById('slide-canvas') as HTMLCanvasElement
+const slideGifs = new SlideGifs(canvas, 'program')
 const slideImage = document.getElementById('slide-image') as HTMLImageElement
 let slideVideo = document.getElementById('slide-video') as HTMLVideoElement
 const liveVideo = document.getElementById('live-video') as HTMLVideoElement
@@ -44,7 +46,7 @@ const kvImage = document.getElementById('keyvisual') as HTMLImageElement
 const kvVideo = document.getElementById('keyvisual-video') as HTMLVideoElement
 const slideImageUnder = document.getElementById('slide-image-under') as HTMLImageElement
 
-const takeFade = new TakeFade(document.body, () => [slideImageUnder, canvas, slideImage, slideVideo, programVideoCanvas(slideVideo), liveVideo, mediaOverlay, programVideoCanvas(mediaOverlay)], retainAudienceVideo)
+const takeFade = new TakeFade(document.body, () => [slideImageUnder, canvas, slideImage, slideVideo, programVideoCanvas(slideVideo), liveVideo, mediaOverlay, programVideoCanvas(mediaOverlay), ...slideGifs.elements()], retainAudienceVideo)
 
 function retainAudienceVideo(video: HTMLVideoElement): HTMLVideoElement | null {
   if (video !== slideVideo && video !== mediaOverlay) return null
@@ -92,6 +94,7 @@ function programFrameReady(): boolean {
   if (s.fileKind === 'live') return liveVideo.readyState >= 2
   if (s.fileKind === 'image') return slideImage.complete && slideImage.naturalWidth > 0
   if (!docLoaded || slidePaint.pending || lastRenderedSlide !== s.currentSlide) return false
+  if (!slideGifs.ready()) return false
   const media = slideMediaAt(s.fileKind, s.slideMedia, s.currentSlide)
   if (!media || !s.pdfSha1) return true
   const expected = slideVideoSrc('program', media.file, s.pdfSha1)
@@ -213,6 +216,8 @@ function unloadMediaOverlay(): void {
 }
 
 function updateMediaOverlay(state: AppState): void {
+  slideGifs.update(state.fileKind, state.slideMedia, state.currentSlide, state.pdfSha1,
+    docLoaded && !slidePaint.pending && lastRenderedSlide === state.currentSlide)
   if (state.fileKind === 'pptx' && (!docLoaded || slidePaint.pending || lastRenderedSlide !== state.currentSlide)) {
     mediaOverlay.muted = true
     mediaOverlay.pause()

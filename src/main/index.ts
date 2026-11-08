@@ -70,7 +70,6 @@ import {
   getTimerTickEnabled,
   getTimerGongEnabled,
   getTimerLoop,
-  getPlaylistDoubleClickTake,
   getClickerGlobal,
   getClickerGlobalArrows,
   getSpeakerMsgPresets,
@@ -585,7 +584,6 @@ app.whenReady().then(async () => {
     speakerMsgPresets: getSpeakerMsgPresets(),
     timerPresets: getTimerPresets(),
     timerAdjustments: getTimerAdjustments(),
-    playlistDoubleClickTake: getPlaylistDoubleClickTake(),
     outputMonitorsEnabled: getOutputMonitorsEnabled(),
     uiTheme: getUiTheme(),
     // Re-register the global clicker if it was on; reflect actual success

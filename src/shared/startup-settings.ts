@@ -12,6 +12,7 @@ export function startupSettings(raw: unknown): StartupSettings {
     autosaveMinutes: v.autosaveMinutes === 15 || v.autosaveMinutes === 30 || v.autosaveMinutes === 60 ? v.autosaveMinutes : 0 }
 }
 export interface SessionCheckpoint {
+  programOverlay?: AppState['programOverlay']
   playlist: AppState['playlist']
   playlistFolders: AppState['playlistFolders']
   keyVisualPath: string | null
@@ -32,6 +33,7 @@ function pausedVideo(video: VideoState, now: number): VideoState {
 export function sessionCheckpoint(state: AppState, now = Date.now()): SessionCheckpoint {
   return {
     playlist: state.playlist, playlistFolders: state.playlistFolders,
+    ...(state.programOverlay ? { programOverlay: state.programOverlay } : {}),
     keyVisualPath: state.keyVisualPath, projectPath: state.projectPath,
     program: { path: state.pdfPath, playlistId: state.currentPlaylistId, slide: state.currentSlide, video: pausedVideo(state.video, now), sourceMuted: state.sourceMuted === true },
     preview: { path: state.preview.path, playlistId: state.preview.playlistId, slide: state.preview.currentSlide, video: pausedVideo(state.preview.video, now), sourceMuted: state.preview.sourceMuted === true },

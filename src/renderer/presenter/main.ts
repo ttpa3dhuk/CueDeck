@@ -1,4 +1,5 @@
 import { rejectAudioOnlyVideo } from '../shared/video-content'
+import { SlideGifs } from '../shared/slide-gifs'
 import { configureProgramMirror, loadProgramVideo, releaseProgramVideo, programVideoCanvas, programVideoReady, programClockOwner } from '../shared/program-mirror'
 import { setupTestScreen } from '../shared/test-screen-controller'
 import { testScreenVisible } from '../../shared/test-screen'
@@ -159,6 +160,7 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
   kvPreview.style.backgroundImage = `url(${kvBlobUrl})`
 }
 const currentCanvas = $<HTMLCanvasElement>('current-canvas')
+const slideGifs = new SlideGifs(currentCanvas, 'program')
 const currentImage = $<HTMLImageElement>('current-image')
 let currentVideo = $<HTMLVideoElement>('current-video')
 const currentLive = $<HTMLVideoElement>('current-live')
@@ -203,6 +205,8 @@ const timecodePending: Record<VideoDeck, { seq: number; identity: FrameStepIdent
 const timecodeKey: Record<VideoDeck, string> = { program: '', preview: '' }
 const draggingScrub: Record<VideoDeck, boolean> = { program: false, preview: false }
 const nextCanvas = $<HTMLCanvasElement>('next-canvas')
+const nextGifs = new SlideGifs(nextCanvas, 'program')
+let nextGifKey = ''
 const nextEmpty = $('next-empty')
 const notesInput = $<HTMLTextAreaElement>('notes-input')
 const notesReadonly = $('notes-readonly')
@@ -222,6 +226,7 @@ let lastSinkId: string | null | undefined = undefined
 // ── Preview deck (operator only) ───────────────────────────────────────────
 const isOperator = role === 'operator'
 const previewCanvas = isOperator ? $<HTMLCanvasElement>('preview-canvas') : null
+const previewGifs = previewCanvas ? new SlideGifs(previewCanvas, 'preview') : null
 const previewImage = isOperator ? $<HTMLImageElement>('preview-image') : null
 const previewVideo = isOperator ? $<HTMLVideoElement>('preview-video') : null
 const previewLive = isOperator ? $<HTMLVideoElement>('preview-live') : null
@@ -311,6 +316,8 @@ function unloadMediaOverlay(): void {
 }
 
 function updateMediaOverlay(state: AppState): void {
+  slideGifs.update(state.fileKind, state.slideMedia, state.currentSlide, state.pdfSha1,
+    docLoaded && !slidePaint.pending && lastRenderedSlide === state.currentSlide)
   if (state.fileKind === 'pptx' && (!docLoaded || slidePaint.pending || lastRenderedSlide !== state.currentSlide)) {
     mediaOverlay.muted = true
     mediaOverlay.pause()
@@ -674,8 +681,13 @@ async function renderCurrent(): Promise<void> {
   const { width: nextWidth, height: nextHeight } = paddingBox(nextCanvas.parentElement!)
   if (slide + 1 <= state.totalSlides) {
     void renderPageTo(slide + 1, nextCanvas, nextWidth, nextHeight)
+      .then(() => {
+        if (getState().pdfPath === path && getState().currentSlide === slide)
+          nextGifs.update(state.fileKind, state.slideMedia, slide + 1, state.pdfSha1, true)
+      })
       .then(() => prerender(slide + 2, currentWidth)).catch(() => undefined)
   } else {
+    nextGifs.clear()
     clearCanvas(nextCanvas)
   }
 }
@@ -1004,8 +1016,15 @@ async function renderPreview(): Promise<void> {
   if (!previewDocLoaded) return
   if (p.currentSlide === previewLastRenderedSlide) return
   previewLastRenderedSlide = p.currentSlide
+  previewCanvas.dataset.gifPage = ''
+  previewGifs?.update(p.kind, p.slideMedia, p.currentSlide, p.sha1, false)
   const width = previewCanvas.parentElement!.clientWidth
   await previewLoader.renderPageTo(p.currentSlide, previewCanvas, width)
+  const actual = getState().preview
+  if (actual.path === p.path && actual.currentSlide === p.currentSlide) {
+    previewCanvas.dataset.gifPage = `${p.sha1}:${p.currentSlide}`
+    previewGifs?.update(p.kind, p.slideMedia, p.currentSlide, p.sha1, true)
+  }
   if (p.currentSlide + 1 <= p.totalSlides) {
     previewLoader.prerender(p.currentSlide + 1, width).catch(() => undefined)
   }
@@ -1076,6 +1095,8 @@ async function handlePreviewChange(state: AppState): Promise<void> {
   if (!isOperator || !previewVideo) return
   updatePreviewUI(state)
   const p = state.preview
+  previewGifs?.update(p.kind, p.slideMedia, p.currentSlide, p.sha1,
+    previewDocLoaded && p.path === prevPreviewPath && previewCanvas?.dataset.gifPage === `${p.sha1}:${p.currentSlide}`)
   if (p.path !== prevPreviewPath) {
     prevPreviewPath = p.path
     previewLastRenderedSlide = -1
@@ -1332,29 +1353,71 @@ function playlistContext(event: MouseEvent, entry: PlaylistEntry, node: HTMLLIEl
   const menu = document.createElement('div'); menu.id = 'playlist-context'; menu.className = 'playlist-context'
   const close = (): void => { menu.remove(); document.removeEventListener('click', close) }
   menu.addEventListener('playlist-context-close', close)
-  const action = (label: string, run: () => void): void => {
+  const action = (label: string, run: () => void, target = menu): void => {
     const button = document.createElement('button'); button.textContent = label
-    button.onclick = () => { close(); run() }; menu.append(button)
+    button.setAttribute('role', 'menuitem')
+    button.onclick = () => { close(); run() }; target.append(button)
   }
+  menu.setAttribute('role', 'menu')
+  const settingsButton = document.createElement('button')
+  settingsButton.textContent = `${t('Настройки')} ›`
+  settingsButton.setAttribute('role', 'menuitem')
+  settingsButton.setAttribute('aria-haspopup', 'menu')
+  settingsButton.setAttribute('aria-expanded', 'false')
+  menu.append(settingsButton)
+  const settings = document.createElement('div')
+  settings.className = 'playlist-context playlist-settings-submenu'
+  settings.setAttribute('role', 'menu')
+  settings.setAttribute('aria-label', t('Настройки'))
+  settings.hidden = true
+  menu.append(settings)
+  const toggleSettings = (open: boolean): void => {
+    settings.hidden = !open
+    settingsButton.setAttribute('aria-expanded', String(open))
+    if (open) {
+      settings.style.left = '100%'
+      settings.style.top = '0px'
+      const rect = settings.getBoundingClientRect()
+      if (rect.right > window.innerWidth - 8) settings.style.left = `${-settings.offsetWidth}px`
+      if (rect.bottom > window.innerHeight - 8) settings.style.top = `${window.innerHeight - 8 - rect.bottom}px`
+    }
+  }
+  settingsButton.onclick = (click) => {
+    click.stopPropagation()
+    toggleSettings(settings.hidden)
+    if (!settings.hidden) settings.querySelector<HTMLButtonElement>('button')?.focus()
+  }
+  settingsButton.addEventListener('mouseenter', () => toggleSettings(true))
+  action(t('Таймер материала…'), () => editSelectedDuration(selectedEntries()), settings)
+  if (entry.kind === 'pdf' || entry.kind === 'pptx') action('FADE', () => editSlideFade(entry), settings)
+  if (entry.kind === 'pptx') action(t('Шрифты'), () => {
+    const badge = node.querySelector<HTMLElement>('.kind-badge')
+    if (badge) showFontPopup(badge, entry.filePath)
+  }, settings)
   if (withRename) action(t('Переименовать'), () => startRename(node, getState().playlist.find((item) => item.id === entry.id) ?? entry))
   action(t('Дублировать'), () => { void window.api.playlist.duplicate(entry.id) })
-  action(t('Таймер материала…'), () => editSelectedDuration(selectedEntries()))
-  if (entry.kind === 'pdf' || entry.kind === 'pptx') action('FADE', () => editSlideFade(entry))
   action(t('Группировать'), () => editPlaylistFolder(undefined, selectedEntries()))
   if (entry.kind !== 'live' && entry.kind !== 'list') {
     action(revealSourceLabel(), () => { void revealSource(entry.id) })
   }
-  if (entry.kind === 'pptx') action(t('Шрифты: добавить, пересобрать'), () => {
-    const badge = node.querySelector<HTMLElement>('.kind-badge')
-    if (badge) showFontPopup(badge, entry.filePath)
-  })
+  if (entry.kind === 'pptx') action(t('Пересобрать'), () => { void rebuildPresentation(entry.filePath) })
+  for (const button of menu.querySelectorAll<HTMLButtonElement>(':scope > button')) {
+    if (button !== settingsButton) button.addEventListener('mouseenter', () => toggleSettings(false))
+  }
   document.body.append(menu)
   menu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8))}px`
   menu.style.top = `${Math.max(8, Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8))}px`
   menu.addEventListener('keydown', (keyboard) => {
     keyboard.stopPropagation()
+    if (keyboard.key === 'ArrowRight' && document.activeElement === settingsButton) {
+      keyboard.preventDefault(); toggleSettings(true); settings.querySelector<HTMLButtonElement>('button')?.focus()
+    }
+    if ((keyboard.key === 'ArrowLeft' || keyboard.key === 'Escape') && !settings.hidden) {
+      keyboard.preventDefault(); toggleSettings(false); settingsButton.focus(); return
+    }
     if (keyboard.key === 'Escape') { close(); node.focus() }
-    const buttons = [...menu.querySelectorAll<HTMLButtonElement>('button')]
+    const scope = settings.contains(document.activeElement) ? settings : menu
+    const buttons = [...scope.querySelectorAll<HTMLButtonElement>(':scope > button')]
     if (keyboard.key === 'ArrowDown' || keyboard.key === 'ArrowUp') {
       keyboard.preventDefault()
       const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
@@ -1550,7 +1613,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
 
   li.append(row1, speakerInput, durRow, missingRow)
 
-  // Single click stages preview; double-click TAKE is an explicit opt-in.
+  // Both single and double clicks load preview; TAKE remains a separate action.
   li.addEventListener('contextmenu', (event) => playlistContext(event, fresh(), li, false))
   li.addEventListener('click', (event) => {
     const modifier = window.api.platform === 'darwin' ? event.metaKey : event.ctrlKey
@@ -1583,7 +1646,7 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
       window.clearTimeout(pendingPlaylistClickTimer)
       pendingPlaylistClickTimer = null
     }
-    activateEntry(fresh(), getState().playlistDoubleClickTake === true)
+    activateEntry(fresh(), false)
   })
 
   li.addEventListener('dragstart', (e) => {
@@ -1931,6 +1994,19 @@ function fontListText(fonts: string[]): string {
  * Окошко у значка ⚠: какие шрифты подменены и кнопка «Пересобрать» — после
  * установки шрифтов PDF из кэша устарел, его надо сконвертировать заново.
  */
+async function rebuildPresentation(path: string): Promise<void> {
+  showBanner(t('Пересобираю…'), 60_000)
+  try {
+    const res = await window.api.pptx.rebuild(path)
+    if (!res.ok) showBanner(t('Ошибка: {error}', { error: res.error ?? '' }), 8000)
+    else if (res.remaining && res.remaining.length > 0)
+      showBanner(t('Шрифты всё ещё не найдены: {fonts}', { fonts: fontListText(res.remaining) }), 8000)
+    else showBanner(t('Презентация пересобрана. Выбери материал заново, чтобы увидеть изменения'), 8000)
+  } catch (error) {
+    showBanner(t('Ошибка: {error}', { error: String(error) }), 8000)
+  }
+}
+
 function showFontPopup(anchor: HTMLElement, path: string): void {
   document.getElementById('font-popup')?.remove()
   const fonts = getState().fontIssues[path] ?? []
@@ -2014,12 +2090,8 @@ function showFontPopup(anchor: HTMLElement, path: string): void {
     addBtn.disabled = true
     rebuild.disabled = true
     rebuild.textContent = t('Пересобираю…')
-    const res = await window.api.pptx.rebuild(path)
     dismiss()
-    if (!res.ok) showBanner(t('Ошибка: {error}', { error: res.error ?? '' }), 8000)
-    else if (res.remaining && res.remaining.length > 0)
-      showBanner(t('Шрифты всё ещё не найдены: {fonts}', { fonts: fontListText(res.remaining) }), 8000)
-    else showBanner(t('Готово: шрифты на месте. Выбери спикера заново, чтобы увидеть новый вид'), 8000)
+    await rebuildPresentation(path)
   }
   rebuild.addEventListener('click', () => void runRebuild())
   addBtn.addEventListener('click', async () => {
@@ -2168,6 +2240,8 @@ function applyProjectTransfer(state: AppState): void {
 
 const preparationProgress = new PreparationProgress()
 function applyState(state: AppState): void {
+  const nextKey = `${state.fileKind}:${state.pdfSha1}:${state.currentSlide + 1}`
+  if (nextKey !== nextGifKey) { nextGifKey = nextKey; nextGifs.clear() }
   if (isOperator) {
     const progress = preparationProgress.update(state.preparations)
     const label = $('preparation-progress')
@@ -2267,7 +2341,6 @@ function applyState(state: AppState): void {
     reflectToggle('timer-tick-toggle', state.audienceTimer.tickEnabled)
     reflectToggle('timer-gong-toggle', state.audienceTimer.gongEnabled)
     reflectToggle('timer-loop-toggle', state.audienceTimer.loop)
-    reflectToggle('playlist-double-click-take-toggle', state.playlistDoubleClickTake)
     reflectToggle('clicker-global-toggle', state.clickerGlobal)
     reflectToggle('clicker-arrows-toggle', state.clickerGlobalArrows)
     document.querySelectorAll<HTMLButtonElement>('button.adjust').forEach((btn, i) => {
@@ -2423,7 +2496,7 @@ async function projectSave(saveAs: boolean = false): Promise<void> {
 }
 
 const takeFade = new TakeFade(currentCanvas.parentElement!, () => [
-  ...(currentImageUnder ? [currentImageUnder] : []), currentCanvas, currentImage, currentVideo, programVideoCanvas(currentVideo), currentLive, mediaOverlay, programVideoCanvas(mediaOverlay),
+  ...(currentImageUnder ? [currentImageUnder] : []), currentCanvas, currentImage, currentVideo, programVideoCanvas(currentVideo), currentLive, mediaOverlay, programVideoCanvas(mediaOverlay), ...slideGifs.elements(),
 ], retainPresenterVideo)
 
 function retainPresenterVideo(video: HTMLVideoElement): HTMLVideoElement | null {
@@ -2481,6 +2554,7 @@ function programFrameReady(): boolean {
   if (s.fileKind === 'live') return currentLive.readyState >= 2
   if (s.fileKind === 'image') return currentImage.complete && currentImage.naturalWidth > 0
   if (!docLoaded || slidePaint.pending || lastRenderedSlide !== s.currentSlide) return false
+  if (!slideGifs.ready()) return false
   const media = slideMediaAt(s.fileKind, s.slideMedia, s.currentSlide)
   if (!media || !s.pdfSha1) return true
   const expected = slideVideoSrc('program', media.file, s.pdfSha1)
@@ -2725,12 +2799,6 @@ function showLoModal(): void {
   const cmdEl = document.getElementById('lo-cmd')
   const labelEl = document.getElementById('lo-option-label')
   const block = document.getElementById('lo-command-option')
-  const hint = document.getElementById('lo-install-hint')
-  if (hint) {
-    hint.textContent = window.api.platform === 'darwin'
-      ? t('Homebrew не нужен. На сайте выбери macOS (Apple Silicon) для M1–M4 и новее или macOS (Intel). Открой скачанный DMG и перетащи LibreOffice в «Программы».')
-      : t('Скачай установщик для своей системы и следуй его подсказкам.')
-  }
   const pickHint = modal?.querySelector<HTMLElement>('[data-i18n-html="loPickHint"]')
   if (pickHint && window.api.platform === 'darwin') {
     pickHint.textContent = t('Если LibreOffice уже установлен, выбери LibreOffice.app в папке «Программы» или там, куда ты его перенёс.')
@@ -2817,6 +2885,7 @@ function hideBanner(): void {
 interface HotkeyAction { id: string; label: string; def: string }
 const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'take', label: t('ЭФИР / take (превью → эфир)'), def: 'Tab' },
+  { id: 'mobileClickerToggle', label: t('Мобильный кликер: вкл / выкл'), def: 'KeyC' },
   { id: 'takeAlt', label: t('ЭФИР: вторая клавиша'), def: 'Enter' },
   { id: 'programNext', label: t('Эфир: следующий слайд'), def: 'ArrowRight' },
   { id: 'programPrev', label: t('Эфир: предыдущий слайд'), def: 'ArrowLeft' },
@@ -2909,6 +2978,8 @@ function dispatchHotkey(action: string): void {
     case 'take':
     case 'takeAlt': window.api.preview.take(); break
     // Keyboard/clicker navigation cannot start or seek standalone videos.
+    case 'mobileClickerToggle':
+      void window.api.mobileClicker.status().then(s => window.api.mobileClicker.setEnabled(!s.enabled)).then(renderMobileClicker).catch(e => showBanner(String(e))); break
     case 'programNext': window.api.clicker.next(); break
     case 'programPrev': window.api.clicker.prev(); break
     case 'previewNext': window.api.preview.next(); break
@@ -3284,6 +3355,27 @@ function wireGotoInput(input: HTMLInputElement, goto: (slide: number) => void): 
 }
 
 function setupOperatorControls(): void {
+  $('mobile-clicker-reset').addEventListener('click', () => { void window.api.mobileClicker.resetLink().then(renderMobileClicker).catch(e => showBanner(String(e))) })
+  const refreshClickerIndicator = (): void => {
+    void window.api.mobileClicker.status().then(status => renderMobileClickerIndicator(status.enabled)).catch(() => renderMobileClickerIndicator(false))
+  }
+  refreshClickerIndicator()
+  window.setInterval(refreshClickerIndicator, 1000)
+  const mobileEnabled = $<HTMLInputElement>('mobile-clicker-enabled')
+  mobileEnabled.addEventListener('change', async () => {
+    mobileEnabled.disabled = true
+    try { renderMobileClicker(await window.api.mobileClicker.setEnabled(mobileEnabled.checked)) }
+    catch (error) { showBanner(String(error)) }
+    finally { mobileEnabled.disabled = false }
+  })
+  $<HTMLSelectElement>('mobile-clicker-host').addEventListener('change', async () => {
+    const index = $<HTMLSelectElement>('mobile-clicker-host').selectedIndex
+    const status = await window.api.mobileClicker.status()
+    $<HTMLInputElement>('mobile-clicker-url').value = status.urls[index] ?? ''
+    const qr = await window.api.mobileClicker.qr(index)
+    const image = $<HTMLImageElement>('mobile-clicker-qr')
+    if (qr) image.src = qr; else image.removeAttribute('src')
+  })
   if (role !== 'operator') return
   // Prev/№/Next из футера убраны (Б-5): эфиром рулят кликер и клавиши,
   // точечный переход по номеру остался в навигации превью.
@@ -3427,9 +3519,6 @@ function setupOperatorControls(): void {
 
   // Глобальный кликер: main отвечает, что реально включилось (регистрация
   // PgUp/PgDn может не пройти) — стейт-патч вернёт галку в фактическое положение.
-  $<HTMLInputElement>('playlist-double-click-take-toggle').addEventListener('change', (event) => {
-    void window.api.clicker.setDoubleClickTake((event.target as HTMLInputElement).checked)
-  })
   const clickerGlobalToggle = $<HTMLInputElement>('clicker-global-toggle')
   clickerGlobalToggle.addEventListener('change', async () => {
     const wanted = clickerGlobalToggle.checked
@@ -4701,14 +4790,18 @@ function editSlideFade(entry: PlaylistEntry): void {
   const overlay = document.createElement('div'); overlay.className = 'modal'; overlay.id = 'slide-fade-modal'
   const form = document.createElement('form'); form.className = 'modal-content'
   const heading = document.createElement('h2'); heading.textContent = t('Фейд слайда')
-  const label = document.createElement('label'); label.textContent = t('Плавное листание')
-  const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.id = 'slide-fade-enabled'; enabled.checked = Boolean(entry.slideFadeMs)
-  label.prepend(enabled)
+  const label = document.createElement('label'); label.textContent = t('Переходы слайдов')
+  const mode = document.createElement('select'); mode.id = 'slide-fade-mode'
+  const choices = entry.kind === 'pptx' ? [['file', t('Из презентации')], ['custom', t('Свой FADE')], ['cut', t('Без переходов')]]
+    : [['custom', t('Свой FADE')], ['cut', t('Без переходов')]]
+  for (const [value, title] of choices) { const option = document.createElement('option'); option.value = value; option.textContent = title; mode.append(option) }
+  mode.value = entry.slideFadeMode ?? (entry.slideFadeMs !== undefined ? (entry.slideFadeMs > 0 ? 'custom' : 'cut') : entry.kind === 'pptx' ? 'file' : 'cut')
+  label.append(mode)
   const durationLabel = document.createElement('label'); durationLabel.textContent = t('Длительность, мс')
-  const duration = document.createElement('input'); duration.type = 'number'; duration.id = 'slide-fade-duration'; duration.min = '100'; duration.max = String(FADE_MAX_MS); duration.step = '10'; duration.value = String(entry.slideFadeMs || 300); duration.disabled = !enabled.checked
+  const duration = document.createElement('input'); duration.type = 'number'; duration.id = 'slide-fade-duration'; duration.min = '100'; duration.max = String(FADE_MAX_MS); duration.step = '10'; duration.value = String(entry.slideFadeMs || 300); duration.disabled = mode.value !== 'custom'
   durationLabel.append(duration)
-  enabled.onchange = () => { duration.disabled = !enabled.checked }
-  const hint = document.createElement('p'); hint.className = 'audio-hint'; hint.textContent = t('Настройка этой презентации. Работает при листании в эфире, включая кликер. Сохраняется в проекте.')
+  mode.onchange = () => { duration.disabled = mode.value !== 'custom' }
+  const hint = document.createElement('p'); hint.className = 'audio-hint'; hint.textContent = t('Из PPTX читается обычный Fade. Переходы пока ограничены 400 мс. Свой FADE заменяет переходы файла; «Без переходов» отключает их. Настройка сохраняется в проекте.')
   const actions = document.createElement('div'); actions.className = 'modal-actions'
   const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = t('Отмена'); cancel.onclick = () => overlay.remove()
   const save = document.createElement('button'); save.type = 'submit'; save.className = 'primary'; save.textContent = t('Применить')
@@ -4717,10 +4810,10 @@ function editSlideFade(entry: PlaylistEntry): void {
   form.onsubmit = async event => {
     event.preventDefault(); if (!duration.reportValidity()) return
     save.disabled = true
-    try { await window.api.playlist.update(entry.id, { slideFadeMs: enabled.checked ? Number(duration.value) : 0 }); overlay.remove() }
+    try { await window.api.playlist.update(entry.id, { slideFadeMode: mode.value as 'file' | 'custom' | 'cut', slideFadeMs: Number(duration.value) }); overlay.remove() }
     catch (error) { hint.textContent = String(error); save.disabled = false }
   }
-  enabled.focus()
+  mode.focus()
 }
 
 type SettingsSection = 'materials' | 'profiles' | 'screens' | 'prompter' | 'audience-timer' | 'clicker' | 'audio' | 'hotkeys' | 'ui' | 'lo' | 'remote' | 'omt' | 'midi'
@@ -4730,6 +4823,7 @@ let settingsWindow: ReturnType<typeof setupSettingsWindow> | null = null
 let beginAudienceTimerEdit: (() => void) | undefined
 
 function showSettingsSection(name: SettingsSection): void {
+  if (name === 'clicker') void window.api.mobileClicker.status().then(renderMobileClicker).catch(() => undefined)
   if (name === 'audience-timer' || name === 'prompter') void refreshTimerFonts()
   if (name === 'audience-timer') beginAudienceTimerEdit?.()
   settingsModal.querySelectorAll<HTMLButtonElement>('.settings-nav button').forEach((b) => {
@@ -4748,6 +4842,26 @@ function showSettingsSection(name: SettingsSection): void {
   if (name === 'midi') void renderMidiSection()
   if (name === 'profiles') void renderProfilesSection()
   if (name === 'materials') renderMaterialSettings()
+}
+
+function renderMobileClickerIndicator(enabled: boolean): void {
+  $('program-prev').classList.toggle('mobile-clicker-active', enabled)
+  $('program-next').classList.toggle('mobile-clicker-active', enabled)
+}
+
+function renderMobileClicker(status: import('../../shared/mobile-clicker').MobileClickerStatus): void {
+  renderMobileClickerIndicator(status.enabled)
+  $<HTMLInputElement>('mobile-clicker-enabled').checked = status.enabled
+  $('mobile-clicker-details').classList.toggle('hidden', !status.urls.length)
+  $('mobile-clicker-error').textContent = status.error ? t(status.error) : ''
+  const host = $<HTMLSelectElement>('mobile-clicker-host')
+  host.replaceChildren(...status.urls.map((url, index) => {
+    const option = document.createElement('option'); option.value = String(index); option.textContent = new URL(url).host; return option
+  }))
+  host.classList.toggle('hidden', status.urls.length < 2)
+  $<HTMLInputElement>('mobile-clicker-url').value = status.urls[0] ?? ''
+  const image = $<HTMLImageElement>('mobile-clicker-qr')
+  if (status.qr) image.src = status.qr; else image.removeAttribute('src')
 }
 
 // ── Профили площадки (раздел «Настройки → Профили площадки») ────────────────
@@ -5542,6 +5656,7 @@ function wirePrompterMock(): void {
     void window.api.speakerMessage.setLayout({ ...getState().speakerMsgLayout, ...patch })
   draggable(msgEl, () => true, (x, y) => setMsg({ pos: { x, y } }))
   resizable(msgEl, () => getState().speakerMsgLayout.scale, (v) => setMsg({ scale: v }), 0.3, 3)
+  $('prompter-timer-reset').addEventListener('click', () => { void window.api.timer.resetStyle().catch(error => showBanner(String(error))) })
   $('prompter-msg-reset').addEventListener('click', () => setMsg({ pos: null, scale: 1 }))
 
   // Колёсико: над сообщением — его размер, в остальном макете — таймер.

@@ -73,9 +73,19 @@ const api: PresenterApi = {
   clicker: {
     next: () => ipcRenderer.invoke('clicker:next'),
     prev: () => ipcRenderer.invoke('clicker:prev'),
-    setDoubleClickTake: (value) => ipcRenderer.invoke('clicker:set-double-click-take', value),
     setGlobal: (value) => ipcRenderer.invoke('clicker:set-global', Boolean(value)),
     setGlobalArrows: (value) => ipcRenderer.invoke('clicker:set-global-arrows', Boolean(value)),
+  },
+  mobileClicker: {
+    resetLink: () => ipcRenderer.invoke('mobile-clicker:reset'),
+    status: () => ipcRenderer.invoke('mobile-clicker:status'),
+    qr: (index) => ipcRenderer.invoke('mobile-clicker:qr', index),
+    setEnabled: (enabled) => ipcRenderer.invoke('mobile-clicker:enabled', enabled),
+  },
+  programOverlay: {
+    set: (config) => ipcRenderer.invoke('program-overlay:set', config),
+    chooseImage: () => ipcRenderer.invoke('program-overlay:choose'),
+    read: () => ipcRenderer.invoke('program-overlay:read'),
   },
   preview: {
     toggleSourceMuted: (identity) => ipcRenderer.invoke('preview:toggle-source-muted', identity),
@@ -105,6 +115,7 @@ const api: PresenterApi = {
     setFontSize: (px) => ipcRenderer.invoke('notes:set-font-size', px),
   },
   timer: {
+    resetStyle: () => ipcRenderer.invoke('timer:reset-style'),
     start: () => ipcRenderer.invoke('timer:start'),
     pause: () => ipcRenderer.invoke('timer:pause'),
     reset: () => ipcRenderer.invoke('timer:reset'),

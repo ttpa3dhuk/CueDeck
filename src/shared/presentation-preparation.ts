@@ -6,7 +6,7 @@
 import type { SlideMedia } from './types.js'
 
 /** Версия OOXML-манифеста (pptx-media). Формат уже используется проектами. */
-export const PPTX_MANIFEST_VERSION = 7
+export const PPTX_MANIFEST_VERSION = 9
 
 /** Папка versioned-кэша внутри userData/pptx-cache. */
 export const PREPARED_CACHE_FOLDER = 'prepared'
@@ -54,6 +54,7 @@ export interface PreparedPresentation {
   sha1: string
   totalSlides: number
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
   pageNotes: Record<number, string>
   fonts: string[]
   pdfPath: string
@@ -70,6 +71,7 @@ export interface PreparedCacheMetadata {
   totalSlides: number
   fonts: string[]
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
   pageNotes: Record<number, string>
   /** Для pptx в root есть <sha>.media.json версии 7. */
   hasManifest: boolean
@@ -113,6 +115,7 @@ export interface PreparationWorkerResult {
   sha1: string
   totalSlides: number
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
   pageNotes: Record<number, string>
   fonts: string[]
 }

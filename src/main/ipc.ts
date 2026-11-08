@@ -10,6 +10,11 @@ import { assertSessionIdle, waitForSessionRestore, beginSessionRestore, finishSe
 import { recoveryTakeFrame } from '../shared/recovery-take.js'
 import { togglePreviewSourceMute } from '../shared/source-audio.js'
 import { createClickerNavigation } from './clicker-navigation.js'
+import { mobileClickerStorage } from './mobile-clicker-storage.js'
+import { defaultSpeakerTimerStyle } from '../shared/speaker-timer-style.js'
+import { MobileClicker } from './mobile-clicker.js'
+import { programOverlay } from '../shared/program-overlay.js'
+import { timerView } from '../renderer/shared/timer.js'
 import { audienceTimerConfig, createAudienceTimer } from '../shared/audience-timer.js'
 import { createAudienceTimerCommands } from './audience-timer.js'
 import { getAudienceTimer, setAudienceTimer } from './display-mapping.js'
@@ -33,6 +38,7 @@ import {
 import { frameTimelines } from './frame-timeline.js'
 import { VideoInOutController } from './video-inout.js'
 import { VideoBoundaryScheduler } from './video-boundary.js'
+import { autoVideoIdentity, autoVideoStillTargets, autoVideoTarget } from '../shared/video-auto-advance.js'
 import { registerVideoInOutIpc } from './video-inout-ipc.js'
 import { app, dialog, globalShortcut, ipcMain, screen, shell } from 'electron'
 import { homedir } from 'node:os'
@@ -41,6 +47,7 @@ import { randomUUID } from 'node:crypto'
 import { basename, isAbsolute, join } from 'node:path'
 import type { DisplayMap, Layout } from './layout.js'
 import type {
+  AppState,
   DeckState,
   FileKind,
   ListItem,
@@ -102,7 +109,6 @@ import {
   setTimerLoop,
   getAskLayoutOnStartup,
   setAskLayoutOnStartup,
-  setPlaylistDoubleClickTake,
   setClickerGlobal,
   getClickerGlobalArrows,
   setClickerGlobalArrows,
@@ -202,6 +208,7 @@ interface InspectedFile {
   notes: Record<number, string>
   sha1Mismatch: boolean
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
 }
 
 /**
@@ -264,6 +271,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
   let sha1: string
   let totalSlides = 1
   let slideMedia: SlideMedia[] = []
+  let slideTransitions: Record<number, number> = {}
   let pptxNotes: Record<number, string> = {}
 
   if (kind === 'pdf') {
@@ -279,6 +287,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     sha1 = prepared.sha1
     totalSlides = prepared.totalSlides
     slideMedia = prepared.slideMedia
+    slideTransitions = prepared.slideTransitions ?? {}
     pptxNotes = prepared.pageNotes
     pptxNotesBySha1.set(sha1, pptxNotes)
   } else if (kind === 'video') {
@@ -299,6 +308,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     notes: { ...pptxNotes, ...loaded.notes },
     sha1Mismatch: loaded.sha1Mismatch,
     slideMedia,
+    slideTransitions,
   }
 }
 
@@ -449,7 +459,7 @@ function cancelFrameProbeIfUnused(path: string | null): void {
 
 async function openFile(
   filePath: string,
-  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; startOnTake?: boolean; transition?: TakeTransition; restorePaused?: boolean } = {},
+  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; startOnTake?: boolean; transition?: TakeTransition; restorePaused?: boolean; expectedProgram?: string; autoPlayVideo?: boolean } = {},
 ): Promise<OpenPdfResult> {
   const generation = ++programOpenGeneration
   pendingDeckLoads++
@@ -460,6 +470,8 @@ async function openFile(
   try {
     const info = await inspectFile(filePath)
     if (generation !== programOpenGeneration) return { ok: false, cancelled: true }
+    if (opts.expectedProgram && autoVideoIdentity(store.get()) !== opts.expectedProgram) return { ok: false, cancelled: true }
+    if (opts.expectedProgram && !autoVideoStillTargets(store.get(), opts.playlistId, filePath)) return { ok: false, cancelled: true }
     if (opts.playlistId && !store.get().playlist.some(e => e.id === opts.playlistId)) return { ok: false, cancelled: true }
     const playlistId = opts.playlistId ?? null
     const timerPatch: Partial<import('./state.js').TimerState> = {
@@ -499,13 +511,14 @@ async function openFile(
       currentSlide: 1,
       notes: info.notes,
       slideMedia: info.slideMedia,
+      slideTransitions: info.slideTransitions ?? {},
       currentPlaylistId: playlistId,
       sourceMuted: entry?.sourceMuted === true,
       // Reset the playback clock for every file load; keep audience-mute preference.
       video: {
-        playing: false,
+        playing: info.kind === 'video' && opts.autoPlayVideo === true,
         anchorSec: entryRange?.inSec ?? 0,
-        anchorAt: null,
+        anchorAt: info.kind === 'video' && opts.autoPlayVideo === true ? Date.now() : null,
         durationSec: reusedDuration,
         muted: store.get().video.muted,
         range: entryRange,
@@ -570,6 +583,7 @@ async function loadPreview(
       playlistId,
       sourceMuted: entry?.sourceMuted === true,
       slideMedia: info.slideMedia,
+      slideTransitions: info.slideTransitions ?? {},
       video: {
         playing: false,
         anchorSec: entryRange?.inSec ?? 0,
@@ -623,7 +637,7 @@ async function programNext(): Promise<void> {
   // стартует видео тем же кликером. Следующий «далее» листает дальше. Ролик,
   // который уже играл (позиция > 0 или доигран), клик не перезапускает.
   if (state.fileKind === 'pptx' && !state.video.playing && state.video.anchorSec === 0) {
-    const m = state.slideMedia.find((mm) => mm.slide === currentSlide)
+    const m = state.slideMedia.find((mm) => mm.slide === currentSlide && mm.kind !== 'gif')
     if (m) {
       store.patchVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
       return
@@ -700,6 +714,14 @@ function programSeekBy(deltaSec: number): void {
  * a key; a failed pair is fully released so we never end up half-on.
  */
 const clickerNavigation = createClickerNavigation(() => store.get().fileKind, programNext, programPrev)
+const mobileClicker = new MobileClicker(() => {
+  const state = store.get()
+  return { current: state.currentSlide, total: state.totalSlides,
+    remaining: Math.max(0, state.totalSlides - state.currentSlide),
+    canNavigate: Boolean(state.pdfPath) && (state.fileKind === 'pdf' || state.fileKind === 'pptx'),
+    timer: timerView(state.timer, state.timerMode) }
+}, direction => { log.info('clicker:mobile', direction); return clickerNavigation[direction]() }, undefined, undefined, mobileClickerStorage)
+app.once('will-quit', () => { void mobileClicker.dispose() })
 const clickerShortcuts = createClickerShortcutManager(
   globalShortcut,
   () => Boolean(getOperatorWindow()?.isFocused()),
@@ -715,7 +737,33 @@ function persistPlaylist(): void {
 }
 
 const videoInOut = new VideoInOutController(store, frameTimelines, persistPlaylist)
-const videoBoundary = new VideoBoundaryScheduler(store)
+let autoVideoPending: string | null = null
+const autoVideoAdvance = {
+  eligible: (state: AppState): boolean => autoVideoPending ? autoVideoIdentity(state) === autoVideoPending : Boolean(autoVideoTarget(state)),
+  run: (state: AppState): boolean => {
+    if (autoVideoPending) return autoVideoIdentity(state) === autoVideoPending
+    const target = autoVideoTarget(state)
+    if (!target) return false
+    if ('slide' in target) { changeProgramSlide(target.slide); return true }
+    const entry = state.playlist.find(e => e.id === target.entryId)
+    if (!entry) return false
+    const expectedProgram = autoVideoIdentity(state)
+    autoVideoPending = expectedProgram
+    void openFile(entry.filePath, { playlistId: entry.id, durationMs: entry.durationMs, startOnTake: true,
+      transition: { id: randomUUID(), durationMs: target.fadeMs }, expectedProgram,
+      autoPlayVideo: state.videoTakeMode !== 'hold-first' })
+      .then(result => {
+        if (!result.ok && autoVideoIdentity(store.get()) === expectedProgram)
+          store.patchVideo(endVideo(store.get().video, false))
+      })
+      .finally(() => {
+        if (autoVideoPending === expectedProgram) autoVideoPending = null
+        videoBoundary.sync()
+      })
+    return true
+  },
+}
+const videoBoundary = new VideoBoundaryScheduler(store, autoVideoAdvance)
 videoBoundary.start()
 
 /** Правка таймера в эфире становится длительностью именно этой записи. */
@@ -795,6 +843,7 @@ export async function saveProject(
       playlistFolders: state.playlistFolders,
       keyVisualPath: state.keyVisualPath,
       audienceTimer: audienceTimerConfig(state.audienceTimer),
+      programOverlay: state.programOverlay,
     })
     store.patch({ projectPath: target })
     setProjectPath(target)
@@ -817,6 +866,7 @@ async function restoreLastSession(backupId?: string): Promise<OpenPdfResult & { 
     const id = saved ? saved.program.playlistId : getCurrentPlaylistId()
     const path = saved ? saved.program.path : getLastPdfPath()
     store.patch({ playlist: normalizeFolderPlaylist(playlist, folders), playlistFolders: folders,
+      programOverlay: programOverlay(saved?.programOverlay),
       currentPlaylistId: id, keyVisualPath: saved ? saved.keyVisualPath : getKeyVisualPath(),
       projectPath: saved ? saved.projectPath : getProjectPath(), audienceTimer: createAudienceTimer(getAudienceTimer()) })
     void refreshMissingFiles()
@@ -842,6 +892,11 @@ async function restoreLastSession(backupId?: string): Promise<OpenPdfResult & { 
 }
 
 export function registerIpcHandlers(): void {
+  void mobileClicker.setEnabled().catch(() => log.warn('mobile clicker: restore failed; saved link retained'))
+  const requireOperator = (event: import('electron').IpcMainInvokeEvent): void => {
+    if (event.sender !== getOperatorWindow()?.webContents || event.senderFrame !== getOperatorWindow()?.webContents.mainFrame)
+      throw new Error('Operator window required')
+  }
   onPreparationStatus((path, status) => preparationUi.phase(path, status))
   ipcMain.handle('playlist:prepare', async (event, id: unknown) => {
     const operator = getOperatorWindow()
@@ -855,7 +910,7 @@ export function registerIpcHandlers(): void {
     const state = store.get()
     if (!state.projectPath) return
     await saveProjectFile(state.projectPath, { playlist: state.playlist, playlistFolders: state.playlistFolders,
-      keyVisualPath: state.keyVisualPath, audienceTimer: audienceTimerConfig(state.audienceTimer) })
+      keyVisualPath: state.keyVisualPath, audienceTimer: audienceTimerConfig(state.audienceTimer), programOverlay: state.programOverlay })
   })
   ipcMain.handle('session:configure-startup', (event, raw: unknown) => {
     if (event.sender !== getOperatorWindow()?.webContents) throw new Error('Operator window required')
@@ -942,16 +997,28 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('nav:prev', () => programPrev())
   ipcMain.handle('clicker:next', () => clickerNavigation.next())
   ipcMain.handle('clicker:prev', () => clickerNavigation.prev())
-
-  ipcMain.handle('clicker:set-double-click-take', (event, value: unknown) => {
-    const operator = getOperatorWindow()
-    if (!operator || operator.isDestroyed() || event.sender !== operator.webContents ||
-      event.senderFrame !== operator.webContents.mainFrame) throw new Error('Operator window required')
-    if (typeof value !== 'boolean') throw new Error('Boolean required')
-    const enabled = value
-    setPlaylistDoubleClickTake(enabled)
-    store.patch({ playlistDoubleClickTake: enabled })
-    return enabled
+  ipcMain.handle('mobile-clicker:reset', event => { requireOperator(event); return mobileClicker.resetLink() })
+  ipcMain.handle('mobile-clicker:status', event => { requireOperator(event); return mobileClicker.status() })
+  ipcMain.handle('mobile-clicker:qr', (event, index: number) => { requireOperator(event); return mobileClicker.qr(index) })
+  ipcMain.handle('mobile-clicker:enabled', (event, enabled: boolean) => { requireOperator(event); return mobileClicker.setEnabled(enabled === true) })
+  ipcMain.handle('program-overlay:set', (event, config: unknown) => {
+    requireOperator(event)
+    const overlay = programOverlay(config)
+    if (overlay.mode === 'image' && overlay.path && kindOf(overlay.path) !== 'image') throw Error('Overlay supports images only')
+    store.patch({ programOverlay: overlay })
+  })
+  ipcMain.handle('program-overlay:choose', async event => {
+    requireOperator(event)
+    const chosen = await dialog.showOpenDialog(getOperatorWindow()!, { title: t('Картинка для Overlay'), properties: ['openFile'],
+      filters: [{ name: t('Изображения'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] })
+    return chosen.canceled ? null : chosen.filePaths[0] ?? null
+  })
+  ipcMain.handle('program-overlay:read', async () => {
+    const overlay = programOverlay(store.get().programOverlay)
+    if (overlay.mode !== 'image' || !overlay.path || kindOf(overlay.path) !== 'image') return null
+    const info = await stat(overlay.path)
+    if (!info.isFile() || info.size > 50 * 1024 * 1024) throw Error(t('Картинка Overlay должна быть меньше 50 МБ'))
+    return { bytes: await readFile(overlay.path), mime: mimeOf(overlay.path) }
   })
 
   ipcMain.handle('clicker:set-global', (_e, value: boolean) => {
@@ -1157,6 +1224,7 @@ export function registerIpcHandlers(): void {
       notes: state.notes,
       playlistId: state.currentPlaylistId,
       slideMedia: state.slideMedia,
+      slideTransitions: state.slideTransitions ?? {},
       video:
         state.fileKind === 'video'
           ? {
@@ -1184,6 +1252,7 @@ export function registerIpcHandlers(): void {
       notes: p.notes,
       currentPlaylistId: p.playlistId,
       slideMedia: p.slideMedia,
+      slideTransitions: p.slideTransitions ?? {},
       video,
       // Цикл берём у выдаваемой записи: ролик-заставка должен уйти в эфир
       // зациклённым сразу, без второго действия оператора.
@@ -1352,6 +1421,18 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('timer:set-mode', (_e, mode: TimerMode) => {
     store.patch({ timerMode: mode })
     setTimerMode(mode)
+  })
+
+  ipcMain.handle('timer:reset-style', event => {
+    requireOperator(event)
+    const style = defaultSpeakerTimerStyle()
+    setTimerPosition(style.timerPosition)
+    setTimerScale(style.timerScale)
+    setTimerFree(style.timerFree)
+    setTimerFont(style.timerFont)
+    setTimerColor(style.timerColor)
+    setTimerWarnColors(style.timerWarnColors)
+    store.patch(style)
   })
 
   ipcMain.handle('timer:set-position', (_e, pos: TimerPosition) => {
@@ -1526,6 +1607,8 @@ export function registerIpcHandlers(): void {
   // Real EOF from the operator (the main Out deadline uses endVideo directly).
   // Loop wraps to In; otherwise freeze on Out, not on the file duration.
   ipcMain.handle('video:ended', () => {
+    if (autoVideoPending && autoVideoIdentity(store.get()) === autoVideoPending) return
+    if (autoVideoTarget(store.get()) && autoVideoAdvance.run(store.get())) return
     if (isListPlaying()) {
       void stepList(1)
       return
@@ -1985,6 +2068,7 @@ export function registerIpcHandlers(): void {
         liveFit?: LiveFit
         loop?: boolean
         slideFadeMs?: number
+        slideFadeMode?: 'file' | 'custom' | 'cut'
       },
     ) => {
       const next = store.get().playlist.map((e) =>
@@ -1999,6 +2083,8 @@ export function registerIpcHandlers(): void {
               loop: typeof payload.loop === 'boolean' ? payload.loop : e.loop,
               ...(typeof payload.slideFadeMs === 'number' && (e.kind === 'pdf' || e.kind === 'pptx')
                 ? { slideFadeMs: sanitizeSlideFadeMs(payload.slideFadeMs) } : {}),
+              ...(['file', 'custom', 'cut'].includes(payload.slideFadeMode ?? '') && (e.kind === 'pdf' || e.kind === 'pptx')
+                ? { slideFadeMode: payload.slideFadeMode } : {}),
             }
           : e,
       )
@@ -2305,6 +2391,7 @@ export function registerIpcHandlers(): void {
     store.patch({
       playlist: [],
       playlistFolders: [],
+      programOverlay: programOverlay(null),
       currentPlaylistId: null,
       keyVisualPath: null,
       projectPath: null,
@@ -2358,6 +2445,7 @@ export function registerIpcHandlers(): void {
           playlist: loaded.playlist,
           playlistFolders: loaded.playlistFolders,
           keyVisualPath: loaded.keyVisualPath,
+          programOverlay: programOverlay(loaded.programOverlay),
           audienceTimer: createAudienceTimer(loaded.audienceTimer ?? getAudienceTimer()),
           currentPlaylistId: null,
           projectPath: path,
@@ -2471,6 +2559,7 @@ export function registerIpcHandlers(): void {
         parent: res.filePaths[0], name,
         playlist: snapshot.playlist, playlistFolders: snapshot.playlistFolders, keyVisualPath: snapshot.keyVisualPath,
         audienceTimer: audienceTimerConfig(snapshot.audienceTimer),
+        programOverlay: snapshot.programOverlay,
         progress,
         prepare: async (source, target, directory) => {
           if (kindOf(source) !== 'pptx') return []

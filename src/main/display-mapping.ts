@@ -84,7 +84,6 @@ interface PersistedShape {
   timerGongEnabled: boolean
   timerLoop: boolean
   askLayoutOnStartup: boolean
-  playlistDoubleClickTake: boolean
   clickerGlobal: boolean
   clickerGlobalArrows: boolean
   speakerMsgPresets: string[]
@@ -159,7 +158,6 @@ const STORE_DEFAULTS: PersistedShape = {
   timerGongEnabled: false,
   timerLoop: false,
   askLayoutOnStartup: true,
-  playlistDoubleClickTake: false,
   clickerGlobal: false,
   clickerGlobalArrows: false,
   speakerMsgPresets: [...DEFAULT_SPEAKER_MSG_PRESETS],
@@ -543,14 +541,6 @@ export function getTimerLoop(): boolean {
 
 export function setTimerLoop(value: boolean): void {
   store().set('timerLoop', value)
-}
-
-export function getPlaylistDoubleClickTake(): boolean {
-  return store().get('playlistDoubleClickTake') === true
-}
-
-export function setPlaylistDoubleClickTake(value: boolean): void {
-  store().set('playlistDoubleClickTake', value)
 }
 
 export function getClickerGlobal(): boolean {

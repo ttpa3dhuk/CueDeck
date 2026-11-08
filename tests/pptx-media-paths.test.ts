@@ -1,5 +1,6 @@
 import { join, win32 } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { PPTX_MANIFEST_VERSION } from '../src/shared/presentation-preparation'
 
 // No OS writes: even the vulnerable implementation only writes to this map.
 const disk = vi.hoisted(() => ({ files: new Map<string, Buffer>(), writes: [] as string[] }))
@@ -144,7 +145,7 @@ describe('PPTX media extraction paths', () => {
     expect(disk.files.get(join(MEDIA_DIR, filename))).toEqual(VIDEO)
     expect(prepared.temporary).toBe(true)
     const manifestBytes = disk.files.get(MANIFEST)
-    expect(JSON.parse(manifestBytes!.toString()).version).toBe(7)
+    expect(JSON.parse(manifestBytes!.toString()).version).toBe(PPTX_MANIFEST_VERSION)
     disk.files.set(`/fixture/cache/${SHA}.pdf`, Buffer.from('ready PDF'))
     disk.writes.length = 0
     const cached = await preparePptxMedia(SOURCE, SHA)

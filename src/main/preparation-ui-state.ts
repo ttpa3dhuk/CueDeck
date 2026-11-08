@@ -34,14 +34,15 @@ export class PreparationUiState<T> {
 
   /** Terminal states are accepted only by the promise with the matching epoch. */
   phase(path: string, status: Status): void {
-    if (status.phase === 'preparing' && this.versions.has(path)) this.publish(path, status)
+    if ((status.phase === 'queued' || status.phase === 'preparing') && this.versions.has(path)) this.publish(path, status)
   }
 
   async prepare(path: string, options: PreparationOptions = {}): Promise<T> {
     const epoch = this.epoch
     const version = ++this.serial
     this.versions.set(path, version)
-    this.publish(path, { phase: 'queued' })
+    // The queue checks disk cache before emitting queued. A warm lookup must
+    // not look like a fresh conversion or increment the batch counter.
     try {
       const result = await this.prepareFile(path, options)
       if (epoch !== this.epoch) throw new Error('Presentation preparation cancelled')

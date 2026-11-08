@@ -41,6 +41,7 @@ export interface PublishInput {
   identity: SourceIdentity
   totalSlides: number
   slideMedia: PreparedPresentation['slideMedia']
+  slideTransitions?: Record<number, number>
   pageNotes: Record<number, string>
   fonts: string[]
   hasManifest: boolean
@@ -240,6 +241,7 @@ export class PresentationCache {
       sha1: meta.sha1,
       totalSlides: meta.totalSlides,
       slideMedia: meta.slideMedia,
+      slideTransitions: meta.slideTransitions ?? {},
       pageNotes: meta.pageNotes,
       fonts: meta.fonts,
       pdfPath,
@@ -333,6 +335,7 @@ export class PresentationCache {
       totalSlides: input.totalSlides,
       fonts: input.fonts,
       slideMedia: input.slideMedia,
+      slideTransitions: input.slideTransitions ?? {},
       pageNotes: input.pageNotes,
       hasManifest: input.hasManifest,
       createdAt: Date.now(),

@@ -9,6 +9,7 @@ import { loadProjectFile, PROJECT_EXTENSION, saveProjectFile } from './project.j
 import { uniqueName } from './project-files.js'
 import { sidecarPathFor } from './notes-store.js'
 import { audienceTimerConfig, type AudienceTimerConfig } from '../shared/audience-timer.js'
+import { programOverlay, type ProgramOverlayConfig } from '../shared/program-overlay.js'
 
 let running = false
 export function beginProjectTransfer(): boolean {
@@ -34,6 +35,7 @@ export async function verifyTransferFile(file: TransferFile): Promise<void> {
 
 /** Build a snapshot in a staging folder; expose its project only after verification. */
 export async function transferProject(opts: {
+  programOverlay?: ProgramOverlayConfig
   audienceTimer?: AudienceTimerConfig
   parent: string
   name: string
@@ -43,7 +45,7 @@ export async function transferProject(opts: {
   prepare(source: string, target: string, directory: string): Promise<TransferFile[]>
   progress(status: ProjectTransferStatus): void
 }): Promise<{ path: string; copied: number }> {
-  const snapshot = structuredClone({ playlist: opts.playlist, playlistFolders: opts.playlistFolders ?? [], keyVisualPath: opts.keyVisualPath, audienceTimer: opts.audienceTimer })
+  const snapshot = structuredClone({ playlist: opts.playlist, playlistFolders: opts.playlistFolders ?? [], keyVisualPath: opts.keyVisualPath, audienceTimer: opts.audienceTimer, programOverlay: opts.programOverlay })
   const sources = new Set<string>()
   for (const entry of snapshot.playlist) {
     if (entry.kind === 'live') continue
@@ -51,6 +53,7 @@ export async function transferProject(opts: {
     else sources.add(entry.filePath)
   }
   if (snapshot.keyVisualPath) sources.add(snapshot.keyVisualPath)
+  if (snapshot.programOverlay?.path) sources.add(snapshot.programOverlay.path)
   // Notes are small and edited by the operator: freeze them before the slow copy.
   const notesSnapshot = new Map<string, Buffer>()
   for (const source of sources) {
@@ -89,14 +92,16 @@ export async function transferProject(opts: {
       return { ...entry, filePath: copies.get(entry.filePath)! }
     })
     const keyVisualPath = snapshot.keyVisualPath ? copies.get(snapshot.keyVisualPath)! : null
+    const overlay = snapshot.programOverlay ? { ...programOverlay(snapshot.programOverlay), path: snapshot.programOverlay.path ? copies.get(snapshot.programOverlay.path)! : null } : undefined
     for (let i = 0; i < check.length; i++) {
       opts.progress({ phase: 'checking', completed: i, total: check.length, file: basename(check[i].target) })
       await verifyTransferFile(check[i])
     }
     const projectFile = `${opts.name}.${PROJECT_EXTENSION}`
     const stagedProject = join(stage, projectFile)
-    await saveProjectFile(stagedProject, { playlist, playlistFolders: snapshot.playlistFolders, keyVisualPath, audienceTimer: snapshot.audienceTimer })
+    await saveProjectFile(stagedProject, { playlist, playlistFolders: snapshot.playlistFolders, keyVisualPath, audienceTimer: snapshot.audienceTimer, programOverlay: overlay })
     const loaded = await loadProjectFile(stagedProject)
+    if (overlay && JSON.stringify(loaded.programOverlay) !== JSON.stringify(overlay)) throw new Error(t('Проверка файла проекта не прошла'))
     if (snapshot.audienceTimer && JSON.stringify(loaded.audienceTimer) !== JSON.stringify(audienceTimerConfig(snapshot.audienceTimer))) {
       throw new Error(t('Проверка файла проекта не прошла'))
     }

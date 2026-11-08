@@ -1303,7 +1303,7 @@ body[data-role="operator"] #current-slide {
   position: absolute;
   top: 8px;
   left: 8px;
-  z-index: 7;
+  z-index: 8;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1609,6 +1609,7 @@ body[data-role="operator"] [data-frame-player]:focus-within {
   min-height: 0;
   overflow: hidden;
 }
+.next-slide { position: relative; }
 .label {
   color: var(--muted);
   font-size: 11px;
@@ -2512,7 +2513,9 @@ body[data-theme="light"] .op-bottombar-handle::after { background: rgba(0, 0, 0,
 body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--accent); }
 
 /* ── Трансляция: кнопка STREAM и окно ── */
-.bottombar .stream-btn {
+.bottombar .stream-btn,
+.bottombar .omt-btn,
+.bottombar .overlay-btn {
   font-weight: 700;
   letter-spacing: 0.06em;
   font-size: 12px;
@@ -2526,16 +2529,8 @@ body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--a
 .bottombar .stream-btn.on { background: var(--danger); border-color: var(--danger); color: #fff; }
 .bottombar .stream-btn.warn { animation: stream-warn 1s steps(1, end) infinite; }
 /* Выходы OMT: красная — наш источник в эфире у vMix (tally), зелёная — в превью. */
-.bottombar .omt-btn {
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  font-size: 12px;
-  padding: 4px 12px;
-  margin-left: 8px;
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-}
+.bottombar .omt-btn,
+.bottombar .overlay-btn { margin-left: 8px; }
 .omt-btn-tally:empty { display: none; }
 .omt-btn-tally { font-weight: 600; letter-spacing: 0; }
 .bottombar .omt-btn.program { background: var(--danger); border-color: var(--danger); color: #fff; }
@@ -2764,6 +2759,29 @@ html[lang="en"] {
 .playlist-context { position: fixed; z-index: 10001; min-width: 190px; padding: 6px; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; box-shadow: 0 8px 30px rgba(0,0,0,.3); }
 .playlist-context button { display: block; width: 100%; padding: 10px 12px; border: 0; text-align: left; background: transparent; }
 .playlist-context button:hover { background: var(--border); }
+.playlist-settings-submenu { position: absolute; }
+.playlist-settings-submenu[hidden] { display: none; }
+.slide-gif { z-index: 2; max-width: none; max-height: none; }
+.slide-gif[hidden] { display: none; }
+.settings-section[data-section="clicker"] { gap: 6px; }
+.settings-section[data-section="clicker"] > h3 { margin: 4px 0 2px; }
+.settings-section[data-section="clicker"] > .audio-hint { margin: 0; }
+#mobile-clicker-error:empty { display: none; }
+#mobile-clicker-details { display: grid; grid-template-columns: 200px minmax(0, 1fr); align-items: center; gap: 6px 12px; margin: 0; }
+#mobile-clicker-url { grid-column: 1 / -1; }
+.mobile-clicker-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+#mobile-clicker-host { justify-self: start; max-width: 100%; }
+#mobile-clicker-reset { justify-self: start; }
+.mobile-clicker-qr-wrap { position: relative; width: 200px; height: 200px; }
+.mobile-clicker-qr-brand { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; place-items: center; width: 32px; height: 32px; border: 4px solid #fff; border-radius: 6px; background: #101724; color: #fff; font: 700 13px Arial, sans-serif; letter-spacing: -.5px; pointer-events: none; }
+#mobile-clicker-details.hidden { display: none; }
+#mobile-clicker-qr { background: #fff; border-radius: 8px; }
+#mobile-clicker-url { width: 100%; font-size: 12px; }
+.overlay-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+.overlay-fields label { display: flex; flex-direction: column; gap: 4px; }
+#program-overlay-modal textarea { width: 100%; resize: vertical; }
+#program-overlay-modal .modal-content { max-height: 90vh; overflow-y: auto; }
+.bottombar .overlay-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* Deck controls adapt to their pane, not the whole window: PROGRAM is much
    smaller than PREVIEW when output monitors share its column. */
@@ -3099,3 +3117,49 @@ body[data-role="operator"] #program-playback > #current-meter {
 @container (max-width: 480px) {
   body[data-role="operator"] #program-playback > #current-meter { flex-basis: 40px; width: 40px; }
 }
+
+/* Mobile clicker availability, independent of the current material's navigation. */
+.bottombar #program-prev.mobile-clicker-active { background: var(--danger); border-color: var(--danger); color: #fff; opacity: 1; }
+.bottombar #program-next.mobile-clicker-active { background: var(--timer-green); border-color: var(--timer-green); color: #fff; opacity: 1; }
+
+/* Shared settings rhythm; output previews keep their own scale and typography. */
+.settings-modal-content { --settings-control-height: 30px; font: 13px/1.5 Arial, sans-serif; }
+.settings-nav button { min-height: var(--settings-control-height); font: inherit; padding: 5px 12px; }
+.settings-body .settings-section { font: inherit; gap: 8px; }
+.settings-body .settings-section > h3 { font-size: 16px; line-height: 1.4; margin: 6px 0 2px; }
+.settings-body .settings-section > h3:first-child { margin-top: 0; }
+.settings-body .settings-section h4 { font-size: 14px; line-height: 1.4; margin: 6px 0 2px; }
+.settings-body .audio-hint { font: inherit; color: var(--muted); margin: 0; }
+.settings-body .windowed-label { font: inherit; min-height: 24px; gap: 8px; }
+.settings-body .live-field { margin: 0 0 8px; }
+.settings-body .live-field-label { font: inherit; font-weight: 600; text-transform: none; letter-spacing: normal; color: var(--text); margin: 0 0 6px; }
+.settings-body button,
+.settings-body select,
+.settings-body input:is([type="text"], [type="number"], [type="password"], [type="url"], :not([type])) {
+  font: 13px/18px Arial, sans-serif;
+  min-height: var(--settings-control-height);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  background-color: var(--panel-2);
+  color: var(--text);
+  max-width: 100%;
+}
+.settings-body select { padding-right: 24px; }
+.settings-body button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.settings-body button:hover { background: var(--border); }
+.settings-body button.primary:hover { filter: brightness(1.1); background: var(--accent); }
+.settings-body textarea { font: 13px/1.5 Arial, sans-serif; }
+.settings-body input:is([type="checkbox"], [type="radio"]) { width: 14px; height: 14px; margin: 0; flex-shrink: 0; accent-color: var(--accent); }
+.settings-body .remote-row { margin-top: 0; gap: 8px 12px; }
+.settings-body .settings-section[data-section="ui"] { gap: 16px; }
+.settings-body .settings-section[data-section="clicker"] { gap: 6px; }
+.settings-nav button.active:hover { background: var(--accent); }
+.settings-body .audio-device-row { font: inherit; gap: 8px; padding: 6px 10px; }
+.settings-body .audio-device-list { margin-bottom: 8px; }
+/* Leave room for the selected value as well as the native dropdown arrow. */
+.settings-body .omt-row { grid-template-columns: minmax(70px, 1fr) minmax(90px, 150px) 88px 88px; gap: 6px; }
+.settings-body .omt-row select { width: 100%; padding-left: 8px; padding-right: 20px; }
+.settings-body .audience-timer-field-column > label:has(> select) { grid-template-columns: minmax(0, 1fr); }
+.settings-body .audience-timer-field-column > label > select { width: 100%; }
+#prompter-timer-reset { align-self: flex-start; }

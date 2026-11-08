@@ -162,7 +162,7 @@ function parseSeconds(v: RemoteArg): number | null {
 /** В эфире есть что играть: файл-ролик или PPTX-слайд с видео. */
 export function programHasVideo(s: RemoteStateView): boolean {
   if (s.fileKind === 'video') return true
-  return s.fileKind === 'pptx' && s.slideMedia.some((m) => m.slide === s.currentSlide)
+  return s.fileKind === 'pptx' && s.slideMedia.some((m) => m.slide === s.currentSlide && m.kind !== 'gif')
 }
 
 const withVideo =

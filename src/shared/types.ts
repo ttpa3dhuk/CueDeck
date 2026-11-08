@@ -195,6 +195,8 @@ export interface SlideMediaRect {
  * тот же, что и для «файл целиком — видео».
  */
 export interface SlideMedia {
+  /** Отсутствует у видео из прежних проектов. GIF играет независимо от видеотранспорта. */
+  kind?: 'gif'
   /** Номер страницы (1-based, совпадает с currentSlide). */
   slide: number
   rect: SlideMediaRect
@@ -255,6 +257,7 @@ export interface PlaylistEntry {
   fadeMs?: number
   /** PDF/PPTX slide crossfade; absent/zero keeps a cut. */
   slideFadeMs?: number
+  slideFadeMode?: 'file' | 'custom' | 'cut'
   /**
    * Зациклить ролик этой записи: видео-заставка крутится, пока спикер на
    * сцене, а обычный ролик доигрывает и встаёт. Настройка живёт у записи, а не
@@ -294,6 +297,7 @@ export interface DeckState {
   playlistId: string | null
   /** Видео, вшитые в слайды (только PPTX; пусто для остальных форматов). */
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
 }
 
 export interface ProjectTransferStatus {
@@ -306,6 +310,7 @@ export interface ProjectTransferStatus {
 }
 
 export interface AppState {
+  programOverlay?: import('./program-overlay').ProgramOverlayConfig
   /** Runtime conversion status by source path; never stored in project/session files. */
   preparations: Record<string, { phase: 'queued' | 'preparing' | 'ready' | 'error'; error?: string }>
   /** Applied program input mute; video.muted remains the independent mix switch. */
@@ -327,6 +332,7 @@ export interface AppState {
   video: VideoState
   /** Видео, вшитые в слайды программного PPTX (см. SlideMedia). */
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
   materialSettings: import('./material-settings.js').MaterialSettings
   timer: TimerState
   /** Independent countdown over the audience feed; speaker timer is unaffected. */
@@ -438,7 +444,6 @@ export interface AppState {
   timerAdjustments: number[]
   timerPresets: number[]
   /** Opt-in double-click TAKE; false keeps playlist activation in Preview. */
-  playlistDoubleClickTake: boolean
   /**
    * Global clicker: PgUp/PgDn switch program slides system-wide (globalShortcut),
    * so the speaker keeps clicking while the operator works in a browser/Finder.

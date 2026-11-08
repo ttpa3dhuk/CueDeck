@@ -13,6 +13,9 @@ vi.mock('electron', () => ({
 
 import { mediaDirFor, parseVideoPlayback, preparePptxMedia } from '../src/main/pptx-media'
 import { cachedPdfPathFor } from '../src/main/pptx-converter'
+import { isAnimatedGif } from '../src/shared/gif'
+import { slideMediaAt } from '../src/renderer/shared/video'
+import { PPTX_MANIFEST_VERSION } from '../src/shared/presentation-preparation'
 
 // Реальная преза: слайд 1 — титул; слайд 2 — билд из 3 кликов по абзацам;
 // слайд 3 — видео media1.mp4 (H.264, ~158 МБ); слайд 4 — пустой.
@@ -193,7 +196,7 @@ const NOTES_DECK: Record<string, string> = {
   'ppt/media/media1.mp4': 'fake video',
 }
 
-async function buildDeck(dir: string, files: Record<string, string>): Promise<string> {
+async function buildDeck(dir: string, files: Record<string, string | Buffer>): Promise<string> {
   await rm(dir, { recursive: true, force: true })
   for (const [name, body] of Object.entries(files)) {
     const path = join(dir, 'src', name)
@@ -205,10 +208,78 @@ async function buildDeck(dir: string, files: Record<string, string>): Promise<st
   return out
 }
 
+describe('PPTX animated GIF', () => {
+  const dir = join(tmpdir(), 'cuedeck-gif-deck')
+  const gif = Buffer.from('R0lGODlhAgACAIEAAP8AAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQACgAAACwAAAAAAgACAAAIBgABCAQQEAAh+QQBCgABACwAAAAAAgACAIEAAP8AAAAAAAAAAAAIBgABCAQQEAA7', 'base64')
+  const pic = '<p:pic><p:nvPicPr><p:cNvPr id="6" name="GIF"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rIdG"/></p:blipFill><p:spPr><a:xfrm><a:off x="1219200" y="685800"/><a:ext cx="6096000" cy="3429000"/></a:xfrm><a:srcRect l="10000" r="20000"/></p:spPr></p:pic>'
+  const files = (body: string, hidden = false): Record<string, string | Buffer> => ({
+    ...NOTES_DECK,
+    'ppt/slides/slide1.xml': slideXml(body, hidden ? ' show="0"' : ''),
+    'ppt/slides/_rels/slide1.xml.rels': slideRels(null).replace('</Relationships>', `<Relationship Id="rIdG" Type="${REL}/image" Target="../media/animated.gif"/></Relationships>`),
+    'ppt/media/animated.gif': gif,
+  })
+  afterAll(async () => { await rm(dir, { recursive: true, force: true }) })
+
+  it('reads GIF blocks and rejects truncated or static images', () => {
+    expect(isAnimatedGif(gif)).toBe(true)
+    expect(isAnimatedGif(gif.subarray(0, -1))).toBe(false)
+    expect(isAnimatedGif(Buffer.from('GIF89a'))).toBe(false)
+    const last = gif.lastIndexOf(Buffer.from([0x21, 0xf9]))
+    expect(isAnimatedGif(Buffer.concat([gif.subarray(0, last), Buffer.from([0x3b])]))).toBe(false)
+  })
+  it('extracts original animation, keeps geometry/crop and removes the static underlay', async () => {
+    const deck = await buildDeck(dir, files(pic))
+    const result = await preparePptxMedia(deck, 'gif-basic')
+    const media = result.slideMedia.filter(m => m.kind === 'gif')
+    expect(media).toHaveLength(1)
+    expect(media[0]).toMatchObject({ slide: 1, rect: { x: .1, y: .1, w: .5, h: .5 }, crop: { left: .1, right: .2, top: 0, bottom: 0 } })
+    expect(await readFile(join(mediaDirFor('gif-basic'), media[0].file))).toEqual(gif)
+    const xml = execFileSync('unzip', ['-p', result.convertSource, 'ppt/slides/slide1.xml'], { encoding: 'utf8' })
+    expect(xml).not.toContain('name="GIF"')
+    expect(slideMediaAt('pptx', media, 1)).toBeUndefined()
+  })
+  it('handles two GIFs without replacing the independent video', async () => {
+    const separateVideo = VIDEO_PIC.replace('id="6"', 'id="8"').replace('</p:pic>', '<p:spPr><a:xfrm><a:off x="0" y="6000000"/><a:ext cx="6096000" cy="800000"/></a:xfrm></p:spPr></p:pic>')
+    const deckFiles = files(pic + pic.replace('id="6"', 'id="7"').replace('x="1219200"', 'x="8000000"') + separateVideo)
+    deckFiles['ppt/slides/_rels/slide1.xml.rels'] = String(deckFiles['ppt/slides/_rels/slide1.xml.rels']).replace('</Relationships>', `<Relationship Id="rIdV" Type="${REL}/video" Target="../media/media1.mp4"/></Relationships>`)
+    const result = await preparePptxMedia(await buildDeck(dir, deckFiles), 'gif-two-video')
+    expect(result.slideMedia.filter(m => m.kind === 'gif')).toHaveLength(2)
+    expect(slideMediaAt('pptx', result.slideMedia, 1)?.file).toBe('media1.mp4')
+  })
+  it('does not animate hidden slides or unsupported group coordinates', async () => {
+    for (const [body, hidden, sha] of [[pic, true, 'gif-hidden'], [`<p:grpSp>${pic}</p:grpSp>`, false, 'gif-group']] as const) {
+      const result = await preparePptxMedia(await buildDeck(dir, files(body, hidden)), sha)
+      expect(result.slideMedia.filter(m => m.kind === 'gif')).toHaveLength(0)
+    }
+  })
+  it('keeps a static fallback when a foreground object overlaps the GIF', async () => {
+    const cover = '<p:sp><p:nvSpPr><p:cNvPr id="8" name="foreground"/></p:nvSpPr><p:spPr><a:xfrm><a:off x="1219200" y="685800"/><a:ext cx="1000000" cy="1000000"/></a:xfrm></p:spPr></p:sp>'
+    const result = await preparePptxMedia(await buildDeck(dir, files(pic + cover)), 'gif-foreground')
+    expect(result.slideMedia.some(m => m.kind === 'gif')).toBe(false)
+  })
+  it('invalidates an old PDF containing a static GIF and reloads the new manifest', async () => {
+    const deck = await buildDeck(dir, files(pic))
+    await preparePptxMedia(deck, 'gif-old-cache')
+    const manifest = join(dirname(mediaDirFor('gif-old-cache')), 'gif-old-cache.media.json')
+    const old = JSON.parse(await readFile(manifest, 'utf8')); old.version = 7
+    await writeFile(manifest, JSON.stringify(old))
+    await writeFile(cachedPdfPathFor('gif-old-cache'), 'old static GIF PDF')
+    expect((await preparePptxMedia(deck, 'gif-old-cache')).temporary).toBe(true)
+    expect((await preparePptxMedia(deck, 'gif-old-cache')).slideMedia.some(m => m.kind === 'gif')).toBe(true)
+  })
+})
+
 describe('preparePptxMedia: заметки докладчика (2.23)', () => {
   const DIR = join(tmpdir(), 'cuedeck-notes-deck')
   afterAll(async () => {
     await rm(DIR, { recursive: true, force: true })
+  })
+
+  it('maps the source Fade to the first expanded page only and retains it in cache', async () => {
+    const files = { ...NOTES_DECK, 'ppt/slides/slide3.xml': NOTES_DECK['ppt/slides/slide3.xml'].replace('</p:sld>', '<p:transition p14:dur="350"><p:fade/></p:transition></p:sld>') }
+    const deck = await buildDeck(DIR, files)
+    expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: 350, 5: 0, 6: 0 })
+    expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: 350, 5: 0, 6: 0 })
   })
 
   it('заметки по страницам PDF: абзацы, переносы, сущности; шаги; скрытый слайд пропущен', async () => {
@@ -290,7 +361,7 @@ describe('preparePptxMedia: video geometry and source crop', () => {
     expect(prepared.temporary).toBe(false)
     expect(prepared.slideMedia[0].crop).toEqual({ left: 0.01, top: 0.02, right: 0.03, bottom: 0.06476 })
     expect(await readFile(cachedPdfPathFor(sha), 'utf8')).toBe('unchanged PDF')
-    expect(JSON.parse(await readFile(manifestPath, 'utf8')).version).toBe(7)
+    expect(JSON.parse(await readFile(manifestPath, 'utf8')).version).toBe(PPTX_MANIFEST_VERSION)
   })
 
   it('ignores a malformed or empty source rectangle instead of emitting invalid crop', async () => {

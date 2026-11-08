@@ -11,6 +11,7 @@ import { shouldMute, shouldMuteMix } from '../src/renderer/shared/video'
 import { initialSlideVideo } from '../src/shared/slide-video'
 import { entryVideoRange, planVideoTake, reusedVideoDuration } from '../src/shared/video-range'
 import { recoveryTakeFrame } from '../src/shared/recovery-take'
+import { autoVideoIdentity, autoVideoStillTargets } from '../src/shared/video-auto-advance'
 import type { AppState, FileKind, FrameStepIdentity, PlaylistEntry } from '../src/shared/types'
 
 const entry = (id: string, sourceMuted = false): PlaylistEntry => ({
@@ -149,7 +150,50 @@ describe('actual source load and IPC wiring', () => {
       expect(await load('/loose.mp4')).toMatchObject({ ok: true })
       expect(deck === 'program' ? store.get().sourceMuted : store.get().preview.sourceMuted).toBe(false)
       expect(store.get().video.muted).toBe(true)
+      if (deck === 'program' && kind === 'video') {
+        expect(await load('/same.mp4', { playlistId: 'b', autoPlayVideo: true })).toMatchObject({ ok: true })
+        expect(store.get().video.playing).toBe(true)
+        expect(store.get().video.anchorAt).not.toBeNull()
+      }
     }
+  })
+
+  it('cancels a pending automatic file load when the operator changes the program', async () => {
+    const store = show()
+    const expected = autoVideoIdentity(store.get())
+    let finish!: (value: unknown) => void
+    const waiting = new Promise(resolve => { finish = resolve })
+    const start = source.indexOf('async function openFile(')
+    const end = source.indexOf('/** Load a file into', start)
+    const load = runInNewContext(ts.transpile(source.slice(start, end)) + '; openFile', {
+      store, pendingDeckLoads: 0, programOpenGeneration: 0, stopListPlayback: vi.fn(),
+      inspectFile: () => waiting, autoVideoIdentity,
+    })
+    const result = load('/next.mp4', { expectedProgram: expected, autoPlayVideo: true })
+    store.patch({ pdfPath: '/manual.mp4', pdfSha1: 'manual' })
+    finish({ kind: 'video', sha1: 'next', totalSlides: 1, notes: {}, slideMedia: [] })
+    expect(await result).toMatchObject({ ok: false, cancelled: true })
+    expect(store.get().pdfPath).toBe('/manual.mp4')
+  })
+
+  it('does not show a removed next card after its asynchronous load finishes', async () => {
+    const store = show()
+    store.patch({ autoAdvance: true, video: { ...store.get().video, playing: true, anchorAt: Date.now() },
+      playlist: [entry('a'), { ...entry('b'), filePath: '/next.mp4' }] })
+    const expected = autoVideoIdentity(store.get())
+    let finish!: (value: unknown) => void
+    const waiting = new Promise(resolve => { finish = resolve })
+    const start = source.indexOf('async function openFile(')
+    const end = source.indexOf('/** Load a file into', start)
+    const load = runInNewContext(ts.transpile(source.slice(start, end)) + '; openFile', {
+      store, pendingDeckLoads: 0, programOpenGeneration: 0, stopListPlayback: vi.fn(),
+      inspectFile: () => waiting, autoVideoIdentity, autoVideoStillTargets,
+    })
+    const result = load('/next.mp4', { playlistId: 'b', expectedProgram: expected, autoPlayVideo: true })
+    store.patch({ playlist: [entry('a')] })
+    finish({ kind: 'video', sha1: 'next', totalSlides: 1, notes: {}, slideMedia: [] })
+    expect(await result).toMatchObject({ ok: false, cancelled: true })
+    expect(store.get().pdfPath).toBe('/same.mp4')
   })
 
   it('allows only the operator main frame and persists only valid card edits', () => {
