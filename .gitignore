@@ -39,3 +39,17 @@ vendor/
 # Локальные отзывы пользователей и разбор между сессиями
 /FEEDBACK.md
 /feedback/
+
+# Private agent instructions and working notes
+/AGENTS.md
+/JOURNAL.md
+/LESSONS.md
+/DECISIONS.md
+/SESSION-RESUME.md
+/NEXT-RELEASE-PLAN.md
+/.agents/
+/instagram/
+/docs/UI-MESSAGES.md
+/docs/releases/NEXT-BUGFIX-DRAFT.md
+/docs/releases/NEXT-RELEASE-NOTES.md
+/docs/releases/next-bugfix/
