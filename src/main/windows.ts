@@ -415,13 +415,13 @@ export function loadGpuAudiencePage(win: BrowserWindow): void {
  * with a shared texture. Never shown and never used as a normal hidden audience
  * for stream/OMT/capture. One instance is registered in store as `audience` by
  * the GPU audience mode through the ghost lease. Target is PHYSICAL texture
- * pixels; BrowserWindow dimensions are DIP, so Retina scale is divided out and
- * the actual codedSize is checked by GpuTexturePublisher.
+ * pixels. The offscreen renderer uses its own fixed 1x scale so fractional
+ * desktop DPI cannot round a Full HD texture to 1921 pixels. The actual
+ * codedSize is still checked by GpuTexturePublisher.
  */
 export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080, load = true): BrowserWindow {
-  const scaleFactor = screen.getPrimaryDisplay().scaleFactor || 1
-  const width = Math.max(16, Math.round(targetWidth / scaleFactor))
-  const height = Math.max(16, Math.round(targetHeight / scaleFactor))
+  const width = Math.max(16, Math.round(targetWidth))
+  const height = Math.max(16, Math.round(targetHeight))
   const win = new BrowserWindow({
     width,
     height,
@@ -438,9 +438,13 @@ export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080,
       nodeIntegration: false,
       backgroundThrottling: false,
       autoplayPolicy: 'no-user-gesture-required',
-      offscreen: { useSharedTexture: true, deviceScaleFactor: scaleFactor },
+      offscreen: { useSharedTexture: true, deviceScaleFactor: 1 },
     },
   })
+  // Windows constrains initial window bounds to the screen/work area, even
+  // for hidden OSR windows. Resize after construction, before the first frame.
+  const [actualWidth, actualHeight] = win.getContentSize()
+  if (actualWidth !== width || actualHeight !== height) win.setContentSize(width, height)
   win.webContents.setFrameRate(30)
   if (load) loadGpuAudiencePage(win)
   return win

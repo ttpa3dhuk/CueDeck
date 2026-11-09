@@ -4,6 +4,9 @@ const mocks = vi.hoisted(() => {
   class MockBrowserWindow {
     static instances: MockBrowserWindow[] = []
     options: any
+    contentSize: number[]
+    getContentSize = vi.fn(() => this.contentSize)
+    setContentSize = vi.fn((width: number, height: number) => { this.contentSize = [width, height] })
     webContents = { setFrameRate: vi.fn() }
     loadFile = vi.fn().mockResolvedValue(undefined)
     loadURL = vi.fn().mockResolvedValue(undefined)
@@ -18,11 +21,14 @@ const mocks = vi.hoisted(() => {
     isDestroyed = vi.fn(() => false)
     constructor(options: any) {
       this.options = options
+      this.contentSize = [options.width, Math.min(options.height, mocks.initialHeightLimit)]
       MockBrowserWindow.instances.push(this)
     }
   }
   return {
     MockBrowserWindow,
+    displayScale: 2,
+    initialHeightLimit: Infinity,
     registerWindow: vi.fn(),
     unregisterWindow: vi.fn(),
     registeredWindow: vi.fn(() => undefined as any),
@@ -34,7 +40,7 @@ const mocks = vi.hoisted(() => {
 vi.mock('electron', () => ({
   BrowserWindow: mocks.MockBrowserWindow,
   screen: {
-    getPrimaryDisplay: () => ({ scaleFactor: 2, workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
+    getPrimaryDisplay: () => ({ scaleFactor: mocks.displayScale, workArea: { x: 0, y: 0, width: 1920, height: 1080 } }),
     getAllDisplays: () => [
       { id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 2 },
       { id: 2, bounds: { x: 1920, y: 0, width: 1920, height: 1080 }, workArea: { x: 1920, y: 0, width: 1920, height: 1080 }, scaleFactor: 2 },
@@ -60,21 +66,24 @@ import { acquireGhost, applyLayout, createGpuAudienceWindow, createHiddenAudienc
 import { clearGpuAudienceGuard, setGpuAudienceGuard } from '../src/main/gpu-audience-arbiter'
 
 beforeEach(() => {
+  mocks.displayScale = 2
+  mocks.initialHeightLimit = Infinity
   mocks.MockBrowserWindow.instances = []
   vi.clearAllMocks()
   delete process.env.ELECTRON_RENDERER_URL
 })
 
 describe('real GPU audience window factory', () => {
-  it('uses the audience renderer, offscreen shared texture, and 1920x1080 physical target at 2x DPI', () => {
+  it.each([1, 1.15, 1.25, 1.3, 1.5, 1.75, 2, 2.25, 2.5])('uses a fixed Full HD offscreen texture at desktop scale %s', (scale) => {
+    mocks.displayScale = scale
     const win = createGpuAudienceWindow(1920, 1080) as any
     expect(win).toBe(mocks.MockBrowserWindow.instances[0])
-    expect(win.options.width).toBe(960)
-    expect(win.options.height).toBe(540)
+    expect(win.options.width).toBe(1920)
+    expect(win.options.height).toBe(1080)
     expect(win.options.show).toBe(false)
     expect(win.options.useContentSize).toBe(true)
     expect(win.options.enableLargerThanScreen).toBe(true)
-    expect(win.options.webPreferences.offscreen).toEqual({ useSharedTexture: true, deviceScaleFactor: 2 })
+    expect(win.options.webPreferences.offscreen).toEqual({ useSharedTexture: true, deviceScaleFactor: 1 })
     expect(win.webContents.setFrameRate).toHaveBeenCalledWith(30)
     expect(win.options.webPreferences.preload).toContain('preload/index.cjs')
     expect(win.options.webPreferences.backgroundThrottling).toBe(false)
@@ -84,6 +93,14 @@ describe('real GPU audience window factory', () => {
     expect(path).not.toContain('gpu-test')
     expect(options.search).toContain('role=audience')
     expect(mocks.registerWindow).toHaveBeenCalledWith('audience', win)
+  })
+
+  it('restores Full HD before loading when Windows clamps initial height to the work area', () => {
+    mocks.initialHeightLimit = 1040
+    const win = createGpuAudienceWindow() as any
+    expect(win.setContentSize).toHaveBeenCalledWith(1920, 1080)
+    expect(win.getContentSize()).toEqual([1920, 1080])
+    expect(win.setContentSize.mock.invocationCallOrder[0]).toBeLessThan(win.loadFile.mock.invocationCallOrder[0])
   })
 
   it('never hands a GPU ghost to a normal hidden-audience holder', () => {
@@ -134,7 +151,7 @@ describe('real GPU audience window factory', () => {
   it('does not reuse the normal hidden-audience factory options', () => {
     const gpu = createGpuAudienceWindow() as any
     expect(gpu.options.transparent).not.toBe(true)
-    expect(gpu.options.webPreferences.offscreen).toEqual({ useSharedTexture: true, deviceScaleFactor: 2 })
+    expect(gpu.options.webPreferences.offscreen).toEqual({ useSharedTexture: true, deviceScaleFactor: 1 })
     expect(gpu.options.title).toContain('GPU audience')
 
     const normal = createHiddenAudienceWindow(960, 540) as any

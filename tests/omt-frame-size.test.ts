@@ -9,7 +9,8 @@ describe('OMT frame limits', () => {
     [3840, 1080, 1080, 1920, 540],
     [1920, 1080, 1080, 1920, 1080],
     [640, 480, 1080, 640, 480],
-    [1080, 1920, 720, 405, 720],
+    [1080, 1920, 720, 406, 720],
+    [601, 719, 1080, 600, 719],
     [1920, 1080, 720, 1280, 720],
   ] as const)('fits %i×%i into %ip without cropping or upscaling', (w, h, resolution, expectedW, expectedH) => {
     expect(omtFrameSize(w, h, resolution)).toEqual({ width: expectedW, height: expectedH })
@@ -22,7 +23,8 @@ describe('OMT frame limits', () => {
           expect(size.width).toBeLessThanOrEqual(Math.min(width, resolution * 16 / 9))
           expect(size.height).toBeLessThanOrEqual(Math.min(height, resolution))
           const scale = Math.min(1, resolution * 16 / 9 / width, resolution / height)
-          expect(Math.abs(size.width - width * scale)).toBeLessThanOrEqual(.5)
+          expect(size.width % 2).toBe(0)
+          expect(Math.abs(size.width - width * scale)).toBeLessThanOrEqual(1)
           expect(Math.abs(size.height - height * scale)).toBeLessThanOrEqual(.5)
         }
       }
