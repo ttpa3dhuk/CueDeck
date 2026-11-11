@@ -431,6 +431,8 @@ export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080,
     enableLargerThanScreen: true,
     backgroundColor: '#000000',
     title: 'CueDeck (GPU audience)',
+    // Windows' invisible thick frame enlarges OSR textures at fractional DPI.
+    thickFrame: false,
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
@@ -448,6 +450,20 @@ export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080,
   win.webContents.setFrameRate(30)
   if (load) loadGpuAudiencePage(win)
   return win
+}
+
+/** Render the actual confidence monitor to its own fixed-size GPU texture. */
+export function createGpuPrompterWindow(load = true): BrowserWindow {
+  const win = createGpuAudienceWindow(1920, 1080, false)
+  if (load) loadGpuPrompterPage(win)
+  return win
+}
+
+/** Keep the physical/OMT speaker registration independent of the GPU output. */
+export function loadGpuPrompterPage(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  loadRenderer(win, { entry: 'presenter', role: 'speaker' })
+  store.registerWindow('gpu-prompter', win)
 }
 
 /** A display-only GPU consumer: no audience state registration or media load. */

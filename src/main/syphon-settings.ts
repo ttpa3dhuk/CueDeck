@@ -13,7 +13,11 @@ import {
   getSyphonSettings,
   hasSyphonSettings,
   setSyphonSettings,
+  getSyphonPrompterSettings,
+  setSyphonPrompterSettings,
 } from './display-mapping.js'
+import { GpuPrompterMode } from './syphon-gpu-prompter.js'
+import { t } from '../shared/i18n.js'
 import {
   GpuAudienceMode,
   type GpuAudienceHooks,
@@ -67,9 +71,11 @@ export interface SyphonManagerDeps {
   saveSettings: (settings: SyphonSettings) => void
   publish: (status: SyphonStatus) => void
   createMode: (options: GpuAudienceOptions, hooks: GpuAudienceHooks) => SyphonModeLike
+  validateSettings?: (settings: SyphonSettings) => string | null
 }
 
-function defaultDeps(): SyphonManagerDeps {
+function defaultDeps(output: 'audience' | 'prompter' = 'audience'): SyphonManagerDeps {
+  const prompter = output === 'prompter'
   return {
     platform: process.platform,
     packaged: app.isPackaged,
@@ -78,6 +84,7 @@ function defaultDeps(): SyphonManagerDeps {
     nativePath: nativePath(),
     nativeExists: existsSync,
     loadSettings: () => {
+      if (prompter) return { settings: getSyphonPrompterSettings(), stored: true }
       const stored = hasSyphonSettings()
       return {
         settings: startupSyphonSettings(
@@ -86,9 +93,14 @@ function defaultDeps(): SyphonManagerDeps {
         stored,
       }
     },
-    saveSettings: setSyphonSettings,
-    publish: (status) => store.patch({ syphon: status }),
-    createMode: (options, hooks) => new GpuAudienceMode(options, hooks),
+    saveSettings: prompter ? setSyphonPrompterSettings : setSyphonSettings,
+    publish: (status) => store.patch(prompter ? { syphonPrompter: status } : { syphon: status }),
+    createMode: (options, hooks) => prompter ? new GpuPrompterMode(options, hooks) : new GpuAudienceMode(options, hooks),
+    validateSettings: (settings) => {
+      const other = (prompter ? manager : prompterManager)?.getStatus()
+      return settings.enabled && other?.enabled && settings.name.toLowerCase() === other.name.toLowerCase()
+        ? t('Имена источников зала и суфлёра должны различаться') : null
+    },
   }
 }
 
@@ -194,7 +206,10 @@ export class SyphonGpuManager {
   }
 
   private async applyConfigure(patch: Partial<SyphonSettings>): Promise<SyphonConfigureResult> {
-    this.settings = { ...this.settings, ...patch }
+    const next = { ...this.settings, ...patch }
+    const invalid = this.deps.validateSettings?.(next)
+    if (invalid) return this.failure(invalid)
+    this.settings = next
     this.deps.saveSettings(this.settings)
     this.status = { ...this.status, enabled: this.settings.enabled, name: this.settings.name }
     this.publish()
@@ -235,6 +250,11 @@ export class SyphonGpuManager {
   private async startMode(): Promise<boolean> {
     if (this.stopping) await this.stopGate
     if (this.mode) return true
+    const invalid = this.deps.validateSettings?.(this.settings)
+    if (invalid) {
+      this.setState('error', 'runtime', invalid)
+      return false
+    }
     const unavailable = this.unavailableReason()
     if (unavailable) {
       this.setState('unavailable', unavailable, this.unavailableDetail(unavailable))
@@ -391,27 +411,36 @@ export class SyphonGpuManager {
 }
 
 let manager: SyphonGpuManager | null = null
+let prompterManager: SyphonGpuManager | null = null
 
 function ensureManager(): SyphonGpuManager {
   if (!manager) manager = new SyphonGpuManager()
   return manager
 }
 
+function ensurePrompterManager(): SyphonGpuManager {
+  if (!prompterManager) prompterManager = new SyphonGpuManager(defaultDeps('prompter'))
+  return prompterManager
+}
+
 /** Called once after boot layout; reads persisted settings and may start the output. */
 export function initSyphonGpuAudience(): void {
-  void ensureManager().init().catch((error: unknown) => {
+  void Promise.all([ensureManager().init(), ensurePrompterManager().init()]).catch((error: unknown) => {
     log.error(`syphon-gpu-audience: init failed: ${(error as Error).message}`)
   })
 }
 
 export function registerSyphonIpc(): void {
   registerSettingsIpc(ensureManager())
+  registerSettingsIpc(ensurePrompterManager(), 'syphon-prompter')
 }
 
 export async function shutdownSyphonGpuAudience(): Promise<void> {
   const current = manager
+  const prompter = prompterManager
   manager = null
-  if (current) await current.shutdown()
+  prompterManager = null
+  await Promise.all([current?.shutdown(), prompter?.shutdown()])
 }
 
 export function gpuAudienceStatus(): SyphonStatus | null {

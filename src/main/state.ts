@@ -4,7 +4,7 @@ import { DEFAULT_TIMER_ADJUSTMENTS } from '../shared/timer-controls.js'
 import { DEFAULT_STARTUP_SETTINGS } from '../shared/startup-settings.js'
 import { DEFAULT_TAKE_FADE_MS } from '../shared/take-transition.js'
 import { BrowserWindow } from 'electron'
-import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS, defaultSyphonStatus } from '../shared/types.js'
+import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS, DEFAULT_SYPHON_PROMPTER_SETTINGS, defaultSyphonStatus } from '../shared/types.js'
 import type { AppState, DeckState, Role, TimerState, VideoState } from '../shared/types.js'
 import { createAudienceTimer } from '../shared/audience-timer.js'
 
@@ -163,6 +163,7 @@ export function initialState(): AppState {
       },
     },
     syphon: defaultSyphonStatus(),
+    syphonPrompter: { ...defaultSyphonStatus(), ...DEFAULT_SYPHON_PROMPTER_SETTINGS },
   }
 }
 
@@ -176,7 +177,7 @@ function positionOf(v: VideoState): number {
 }
 
 /** Окна, которым рассылается состояние: роли раскладки + служебные (оверлей OMT). */
-export type WindowKey = Role | 'omt-timer'
+export type WindowKey = Role | 'omt-timer' | 'gpu-prompter'
 
 type Listener = (state: AppState, patch: Partial<AppState>) => void
 

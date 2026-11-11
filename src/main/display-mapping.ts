@@ -26,6 +26,7 @@ import {
   STREAM_KEYFRAME_SEC,
   STREAM_MAX_DESTINATIONS,
   DEFAULT_SYPHON_SETTINGS,
+  DEFAULT_SYPHON_PROMPTER_SETTINGS,
   SYPHON_NAME_MAX,
   type OmtFps,
   type OmtResolution,
@@ -105,6 +106,7 @@ interface PersistedShape {
   omt: OmtSettings
   /** Syphon для Resolume/OBS (syphon-settings.ts). Нет в файле — не трогали (env QA). */
   syphon?: SyphonSettings
+  syphonPrompter?: SyphonSettings
   /** MIDI-входы, которые слушает CueDeck — имена устройств («Настройки → MIDI»). */
   midiInputs: string[]
   /** Профили площадки (profiles.ts) — список, новые в конце. */
@@ -749,6 +751,17 @@ export function setSyphonSettings(value: SyphonSettings): void {
     enabled: value.enabled === true,
     name: cleanSyphonName(value.name, DEFAULT_SYPHON_SETTINGS.name),
   })
+}
+
+export function getSyphonPrompterSettings(): SyphonSettings {
+  const raw = (store().get('syphonPrompter') ?? {}) as Partial<SyphonSettings>
+  return { enabled: raw.enabled === true,
+    name: cleanSyphonName(raw.name, DEFAULT_SYPHON_PROMPTER_SETTINGS.name) }
+}
+
+export function setSyphonPrompterSettings(value: SyphonSettings): void {
+  store().set('syphonPrompter', { enabled: value.enabled === true,
+    name: cleanSyphonName(value.name, DEFAULT_SYPHON_PROMPTER_SETTINGS.name) })
 }
 
 export function setRemoteSettings(value: RemoteSettings): void {

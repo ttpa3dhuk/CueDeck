@@ -15,6 +15,9 @@
  * множественного числа ни в одном языке.
  */
 export const EN: Record<string, string> = {
+  "Имена источников зала и суфлёра должны различаться": "The audience and prompter source names must be different",
+  "Имя источника суфлёра": "Prompter source name",
+  "Отдельный выход суфлёра. Работает независимо от выхода зала и физических экранов.": "Separate prompter output. Works independently of the audience output and physical displays.",
   "Передавать состояние в Companion": "Send state to Companion",
   "Экспорт страницы…": "Export page…",
   "Экспорт страницы CueDeck для Companion": "Export the CueDeck page for Companion",

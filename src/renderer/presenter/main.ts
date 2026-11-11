@@ -3355,6 +3355,7 @@ function wireGotoInput(input: HTMLInputElement, goto: (slide: number) => void): 
 }
 
 function setupOperatorControls(): void {
+  if (role !== 'operator') return
   $('mobile-clicker-reset').addEventListener('click', () => { void window.api.mobileClicker.resetLink().then(renderMobileClicker).catch(e => showBanner(String(e))) })
   const refreshClickerIndicator = (): void => {
     void window.api.mobileClicker.status().then(status => renderMobileClickerIndicator(status.enabled)).catch(() => renderMobileClickerIndicator(false))
@@ -3376,7 +3377,6 @@ function setupOperatorControls(): void {
     const image = $<HTMLImageElement>('mobile-clicker-qr')
     if (qr) image.src = qr; else image.removeAttribute('src')
   })
-  if (role !== 'operator') return
   // Prev/№/Next из футера убраны (Б-5): эфиром рулят кликер и клавиши,
   // точечный переход по номеру остался в навигации превью.
   wireGotoInput($<HTMLInputElement>('preview-goto-input'), (n) => window.api.preview.goto(n))
@@ -3905,6 +3905,7 @@ function setupOperatorControls(): void {
     if (patch?.remote && !settingsModal.classList.contains('hidden')) renderRemoteStatus(s.remote)
     if (patch?.omt && !settingsModal.classList.contains('hidden')) renderOmtStatus(s.omt)
     if (patch?.syphon && !settingsModal.classList.contains('hidden')) renderSyphonStatus(s.syphon)
+    if (patch?.syphonPrompter && !settingsModal.classList.contains('hidden')) renderSyphonStatus(s.syphonPrompter, true)
     if (patch?.omt) renderOmtButton(s.omt)
   })
   renderOmtButton(getState().omt)
@@ -5366,6 +5367,7 @@ function openSettings(section: SettingsSection = 'screens'): void {
   wireRemoteSection(getState().remote)
   wireOmtSection(getState().omt)
   wireSyphonSection(getState().syphon)
+  wireSyphonSection(getState().syphonPrompter, true)
   showSettingsSection(section)
   settingsModal.classList.remove('hidden')
   settingsWindow?.onOpen()
@@ -5998,15 +6000,16 @@ function syphonReasonText(reason: SyphonReason | null): string {
   }
 }
 
-function renderSyphonStatus(syphon: SyphonStatus): void {
-  const card = document.getElementById('syphon-settings')
+function renderSyphonStatus(syphon: SyphonStatus, prompter = false): void {
+  const prefix = prompter ? 'syphon-prompter' : 'syphon'
+  const card = document.getElementById(prompter ? 'syphon-prompter-settings' : 'syphon-audience-settings')
   if (!card) return
-  card.classList.toggle('hidden', !['darwin', 'win32'].includes(window.api.platform))
+  $('syphon-settings').classList.toggle('hidden', !['darwin', 'win32'].includes(window.api.platform))
   $('local-gpu-title').textContent = window.api.platform === 'win32' ? 'Spout' : 'Syphon'
   $('local-gpu-platform').textContent = window.api.platform === 'win32' ? 'Windows' : 'macOS'
-  const enabled = $<HTMLInputElement>('syphon-enabled')
-  const name = $<HTMLInputElement>('syphon-name')
-  const status = $('syphon-status')
+  const enabled = $<HTMLInputElement>(`${prefix}-enabled`)
+  const name = $<HTMLInputElement>(`${prefix}-name`)
+  const status = $(`${prefix}-status`)
   const unavailable = syphon.state === 'unavailable'
   enabled.checked = syphon.enabled
   enabled.disabled = unavailable
@@ -6037,18 +6040,23 @@ function renderSyphonStatus(syphon: SyphonStatus): void {
   }
 }
 
-function wireSyphonSection(syphon: SyphonStatus): void {
-  renderSyphonStatus(syphon)
-  const enabled = $<HTMLInputElement>('syphon-enabled')
-  const name = $<HTMLInputElement>('syphon-name')
+function wireSyphonSection(syphon: SyphonStatus, prompter = false): void {
+  const prefix = prompter ? 'syphon-prompter' : 'syphon'
+  const key = prompter ? 'syphonPrompter' : 'syphon'
+  const api = window.api[key]
+  const render = (status: SyphonStatus): void => renderSyphonStatus(status, prompter)
+  render(syphon)
+  const enabled = $<HTMLInputElement>(`${prefix}-enabled`)
+  const name = $<HTMLInputElement>(`${prefix}-name`)
   enabled.onchange = () => {
     void (async () => {
       enabled.disabled = true
       try {
-        const result = await window.api.syphon.configure({ enabled: enabled.checked })
-        renderSyphonStatus(result.status)
+        const result = await api.configure({ enabled: enabled.checked })
+        render(result.status)
+        if (!result.ok) showBanner(result.error, 5000)
       } catch {
-        renderSyphonStatus(getState().syphon)
+        render(getState()[key])
         showBanner(t('Не удалось изменить настройку видеовыхода'), 5000)
       }
     })()
@@ -6057,15 +6065,16 @@ function wireSyphonSection(syphon: SyphonStatus): void {
     void (async () => {
       const value = name.value.trim()
       if (!value) {
-        renderSyphonStatus(getState().syphon)
+        render(getState()[key])
         return
       }
       name.disabled = true
       try {
-        const result = await window.api.syphon.configure({ name: value })
-        renderSyphonStatus(result.status)
+        const result = await api.configure({ name: value })
+        render(result.status)
+        if (!result.ok) showBanner(result.error, 5000)
       } catch {
-        renderSyphonStatus(getState().syphon)
+        render(getState()[key])
         showBanner(t('Не удалось изменить имя видеовыхода'), 5000)
       }
     })()

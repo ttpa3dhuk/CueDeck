@@ -23,6 +23,14 @@ function register(wc: WC, key: unknown = expectedProgramVideo(), frame=wc.mainFr
 }
 beforeEach(() => { h.handlers.clear();h.windows.clear();h.state={fileKind:'video',pdfSha1:'a',currentSlide:1,slideMedia:[],layout:'operator-speaker-audience'};registerProgramMirrorIpc(true) })
 describe('program frame routing', () => {
+  it('can share program video with both physical and GPU prompters', () => {
+    const audience=add('audience',2), physical=add('speaker',3), gpu=add('gpu-prompter',4)
+    register(physical);register(gpu);register(audience)
+    expect(physical.postMessage).toHaveBeenCalledOnce()
+    expect(gpu.postMessage).toHaveBeenCalledOnce()
+    expect(audience.postMessage).toHaveBeenCalledTimes(2)
+    expect(gpu.postMessage.mock.calls[0][1].mode).toBe('consumer')
+  })
   it('connects only the actual program owner to registered consumers, in either registration order', () => {
     const op=add('operator',1), audience=add('audience',2), speaker=add('speaker',3)
     register(op);register(speaker);expect(op.postMessage).not.toHaveBeenCalled()
