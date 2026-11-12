@@ -333,6 +333,8 @@ export interface PresenterApi {
     /** Окно звука NDI: кусок звука зала, 32 бит float по каналам подряд. */
     sendAudio(chunk: { sampleRate: number; channels: number; frames: number; data: Float32Array }): void
   }
+  spoutGraphicsHelp(): Promise<{ exePath: string; options: Array<{ preference: 1 | 2; name: string | null; powershell: string }> }>
+  openSpoutGraphicsSettings(): Promise<void>
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */
     pathFor(file: File): string

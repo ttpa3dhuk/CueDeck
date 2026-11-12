@@ -15,6 +15,22 @@
  * множественного числа ни в одном языке.
  */
 export const EN: Record<string, string> = {
+  "Вариант 1 — через настройки Windows": "Option 1 — Windows settings",
+  "Добавьте классическое приложение по пути ниже. В его параметрах выберите тот же режим, что указан выше. Для Resolume / OBS выберите ту же видеокарту.": "Add a desktop app using the path below. In its options, select the same mode as above. Select the same graphics card for Resolume / OBS.",
+  "Режим GPU Windows": "Windows GPU mode",
+  "Энергосбережение": "Power saving",
+  "Высокая производительность": "High performance",
+  "Путь к CueDeck": "CueDeck path",
+  "Вариант 2 — через PowerShell": "Option 2 — PowerShell",
+  "Команда обновляется при выборе режима. Вставьте её в PowerShell и нажмите Enter. Она изменит режим GPU только этой копии CueDeck для текущего пользователя. Права администратора не нужны.": "The command updates when you select a mode. Paste it into PowerShell and press Enter. It changes the GPU mode for this copy of CueDeck for the current user only. Administrator rights are not required.",
+  "После изменения полностью закройте и снова откройте CueDeck и Resolume / OBS.": "After making the change, fully close and reopen CueDeck and Resolume / OBS.",
+  "Не удалось скопировать текст.": "Could not copy the text.",
+  "Настройка видеокарты для Spout…": "Set up graphics for Spout…",
+  "Видеокарта для Spout": "Graphics card for Spout",
+  "CueDeck и Resolume / OBS должны использовать одну видеокарту.": "CueDeck and Resolume / OBS must use the same graphics card.",
+  "Если настройки не открылись: Параметры Windows → Система → Дисплей → Графика.": "If settings did not open: Windows Settings → System → Display → Graphics.",
+  "Открыть настройки графики Windows": "Open Windows graphics settings",
+  "Не удалось открыть настройки графики Windows.": "Could not open Windows graphics settings.",
   "Имена источников зала и суфлёра должны различаться": "The audience and prompter source names must be different",
   "Имя источника суфлёра": "Prompter source name",
   "Отдельный выход суфлёра. Работает независимо от выхода зала и физических экранов.": "Separate prompter output. Works independently of the audience output and physical displays.",

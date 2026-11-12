@@ -1121,6 +1121,10 @@ kbd {
   text-align: center;
 }
 .lo-modal-icon { font-size: 40px; line-height: 1; margin-bottom: 4px; }
+#spout-graphics-modal .lo-modal-content { width: 600px; max-width: 90vw; max-height: 90vh; overflow-y: auto; }
+#spout-graphics-modal .lo-code-block input { flex: 1; min-width: 0; font-family: monospace; }
+#spout-graphics-modal .lo-code-block code { min-width: 0; max-height: 120px; overflow: auto; overflow-wrap: anywhere; font-size: 12px; }
+#spout-gpu-choice { padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-2); color: var(--text); font: inherit; }
 .lo-modal-content h2 { font-size: 18px; font-weight: 600; margin: 0; }
 .lo-modal-subtitle {
   color: var(--muted);

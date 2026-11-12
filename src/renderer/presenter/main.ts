@@ -6084,12 +6084,64 @@ function renderSyphonStatus(syphon: SyphonStatus, prompter = false): void {
   }
 }
 
+async function showSpoutGraphicsHelp(): Promise<void> {
+  if (window.api.platform !== 'win32') return
+  const info = await window.api.spoutGraphicsHelp()
+  const modal = $('spout-graphics-modal')
+  const path = $<HTMLInputElement>('spout-exe-path')
+  path.value = info.exePath
+  path.onclick = () => path.select()
+  const gpuChoice = $<HTMLSelectElement>('spout-gpu-choice')
+  gpuChoice.replaceChildren(...info.options.map(option => {
+    const mode = option.preference === 1 ? t('Энергосбережение') : t('Высокая производительность')
+    return new Option(option.name ? `${option.name} — ${mode}` : mode, String(option.preference))
+  }))
+  gpuChoice.value = '2'
+  const updateCommand = (): void => {
+    $('spout-graphics-command').textContent = info.options.find(option => String(option.preference) === gpuChoice.value)!.powershell
+    $('spout-command-copy').textContent = '⧉'
+  }
+  gpuChoice.onchange = updateCommand
+  updateCommand()
+  const close = (): void => {
+    modal.classList.add('hidden')
+    $('spout-graphics-help').focus()
+  }
+  for (const id of ['spout-exe-copy', 'spout-command-copy']) {
+    const button = $(id)
+    button.onclick = () => {
+      const text = id === 'spout-exe-copy' ? path.value : $('spout-graphics-command').textContent ?? ''
+      void navigator.clipboard.writeText(text).then(() => {
+        button.textContent = '✓'
+        window.setTimeout(() => { button.textContent = '⧉' }, 1500)
+      }).catch(() => showBanner(t('Не удалось скопировать текст.'), 5000))
+    }
+  }
+  $('spout-open-graphics').onclick = () => {
+    void window.api.openSpoutGraphicsSettings().catch(() => showBanner(t('Не удалось открыть настройки графики Windows.'), 5000))
+  }
+  $('spout-graphics-close').onclick = close
+  modal.onclick = (event) => { if (event.target === modal) close() }
+  modal.onkeydown = (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close() }
+  }
+  modal.classList.remove('hidden')
+  $('spout-graphics-close').focus()
+}
+
 function wireSyphonSection(syphon: SyphonStatus, prompter = false): void {
   const prefix = prompter ? 'syphon-prompter' : 'syphon'
   const key = prompter ? 'syphonPrompter' : 'syphon'
   const api = window.api[key]
   const render = (status: SyphonStatus): void => renderSyphonStatus(status, prompter)
   render(syphon)
+  if (!prompter) {
+    const help = $('spout-graphics-help')
+    help.classList.toggle('hidden', window.api.platform !== 'win32')
+    help.onclick = () => {
+      void showSpoutGraphicsHelp().catch(() => showBanner(t('Не удалось открыть настройки графики Windows.'), 5000))
+    }
+  }
   const enabled = $<HTMLInputElement>(`${prefix}-enabled`)
   const name = $<HTMLInputElement>(`${prefix}-name`)
   enabled.onchange = () => {
