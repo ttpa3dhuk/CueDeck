@@ -43,7 +43,6 @@ import { setupSettingsWindow } from './settings-window'
 import { timerFontCss } from '../../shared/timer-font'
 import { refreshTimerFonts, syncTimerFontSelect, setupTimerFontBrowsing } from './timer-font-ui'
 import { setupAudienceTimerUi } from './audience-timer-ui'
-import { setupHoldButton } from '../shared/hold-button'
 import { resolveFrameStepDeck, resolveRangeActionForKey } from '../shared/video-focus'
 import { videoRangeLayout } from '../../shared/video-range'
 import { formatFrameTimecode } from '../../shared/frame-timecode'
@@ -100,7 +99,7 @@ const playlistCompactToggle = role === 'operator' ? $<HTMLInputElement>('playlis
 const playlistAutoAdvanceToggle = role === 'operator' ? $<HTMLInputElement>('playlist-auto-advance-toggle') : null
 const kvPreview = role === 'operator' ? $('kv-preview') : null
 const kvSetBtn = role === 'operator' ? $<HTMLButtonElement>('kv-set') : null
-const kvClearBtn = role === 'operator' ? $<HTMLButtonElement>('kv-clear') : null
+const kvClearBtn = role === 'operator' ? $<HTMLButtonElement>('kv-clear-menu') : null
 
 let sofficePresentCache: boolean | null = null
 
@@ -130,6 +129,7 @@ async function refreshKeyVisualPreview(state: AppState): Promise<void> {
   // текст в 57×32 не влезает.
   if (!path) {
     kvPreview.classList.add('kv-empty')
+    kvPreview.classList.remove('kv-video')
     kvPreview.title = t('Нет заставки — Blackout покажет чёрный экран')
     kvPreview.style.backgroundImage = ''
     return
@@ -3875,7 +3875,48 @@ function setupOperatorControls(): void {
   kvSetBtn!.addEventListener('click', () => {
     window.api.keyvisual.set()
   })
-  setupHoldButton(kvClearBtn!, 2000, () => { void window.api.keyvisual.clear() })
+  const kvMenu = $('kv-menu')
+  const openKeyVisualMenu = (): void => {
+    kvClearBtn!.disabled = !getState().keyVisualPath
+    kvMenu.showPopover()
+    const anchor = kvSetBtn!.getBoundingClientRect()
+    kvMenu.style.left = `${Math.max(8, Math.min(anchor.right - kvMenu.offsetWidth, window.innerWidth - kvMenu.offsetWidth - 8))}px`
+    kvMenu.style.top = `${Math.max(8, Math.min(anchor.bottom + 6, window.innerHeight - kvMenu.offsetHeight - 8))}px`
+    if (kvClearBtn!.disabled) kvMenu.focus()
+    else kvClearBtn!.focus()
+  }
+  kvSetBtn!.addEventListener('contextmenu', (event) => {
+    event.preventDefault(); event.stopPropagation(); openKeyVisualMenu()
+  })
+  kvSetBtn!.addEventListener('keydown', (event) => {
+    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+      event.preventDefault(); event.stopPropagation(); openKeyVisualMenu()
+    }
+  })
+  // On macOS contextmenu fires on mouse-down. An auto popover is light-dismissed
+  // by that same right button's mouse-up outside it. Own dismissal explicitly.
+  const closeKeyVisualMenu = (): void => {
+    if (kvMenu.matches(':popover-open')) kvMenu.hidePopover()
+  }
+  document.addEventListener('pointerdown', event => {
+    const target = event.target as Node | null
+    if (target && !kvMenu.contains(target) && !kvSetBtn!.contains(target)) closeKeyVisualMenu()
+  }, true)
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && kvMenu.matches(':popover-open')) {
+      event.preventDefault(); event.stopPropagation()
+      closeKeyVisualMenu(); kvSetBtn!.focus()
+    }
+  }, true)
+  window.addEventListener('blur', closeKeyVisualMenu)
+  window.addEventListener('resize', closeKeyVisualMenu)
+  kvMenu.addEventListener('toggle', () => kvSetBtn!.setAttribute('aria-expanded', String(kvMenu.matches(':popover-open'))))
+  kvMenu.addEventListener('keydown', event => event.stopPropagation())
+  kvClearBtn!.addEventListener('click', () => {
+    kvMenu.hidePopover()
+    kvSetBtn!.focus()
+    void window.api.keyvisual.clear()
+  })
 
   // Help button + menu
   $<HTMLButtonElement>('help-btn').addEventListener('click', showHelpModal)
@@ -6413,14 +6454,7 @@ function buildOperatorBottomBar(): void {
   // The message box is already a child of #op-bottombar (declared in HTML);
   // append() moves it into the right slot.
   bottom.append(timerBox, notes, $('speaker-msg-box'), takeControls)
-  const sides = [document.querySelector<HTMLElement>('.session-btns')!, document.querySelector<HTMLElement>('.topbar-right')!]
-  const balanceToolbar = (): void => {
-    const width = Math.ceil(Math.max(...sides.map(side => side.getBoundingClientRect().width)))
-    document.documentElement.style.setProperty('--toolbar-side-width', `${width}px`)
-  }
-  const toolbarObserver = new ResizeObserver(balanceToolbar)
-  sides.forEach(side => toolbarObserver.observe(side))
-  balanceToolbar()
+
 
 }
 
