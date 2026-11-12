@@ -323,6 +323,8 @@ export interface PresenterApi {
     >
   }
   syphonPrompter: PresenterApi['syphon']
+  spoutGraphicsHelp(): Promise<{ exePath: string; options: Array<{ preference: 1 | 2; name: string | null; powershell: string }> }>
+  openSpoutGraphicsSettings(): Promise<void>
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */
     pathFor(file: File): string
