@@ -70,7 +70,7 @@ vi.mock('../src/main/state.js', () => ({
 }))
 vi.mock('../src/main/audience-close-guard.js', () => ({ attachAudienceCloseGuard: vi.fn() }))
 
-import { acquireGhost, applyLayout, createGpuAudienceWindow, createGpuPrompterWindow, createHiddenAudienceWindow, getActiveWindows, reconcileGpuAudienceDisplay, releaseGhost } from '../src/main/windows'
+import { acquireGhost, applyLayout, createGpuAudienceWindow, createNdiOverlayWindow, createGpuPrompterWindow, createHiddenAudienceWindow, getActiveWindows, reconcileGpuAudienceDisplay, releaseGhost } from '../src/main/windows'
 import { clearGpuAudienceGuard, setGpuAudienceGuard } from '../src/main/gpu-audience-arbiter'
 
 beforeEach(() => {
@@ -239,4 +239,17 @@ describe('real GPU audience window factory', () => {
     clearGpuAudienceGuard(guard)
     mocks.registeredWindow.mockReturnValue(undefined)
   })
+})
+
+
+it.each([1, 1.15, 1.5, 2])('creates the NDI timer at its selected pixel size at desktop scale %s', scale => {
+  mocks.displayScale = scale
+  mocks.initialHeightLimit = 600
+  mocks.resizeRounding = [1, 1]
+  const win = createNdiOverlayWindow(1280, 720) as unknown as InstanceType<typeof mocks.MockBrowserWindow>
+  expect(win.getSize()).toEqual([1280, 720])
+  expect(win.options.webPreferences.offscreen).toEqual({ useSharedTexture: false, deviceScaleFactor: 1 })
+  expect(win.options.transparent).toBe(true)
+  expect(win.options.thickFrame).toBe(false)
+  expect(mocks.registerWindow).toHaveBeenCalledWith('ndi-timer', win)
 })

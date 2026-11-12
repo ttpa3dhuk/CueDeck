@@ -2177,9 +2177,17 @@ body[data-theme="light"] #slide-fade-modal { color-scheme: light; }
 .remote-port input.remote-host { width: 130px; }
 .remote-status.on { color: var(--timer-green); }
 .remote-status.error { color: var(--danger); }
-/* Выходы — OMT и Syphon в одном разделе окна «Настройки» */
-.output-group { display: flex; flex-direction: column; gap: 8px; }
-.output-group + .output-group { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 6px; }
+/* Expand only the output protocols being configured. */
+.output-group { display: block; border: 1px solid var(--border); border-radius: 6px; }
+.output-group > summary { display: flex; align-items: center; gap: 8px; padding: 12px; cursor: pointer; list-style: none; }
+.output-group > summary::-webkit-details-marker { display: none; }
+.output-group > summary::before { content: '›'; font-size: 20px; line-height: 1; width: 12px; text-align: center; color: var(--muted); }
+.output-group[open] > summary::before { transform: rotate(90deg); }
+.output-group > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
+.output-group[open] > summary { border-bottom: 1px solid var(--border); }
+.output-group-body { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.output-group-body > .audio-hint { margin: 0; }
+.output-group-status { margin-left: auto; white-space: nowrap; }
 .output-title { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
 .output-title-row { display: flex; align-items: baseline; gap: 8px; }
 .output-badge {
@@ -2514,7 +2522,7 @@ body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--a
 
 /* ── Трансляция: кнопка STREAM и окно ── */
 .bottombar .stream-btn,
-.bottombar .omt-btn,
+.bottombar .external-btn,
 .bottombar .overlay-btn {
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -2529,13 +2537,13 @@ body[data-theme="light"] .op-bottombar-handle:hover::after { background: var(--a
 .bottombar .stream-btn.on { background: var(--danger); border-color: var(--danger); color: #fff; }
 .bottombar .stream-btn.warn { animation: stream-warn 1s steps(1, end) infinite; }
 /* Выходы OMT: красная — наш источник в эфире у vMix (tally), зелёная — в превью. */
-.bottombar .omt-btn,
+.bottombar .external-btn,
 .bottombar .overlay-btn { margin-left: 8px; }
-.omt-btn-tally:empty { display: none; }
-.omt-btn-tally { font-weight: 600; letter-spacing: 0; }
-.bottombar .omt-btn.program { background: var(--danger); border-color: var(--danger); color: #fff; }
-.bottombar .omt-btn.preview { background: var(--timer-green); border-color: var(--timer-green); color: #fff; }
-.bottombar .omt-btn.warn { color: var(--warning); border-color: var(--warning); }
+.external-btn-tally:empty { display: none; }
+.external-btn-tally { font-weight: 600; letter-spacing: 0; }
+.bottombar .external-btn.program { background: var(--danger); border-color: var(--danger); color: #fff; }
+.bottombar .external-btn.preview { background: var(--timer-green); border-color: var(--timer-green); color: #fff; }
+.bottombar .external-btn.warn { color: var(--warning); border-color: var(--warning); }
 @keyframes stream-warn {
   0% { background: var(--warning); border-color: var(--warning); color: #111; }
   50% { background: var(--danger); border-color: var(--danger); color: #fff; }
@@ -3163,3 +3171,5 @@ body[data-role="operator"] #program-playback > #current-meter {
 .settings-body .audience-timer-field-column > label:has(> select) { grid-template-columns: minmax(0, 1fr); }
 .settings-body .audience-timer-field-column > label > select { width: 100%; }
 #prompter-timer-reset { align-self: flex-start; }
+
+.bottombar .external-btn.on { border-color: var(--accent); }

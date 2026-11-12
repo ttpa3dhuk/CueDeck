@@ -22,6 +22,7 @@ import { initSyphonGpuProbe } from './syphon-gpu-probe.js'
 import { initSyphonGpuAudience, registerSyphonIpc } from './syphon-settings.js'
 import { initLoopProbe } from './loop-probe.js'
 import { registerOmtInputIpc } from './omt/input-ipc.js'
+import { initNdi, registerNdiIpc } from './ndi/outputs.js'
 import { registerProfileIpc } from './profiles.js'
 import { askBootLayout } from './boot-dialog.js'
 import { askUiLang } from './lang-dialog.js'
@@ -479,6 +480,7 @@ app.whenReady().then(async () => {
   registerOmtIpc()
   registerSyphonIpc()
   registerOmtInputIpc()
+  registerNdiIpc()
   registerWindowCapture()
   initStream()
 
@@ -602,6 +604,7 @@ app.whenReady().then(async () => {
   // выбирает раскладку, кнопки уже должны отвечать, а не сыпать ошибками.
   await initRemote()
   initOmt()
+  initNdi()
 
   setOperatorWindowHook(attachOperatorCloseGuard)
   await bootNag()

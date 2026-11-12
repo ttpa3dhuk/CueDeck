@@ -331,7 +331,7 @@
       <footer class="bottombar op-only">
         <div class="bottombar-left">
           <button id="stream-btn" class="stream-btn" title="Трансляция: площадки, ключи, качество"><span class="stream-btn-label">STREAM</span><span id="stream-btn-time" class="stream-btn-time"></span></button>
-          <button id="omt-btn" class="omt-btn"><span class="omt-btn-label">OMT</span><span id="omt-btn-tally" class="omt-btn-tally"></span></button>
+          <button id="external-btn" class="external-btn"><span>EXTERNAL</span><span id="external-btn-tally" class="external-btn-tally"></span></button>
           <span id="preparation-progress" class="hidden" role="status" aria-live="polite" title="Подготовка презентаций"></span>
 
         </div>
@@ -878,8 +878,9 @@
     </div>
             </section>
             <section class="settings-section hidden" data-section="omt">
-              <div class="output-group">
-                <h3 class="output-title">OMT</h3>
+              <details id="omt-settings" class="output-group">
+                <summary><span class="output-title">OMT</span><span id="omt-group-status" class="output-group-status remote-status"></span></summary>
+                <div class="output-group-body">
                 <p class="audio-hint">Источники в сети для vMix 29+ и OBS (плагин OMT).</p>
                 <div id="omt-section" class="omt-list">
                 <div class="omt-row" data-omt="timer">
@@ -944,11 +945,10 @@
                   <p id="omt-error" class="remote-status error hidden"></p>
                 </div>
               </div>
-              <div id="syphon-settings" class="output-group">
-                <div class="output-title-row">
-                  <h3 id="local-gpu-title" class="output-title">Syphon</h3>
-                  <span id="local-gpu-platform" class="output-badge">macOS</span>
-                </div>
+              </details>
+              <details id="syphon-settings" class="output-group">
+                <summary><span id="local-gpu-title" class="output-title">Syphon</span><span id="local-gpu-platform" class="output-badge">macOS</span><span id="syphon-group-status" class="output-group-status remote-status"></span></summary>
+                <div class="output-group-body">
                 <p class="audio-hint">Локальный видеовыход для Resolume и OBS. Только картинка, без звука.</p>
                 <div id="syphon-audience-settings" class="syphon-card">
                 <div class="syphon-row">
@@ -960,7 +960,7 @@
                   <span class="syphon-resolution" title="Разрешение">1920×1080</span>
                   <span id="syphon-status" class="syphon-status remote-status" role="status"></span>
                 </div>
-                <p class="audio-hint">Работает вместе с окном зала. OMT «Зал» и стрим занимают этот выход.</p>
+                <p class="audio-hint">Работает вместе с окном зала. OMT «Зал», NDI «Зал» и стрим занимают этот выход.</p>
                 </div>
                 <div id="syphon-prompter-settings" class="syphon-card">
                   <div class="syphon-row">
@@ -975,6 +975,85 @@
                   <p class="audio-hint">Отдельный выход суфлёра. Работает независимо от выхода зала и физических экранов.</p>
                 </div>
               </div>
+              </details>
+              <details id="ndi-settings" class="output-group">
+                <summary><span class="output-title">NDI</span><span id="ndi-group-status" class="output-group-status remote-status"></span></summary>
+                <div class="output-group-body">
+              <p class="audio-hint">Источники в сети для OBS, vMix, Wirecast и любых NDI-программ.</p>
+              <p class="audio-hint">Для NDI нужен установленный NDI Runtime. После установки выключи и снова включи выход.</p>
+              <div id="ndi-section" class="omt-list">
+                <div class="omt-row ndi-row" data-ndi="timer">
+                  <label class="windowed-label">
+                    <input class="omt-on ndi-on" type="checkbox" />
+                    <span>Таймер <span class="windowed-hint">(прозрачный фон)</span></span>
+                  </label>
+                  <input class="omt-name ndi-name" type="text" spellcheck="false" maxlength="64" />
+                  <select class="omt-size ndi-size">
+                    <option value="720">720p</option>
+                    <option value="1080">1080p</option>
+                    <option value="2160">4K</option>
+                  </select>
+                  <select class="omt-fps ndi-fps">
+                    <option value="15">15 fps</option>
+                    <option value="25">25 fps</option>
+                    <option value="30">30 fps</option>
+                    <option value="50">50 fps</option>
+                    <option value="60">60 fps</option>
+                  </select>
+                  <span class="omt-status ndi-status remote-status"></span>
+                </div>
+                <label class="windowed-label omt-sub ndi-sub" data-sub="timer">
+                  <input id="ndi-timer-message" type="checkbox" />
+                  <span>Сообщение спикеру на таймере</span>
+                </label>
+                <div class="omt-row ndi-row" data-ndi="program">
+                  <label class="windowed-label">
+                    <input class="omt-on ndi-on" type="checkbox" />
+                    <span>Зал</span>
+                  </label>
+                  <input class="omt-name ndi-name" type="text" spellcheck="false" maxlength="64" />
+                  <select class="omt-size ndi-size">
+                    <option value="720">720p</option>
+                    <option value="1080">1080p</option>
+                    <option value="2160">4K</option>
+                  </select>
+                  <select class="omt-fps ndi-fps">
+                    <option value="15">15 fps</option>
+                    <option value="25">25 fps</option>
+                    <option value="30">30 fps</option>
+                    <option value="50">50 fps</option>
+                    <option value="60">60 fps</option>
+                  </select>
+                  <span class="omt-status ndi-status remote-status"></span>
+                </div>
+                <label class="windowed-label omt-sub ndi-sub" data-sub="program">
+                  <input id="ndi-program-audio" type="checkbox" />
+                  <span>Звук эфира</span>
+                </label>
+                <div class="omt-row ndi-row" data-ndi="prompter">
+                  <label class="windowed-label">
+                    <input class="omt-on ndi-on" type="checkbox" />
+                    <span>Суфлёр</span>
+                  </label>
+                  <input class="omt-name ndi-name" type="text" spellcheck="false" maxlength="64" />
+                  <select class="omt-size ndi-size">
+                    <option value="720">720p</option>
+                    <option value="1080">1080p</option>
+                    <option value="2160">4K</option>
+                  </select>
+                  <select class="omt-fps ndi-fps">
+                    <option value="15">15 fps</option>
+                    <option value="25">25 fps</option>
+                    <option value="30">30 fps</option>
+                    <option value="50">50 fps</option>
+                    <option value="60">60 fps</option>
+                  </select>
+                  <span class="omt-status ndi-status remote-status"></span>
+                </div>
+                <p id="ndi-error" class="remote-status error hidden"></p>
+              </div>
+                </div>
+              </details>
             </section>
             <section class="settings-section hidden" data-section="midi">
               <p class="audio-hint">Выберите MIDI-входы.</p>

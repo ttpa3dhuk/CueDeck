@@ -340,6 +340,7 @@ export class SyphonGpuManager {
       ? reason.slice('conflict:'.length) as SyphonReason
       : reason === 'stream' ? 'stream'
       : reason === 'omt' ? 'omt-program'
+      : reason === 'ndi' ? 'ndi-program'
       : reason === 'layout' ? 'layout'
       : reason.startsWith('ghost:') ? 'audience-lease'
       : null

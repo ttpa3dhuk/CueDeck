@@ -204,7 +204,8 @@ export function shouldMute(state: AppState, role: Role): boolean {
  * звучит (скрытое) окно зала — иначе в захват попадала бы тишина.
  */
 export function programCaptured(state: AppState): boolean {
-  return Boolean(state.stream?.running) || (state.omt?.outputs?.program?.state === 'on' && state.omt.programAudio)
+  return Boolean(state.stream?.running) || (state.omt?.outputs?.program?.state === 'on' && state.omt.programAudio) ||
+    (state.ndi?.outputs?.program?.state === 'on' && state.ndi.programAudio)
 }
 
 const DEFAULT_DRIFT_SEC = 0.4

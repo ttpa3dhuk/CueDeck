@@ -36,7 +36,7 @@ import { getLang, t, type Lang } from '../../shared/i18n'
 import { translateDom } from '../shared/i18n-dom'
 import { LIST_FADE_MAX_MS } from '../../shared/types'
 import { OMT_OUTPUTS } from '../../shared/types'
-import type { ListMode, OmtFps, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, SyphonReason, SyphonStatus, UiTheme, VenueProfile } from '../../shared/types'
+import type { ListMode, NdiFps, NdiOutputId, NdiResolution, NdiStatus, OmtFps, OmtOutputId, OmtResolution, OmtStatus, ProfileAudioOutput, ProfileGroup, RemoteStatus, SyphonReason, SyphonStatus, UiTheme, VenueProfile } from '../../shared/types'
 import { DONATE_URL, SUPPORT_URL } from '../../preload/api'
 import { initStreamUi } from './stream-ui'
 import { setupSettingsWindow } from './settings-window'
@@ -3906,10 +3906,11 @@ function setupOperatorControls(): void {
     if (patch?.omt && !settingsModal.classList.contains('hidden')) renderOmtStatus(s.omt)
     if (patch?.syphon && !settingsModal.classList.contains('hidden')) renderSyphonStatus(s.syphon)
     if (patch?.syphonPrompter && !settingsModal.classList.contains('hidden')) renderSyphonStatus(s.syphonPrompter, true)
-    if (patch?.omt) renderOmtButton(s.omt)
+    if (patch?.ndi && !settingsModal.classList.contains('hidden')) renderNdiStatus(s.ndi)
+    if (patch?.omt || patch?.ndi || patch?.syphon || patch?.syphonPrompter) renderExternalButton(s)
   })
-  renderOmtButton(getState().omt)
-  $('omt-btn').addEventListener('click', () => openSettings('omt'))
+  renderExternalButton(getState())
+  $('external-btn').addEventListener('click', () => openSettings('omt'))
   $('report-close').addEventListener('click', hideReportModal)
   $('report-dismiss').addEventListener('click', hideReportModal)
   $('report-modal').addEventListener('click', (event) => {
@@ -5368,6 +5369,7 @@ function openSettings(section: SettingsSection = 'screens'): void {
   wireOmtSection(getState().omt)
   wireSyphonSection(getState().syphon)
   wireSyphonSection(getState().syphonPrompter, true)
+  wireNdiSection(getState().ndi)
   showSettingsSection(section)
   settingsModal.classList.remove('hidden')
   settingsWindow?.onOpen()
@@ -5992,6 +5994,7 @@ function syphonReasonText(reason: SyphonReason | null): string {
     case 'audience-lease': return t('выход зала уже занят')
     case 'stream': return t('идёт трансляция')
     case 'omt-program': return t('включён OMT «Зал»')
+    case 'ndi-program': return t('включён NDI «Зал»')
     case 'busy': return t('выход ещё завершает предыдущий кадр')
     case 'stop-timeout': return t('предыдущий кадр не завершился')
     case 'runtime': return t('внутренняя ошибка')
@@ -6085,37 +6088,166 @@ function wireSyphonSection(syphon: SyphonStatus, prompter = false): void {
   }
 }
 
-/**
- * Кнопка OMT на нижней панели всегда видна. Красная —
- * какой-то наш источник в эфире у vMix (tally), зелёная — в превью; в подписи —
- * какие именно. Подробности — во всплывающей подсказке, клик — в «Настройки».
- */
-function renderOmtButton(o: OmtStatus): void {
-  const btn = document.getElementById('omt-btn')
-  const tally = document.getElementById('omt-btn-tally')
+/** One entry point for network and local outputs; receiver tally remains visible. */
+function renderExternalButton(state: AppState): void {
+  const btn = document.getElementById('external-btn')
+  const tally = document.getElementById('external-btn-tally')
   if (!btn || !tally) return
-  const on = OMT_OUTPUTS.filter((id) => o.enabled[id])
-  const inProgram = on.filter((id) => o.outputs[id].program)
-  const inPreview = on.filter((id) => o.outputs[id].preview && !o.outputs[id].program)
-  const broken = on.some((id) => o.outputs[id].state === 'error')
-  btn.classList.toggle('program', inProgram.length > 0)
-  btn.classList.toggle('preview', inProgram.length === 0 && inPreview.length > 0)
-  btn.classList.toggle('warn', broken && inProgram.length === 0 && inPreview.length === 0)
-  const shown = inProgram.length ? inProgram : inPreview
-  tally.textContent = shown.map(omtLabel).join(', ')
-  btn.title = on.length === 0 ? t('Выходы OMT выключены. Нажми, чтобы настроить.') : on
-    .map((id) => {
-      const st = o.outputs[id]
-      const parts = [omtLabel(id)]
-      if (st.state === 'error') parts.push(`⚠ ${st.error ?? ''}`)
-      else {
-        parts.push(st.receivers > 0 ? t('смотрят: {n}', { n: st.receivers }) : t('никто не смотрит'))
-        if (st.program) parts.push(t('в эфире'))
-        else if (st.preview) parts.push(t('в превью'))
-      }
-      return parts.join(' · ')
+  let active = 0
+  let program = false
+  let preview = false
+  let warning = false
+  const descriptions: string[] = []
+  const groupStatus = (id: string, count: number, broken: boolean, starting = false): void => {
+    const el = document.getElementById(`${id}-group-status`)
+    if (!el) return
+    el.textContent = broken ? t('Требует внимания') : count ? `${t('Работает')} · ${count}` : starting ? t('Запускается…') : t('Выключено')
+    el.classList.toggle('on', count > 0 && !broken)
+    el.classList.toggle('warn', broken)
+    active += count
+    warning ||= broken
+  }
+  for (const [key, label, output] of [['omt', 'OMT', state.omt], ['ndi', 'NDI', state.ndi]] as const) {
+    let count = 0
+    let broken = false
+    for (const id of OMT_OUTPUTS) {
+      if (!output.enabled[id]) continue
+      const st = output.outputs[id]
+      if (st.state === 'on') { count++; program ||= st.program; preview ||= st.preview }
+      broken ||= st.state === 'error'
+      const detail = st.state === 'error' ? `⚠ ${st.error ?? ''}` : st.state === 'on'
+        ? [t('Работает'), st.receivers > 0 ? t('смотрят: {n}', { n: st.receivers }) : t('никто не смотрит'),
+          st.program ? t('в эфире') : st.preview ? t('в превью') : ''].filter(Boolean).join(' · ')
+        : t('Выключено')
+      descriptions.push(`${label} · ${omtLabel(id)} · ${detail}`)
+    }
+    groupStatus(key, count, broken)
+  }
+  const gpu = [state.syphon, state.syphonPrompter]
+  const gpuLabel = window.api.platform === 'win32' ? 'Spout' : 'Syphon'
+  for (const [index, output] of gpu.entries()) {
+    if (!output.enabled) continue
+    const detail = output.state === 'on' ? t('Работает') : output.state === 'starting' ? t('Запускается…')
+      : output.reason ? syphonReasonText(output.reason) : t('Выключено')
+    descriptions.push(`${gpuLabel} · ${omtLabel(index === 0 ? 'program' : 'prompter')} · ${detail}`)
+  }
+  groupStatus('syphon', gpu.filter(o => o.state === 'on').length,
+    gpu.some(o => o.enabled && ['blocked', 'error', 'unavailable'].includes(o.state)),
+    gpu.some(o => o.state === 'starting'))
+  btn.classList.toggle('program', program)
+  btn.classList.toggle('preview', !program && preview)
+  btn.classList.toggle('warn', warning && !program && !preview)
+  btn.classList.toggle('on', active > 0 && !program && !preview && !warning)
+  tally.textContent = active ? String(active) : ''
+  btn.title = descriptions.length ? descriptions.join('\n') : t('Внешние выходы выключены. Нажми, чтобы настроить.')
+}
+
+// ── Выходы NDI (main/ndi/) ───────────────────────────────────────────────────
+// Применяется сразу; статус (получатели, эфир у принимающей программы) приходит
+// в state.ndi.
+
+function ndiRows(): Array<{
+  id: NdiOutputId
+  row: HTMLElement
+  on: HTMLInputElement
+  name: HTMLInputElement
+  size: HTMLSelectElement
+  fps: HTMLSelectElement
+  status: HTMLElement
+}> {
+  return Array.from(document.querySelectorAll<HTMLElement>('#ndi-section .ndi-row')).map((row) => ({
+    id: row.dataset.ndi as NdiOutputId,
+    row,
+    on: row.querySelector<HTMLInputElement>('.ndi-on')!,
+    name: row.querySelector<HTMLInputElement>('.ndi-name')!,
+    size: row.querySelector<HTMLSelectElement>('.ndi-size')!,
+    fps: row.querySelector<HTMLSelectElement>('.ndi-fps')!,
+    status: row.querySelector<HTMLElement>('.ndi-status')!,
+  }))
+}
+
+function wireNdiSection(ndi: NdiStatus): void {
+  const rows = ndiRows()
+  const message = $<HTMLInputElement>('ndi-timer-message')
+  for (const r of rows) {
+    r.on.checked = ndi.enabled[r.id]
+    r.name.value = ndi.names[r.id]
+    r.size.value = String(ndi.sizes[r.id])
+    r.fps.value = String(ndi.fps[r.id])
+  }
+  const audio = $<HTMLInputElement>('ndi-program-audio')
+  audio.checked = ndi.programAudio
+  message.checked = ndi.timerMessage
+  renderNdiStatus(ndi)
+  const commit = async (): Promise<void> => {
+    const current = getState().ndi
+    const enabled = { ...current.enabled }
+    const names = { ...current.names }
+    const sizes = { ...current.sizes }
+    const fps = { ...current.fps }
+    for (const r of rows) {
+      enabled[r.id] = r.on.checked
+      names[r.id] = r.name.value
+      sizes[r.id] = Number(r.size.value) as NdiResolution
+      fps[r.id] = Number(r.fps.value) as NdiFps
+    }
+    const res = await window.api.ndi.configure({
+      enabled,
+      names,
+      sizes,
+      fps,
+      programAudio: audio.checked,
+      timerMessage: message.checked,
     })
-    .join('\n')
+    // Пустое имя, скобки, совпадение с соседним — main поправил: показываем, что реально стоит.
+    for (const r of rows) r.name.value = res.status.names[r.id]
+  }
+  message.onchange = () => void commit()
+  audio.onchange = () => void commit()
+  for (const r of rows) {
+    r.on.onchange = () => void commit()
+    r.name.onchange = () => void commit()
+    r.size.onchange = () => void commit()
+    r.fps.onchange = () => void commit()
+    r.name.onkeydown = (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') r.name.blur()
+    }
+  }
+}
+
+function renderNdiStatus(o: NdiStatus): void {
+  $<HTMLInputElement>('ndi-program-audio').checked = o.programAudio
+  $<HTMLInputElement>('ndi-timer-message').checked = o.timerMessage
+  for (const r of ndiRows()) {
+    r.on.checked = o.enabled[r.id]
+    const st = o.outputs[r.id]
+    r.row.classList.toggle('off', !o.enabled[r.id])
+    r.status.className = 'omt-status ndi-status remote-status'
+    r.status.title = st.address ?? ''
+    if (st.state === 'error') {
+      r.status.classList.add('error')
+      r.status.textContent = o.available === false ? t('⚠ недоступно') : `⚠ ${st.error ?? ''}`
+      continue
+    }
+    if (st.state !== 'on') {
+      r.status.textContent = ''
+      continue
+    }
+    r.status.classList.add('on')
+    const parts = [t('● в сети')]
+    parts.push(st.receivers > 0 ? t('смотрят: {n}', { n: st.receivers }) : t('никто не смотрит'))
+    if (st.program) parts.push(t('в эфире'))
+    else if (st.preview) parts.push(t('в превью'))
+    r.status.textContent = parts.join(' · ')
+  }
+  document.querySelector('.ndi-sub[data-sub="timer"]')?.classList.toggle('off', !o.enabled.timer)
+  document.querySelector('.ndi-sub[data-sub="program"]')?.classList.toggle('off', !o.enabled.program)
+  const err = document.getElementById('ndi-error')
+  if (err) {
+    err.classList.toggle('hidden', o.available !== false)
+    err.textContent = t('⚠ NDI недоступен на этом компьютере: {error}', { error: o.error ?? '' })
+  }
 }
 
 function renderRemoteStatus(r: RemoteStatus, error?: string): void {

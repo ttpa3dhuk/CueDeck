@@ -4,6 +4,7 @@ const h = vi.hoisted(() => {
   const state = {
     layout: 'solo',
     stream: { running: false },
+    ndi: { enabled: { program: false }, outputs: { program: { state: 'off' } } },
     omt: { enabled: { program: false }, outputs: { program: { state: 'off' } } },
   }
   const listeners = new Set<(s: any) => void>()
@@ -90,6 +91,8 @@ const Publisher = GpuTexturePublisher as unknown as { instances: any[] }
 function reset(): void {
   h.state.layout = 'solo'
   h.state.stream.running = false
+  h.state.ndi.enabled.program = false
+  h.state.ndi.outputs.program.state = 'off'
   h.state.omt.outputs.program.state = 'off'
   h.state.omt.enabled.program = false
   h.listeners.clear()
@@ -180,6 +183,22 @@ describe('GPU audience mode', () => {
     h.ghostWindow.mockReturnValueOnce({ isDestroyed: () => false } as any)
     expect(new GpuAudienceMode().start().ok).toBe(false)
     expect(h.acquireGhost).not.toHaveBeenCalled()
+  })
+
+  it('blocks NDI before GPU start and stops an existing GPU producer when NDI is enabled', async () => {
+    h.state.ndi.enabled.program = true
+    h.registeredWindow.mockReturnValue({ id: 99 })
+    expect(new GpuAudienceMode().start()).toMatchObject({ ok: false, reason: 'ndi-program' })
+    expect(h.acquireGhost).not.toHaveBeenCalled()
+    h.state.ndi.enabled.program = false
+    h.registeredWindow.mockReturnValue(undefined)
+    const mode = new GpuAudienceMode()
+    expect(mode.start()).toEqual({ ok: true })
+    h.state.ndi.enabled.program = true
+    for (const fn of h.listeners) fn(h.state)
+    expect(Publisher.instances[0].stopAndWait).toHaveBeenCalled()
+    expect(isGpuAudienceActive()).toBe(false)
+    await mode.stop('test')
   })
 
   it('stops before a normal output takes the audience lease, without touching the normal path', () => {

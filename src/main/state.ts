@@ -4,7 +4,7 @@ import { DEFAULT_TIMER_ADJUSTMENTS } from '../shared/timer-controls.js'
 import { DEFAULT_STARTUP_SETTINGS } from '../shared/startup-settings.js'
 import { DEFAULT_TAKE_FADE_MS } from '../shared/take-transition.js'
 import { BrowserWindow } from 'electron'
-import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS, DEFAULT_SYPHON_PROMPTER_SETTINGS, defaultSyphonStatus } from '../shared/types.js'
+import { DEFAULT_NDI_SETTINGS, NDI_OUTPUT_OFF, DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS, DEFAULT_SYPHON_PROMPTER_SETTINGS, defaultSyphonStatus } from '../shared/types.js'
 import type { AppState, DeckState, Role, TimerState, VideoState } from '../shared/types.js'
 import { createAudienceTimer } from '../shared/audience-timer.js'
 
@@ -164,6 +164,21 @@ export function initialState(): AppState {
     },
     syphon: defaultSyphonStatus(),
     syphonPrompter: { ...defaultSyphonStatus(), ...DEFAULT_SYPHON_PROMPTER_SETTINGS },
+    ndi: {
+      enabled: { ...DEFAULT_NDI_SETTINGS.enabled },
+      names: { ...DEFAULT_NDI_SETTINGS.names },
+      sizes: { ...DEFAULT_NDI_SETTINGS.sizes },
+      fps: { ...DEFAULT_NDI_SETTINGS.fps },
+      programAudio: DEFAULT_NDI_SETTINGS.programAudio,
+      timerMessage: DEFAULT_NDI_SETTINGS.timerMessage,
+      available: null,
+      error: null,
+      outputs: {
+        timer: { ...NDI_OUTPUT_OFF },
+        program: { ...NDI_OUTPUT_OFF },
+        prompter: { ...NDI_OUTPUT_OFF },
+      },
+    },
   }
 }
 
@@ -176,8 +191,8 @@ function positionOf(v: VideoState): number {
   return v.anchorSec
 }
 
-/** Окна, которым рассылается состояние: роли раскладки + служебные (оверлей OMT). */
-export type WindowKey = Role | 'omt-timer' | 'gpu-prompter'
+/** Окна, которым рассылается состояние: роли раскладки + служебные (оверлеи OMT и NDI). */
+export type WindowKey = Role | 'omt-timer' | 'ndi-timer' | 'gpu-prompter'
 
 type Listener = (state: AppState, patch: Partial<AppState>) => void
 

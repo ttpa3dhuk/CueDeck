@@ -161,6 +161,7 @@ export class GpuAudienceMode {
     if (process.env.CUEDECK_SYPHON_GPU === '1') return this.refuse('synthetic', 'CUEDECK_SYPHON_GPU=1 is active')
     if (process.env.CUEDECK_SYPHON_BRIDGE === '1') return this.refuse('cpu-bridge', 'CUEDECK_SYPHON_BRIDGE=1 is active')
     const state = store.get()
+    if (state.ndi?.enabled.program || state.ndi?.outputs.program.state === 'on') return this.refuse('ndi-program', 'NDI program output is running')
     const physicalAudience = getActiveWindows().get('audience')
     const registeredAudience = store.registeredWindow('audience')
     if (registeredAudience && registeredAudience !== physicalAudience) return this.refuse('physical-audience', 'another audience renderer is registered')
@@ -220,6 +221,7 @@ export class GpuAudienceMode {
       this.unsubscribe = store.onChange((next) => {
         if (this.disposed) return
         if (next.stream.running) void this.stop('conflict:stream')
+        else if (next.ndi?.enabled.program || next.ndi?.outputs.program.state === 'on') void this.stop('conflict:ndi-program')
         else if (omtProgramActive(next)) void this.stop('conflict:omt-program')
       })
       win.once('closed', () => {

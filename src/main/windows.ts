@@ -1,3 +1,4 @@
+import { fitOffscreenSize } from './offscreen-size.js'
 import { attachAudienceCloseGuard } from './audience-close-guard.js'
 import { BrowserWindow, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
@@ -31,8 +32,8 @@ function isOutputFullscreen(win: BrowserWindow): boolean {
 }
 
 interface RendererTarget {
-  entry: 'presenter' | 'audience' | 'stream' | 'overlay' | 'omt-audio' | 'gpu-view'
-  role: Role | 'stream' | 'omt-timer' | 'omt-audio' | 'audience-gpu-view'
+  entry: 'presenter' | 'audience' | 'stream' | 'overlay' | 'omt-audio' | 'gpu-view' | 'ndi-overlay' | 'ndi-audio'
+  role: Role | 'stream' | 'omt-timer' | 'omt-audio' | 'audience-gpu-view' | 'ndi-timer' | 'ndi-audio'
 }
 
 function rendererForRole(role: Role): RendererTarget {
@@ -449,22 +450,7 @@ export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080,
   // OSR uses the native window's OUTER size. Windows also rounds DIP -> native
   // pixels -> DIP (e.g. requesting 1920 at 115% can return 1921). Correct the
   // request by the observed error, rather than repeating the same rounded size.
-  let requestedWidth = width
-  let requestedHeight = height
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const [actualWidth, actualHeight] = win.getSize()
-    if (actualWidth === width && actualHeight === height) break
-    if (attempt > 0) {
-      requestedWidth += width - actualWidth
-      requestedHeight += height - actualHeight
-    }
-    win.setSize(requestedWidth, requestedHeight)
-  }
-  const [actualWidth, actualHeight] = win.getSize()
-  if (actualWidth !== width || actualHeight !== height) {
-    win.destroy()
-    throw new Error(`GPU audience window size ${actualWidth}x${actualHeight} does not match target ${width}x${height}`)
-  }
+  fitOffscreenSize(win, width, height, 'GPU audience')
   win.webContents.setFrameRate(30)
   if (load) loadGpuAudiencePage(win)
   return win
@@ -570,6 +556,56 @@ export function createOmtAudioWindow(): BrowserWindow {
     },
   })
   loadRenderer(win, { entry: 'omt-audio', role: 'omt-audio' })
+  return win
+}
+
+/**
+ * Оверлей для выхода NDI (ndi/outputs.ts): offscreen, прозрачный фон — кадры
+ * берутся событием `paint` вместе с альфой. Никогда не показывается. Получает
+ * состояние, как обычное окно (store.registerWindow).
+ */
+export function createNdiOverlayWindow(width: number, height: number): BrowserWindow {
+  const win = new BrowserWindow({
+    width,
+    height,
+    show: false,
+    frame: false,
+    transparent: true,
+    useContentSize: true,
+    thickFrame: false,
+    enableLargerThanScreen: true,
+    title: 'CueDeck (NDI timer)',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+      offscreen: { useSharedTexture: false, deviceScaleFactor: 1 },
+    },
+  })
+  fitOffscreenSize(win, width, height, 'NDI timer')
+  loadRenderer(win, { entry: 'ndi-overlay', role: 'ndi-timer' })
+  store.registerWindow('ndi-timer', win)
+  return win
+}
+
+/** Окно звука выхода NDI «Зал» (ndi/outputs.ts): снимает звук вкладки зала. Никогда не показывается. */
+export function createNdiAudioWindow(): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 320,
+    height: 180,
+    show: false,
+    title: 'CueDeck (NDI audio)',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  })
+  loadRenderer(win, { entry: 'ndi-audio', role: 'ndi-audio' })
   return win
 }
 
