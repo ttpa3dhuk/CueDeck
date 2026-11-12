@@ -950,6 +950,7 @@
                   <span id="local-gpu-platform" class="output-badge">macOS</span>
                 </div>
                 <p class="audio-hint">Локальный видеовыход для Resolume и OBS. Только картинка, без звука.</p>
+                <button id="spout-graphics-help" class="hidden" type="button">Настройка видеокарты для Spout…</button>
                 <div id="syphon-audience-settings" class="syphon-card">
                 <div class="syphon-row">
                   <label class="windowed-label">
@@ -1071,6 +1072,36 @@
           <span class="modal-actions-spacer"></span>
           <button id="stream-close">Закрыть</button>
         </div>
+      </div>
+    </div>
+
+    <div id="spout-graphics-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="spout-graphics-title">
+      <div class="modal-content lo-modal-content">
+        <h2 id="spout-graphics-title">Видеокарта для Spout</h2>
+        <p class="lo-modal-subtitle">CueDeck и Resolume / OBS должны использовать одну видеокарту.</p>
+        <label for="spout-gpu-choice" class="lo-option-label">Режим GPU Windows</label>
+        <select id="spout-gpu-choice"></select>
+        <div class="lo-install-option">
+          <div class="lo-option-label">Вариант 1 — через настройки Windows</div>
+          <p class="audio-hint compact">Добавьте классическое приложение по пути ниже. В его параметрах выберите тот же режим, что указан выше. Для Resolume / OBS выберите ту же видеокарту.</p>
+          <label for="spout-exe-path" class="lo-option-label">Путь к CueDeck</label>
+          <div class="lo-code-block">
+            <input id="spout-exe-path" type="text" readonly spellcheck="false" />
+            <button id="spout-exe-copy" class="lo-copy-btn" title="Скопировать" aria-label="Скопировать">⧉</button>
+          </div>
+          <button id="spout-open-graphics" class="primary lo-download-btn">Открыть настройки графики Windows</button>
+          <p class="lo-modal-note">Если настройки не открылись: Параметры Windows → Система → Дисплей → Графика.</p>
+        </div>
+        <div class="lo-install-option">
+          <div class="lo-option-label">Вариант 2 — через PowerShell</div>
+          <p class="audio-hint compact">Команда обновляется при выборе режима. Вставьте её в PowerShell и нажмите Enter. Она изменит режим GPU только этой копии CueDeck для текущего пользователя. Права администратора не нужны.</p>
+          <div class="lo-code-block">
+            <code id="spout-graphics-command"></code>
+            <button id="spout-command-copy" class="lo-copy-btn" title="Скопировать" aria-label="Скопировать">⧉</button>
+          </div>
+        </div>
+        <p class="lo-modal-note">После изменения полностью закройте и снова откройте CueDeck и Resolume / OBS.</p>
+        <div class="modal-actions"><button id="spout-graphics-close">Закрыть</button></div>
       </div>
     </div>
 
