@@ -35,17 +35,23 @@ export function isVideoPath(path: string | null | undefined): boolean {
  * на время перехода. Blob-ссылку старого кадра нельзя освобождать сразу —
  * этим занимается вызывающий (см. отложенное освобождение в рендерерах).
  */
+const imageFadeOwners = new WeakMap<HTMLImageElement, object>()
+
 export async function crossfadeToImage(
   img: HTMLImageElement,
   under: HTMLImageElement | null,
   src: string,
   fadeMs: number,
 ): Promise<void> {
+  const owner = {}
+  imageFadeOwners.set(img, owner)
   fadeMs = Number.isFinite(fadeMs) ? Math.max(0, Math.min(FADE_MAX_MS, fadeMs)) : 0
   const prev = img.getAttribute('src')
   const canFade = fadeMs > 0 && Boolean(prev) && !img.classList.contains('hidden') && under
 
   if (!canFade) {
+    under?.classList.add('hidden')
+    under?.removeAttribute('src')
     img.style.transition = ''
     img.style.opacity = '1'
     img.src = src
@@ -62,6 +68,7 @@ export async function crossfadeToImage(
   img.src = src
   // Ждём декодирование: иначе проявится наполовину отрисованный кадр.
   await img.decode?.().catch(() => undefined)
+  if (imageFadeOwners.get(img) !== owner) return
 
   // Форсируем применение opacity:0 до включения перехода — иначе браузер
   // склеит оба присваивания и наплыва не будет.
@@ -70,6 +77,7 @@ export async function crossfadeToImage(
   img.style.opacity = '1'
 
   await new Promise((r) => setTimeout(r, fadeMs + 40))
+  if (imageFadeOwners.get(img) !== owner) return
   under!.classList.add('hidden')
   under!.removeAttribute('src')
 }

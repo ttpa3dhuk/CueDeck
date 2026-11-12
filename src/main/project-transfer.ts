@@ -72,7 +72,16 @@ export async function transferProject(opts: {
     for (const source of sources) {
       const file = basename(source)
       opts.progress({ phase: 'copying', completed: copies.size, total: sources.size, file })
-      const target = join(mediaDir, uniqueName(file, taken))
+      // A material and its extension-less notes sidecar occupy two names.
+      // show.pdf and show.pptx must not both acquire show.notes.json.
+      let target: string
+      for (;;) {
+        target = join(mediaDir, uniqueName(file, taken))
+        const notesName = basename(sidecarPathFor(target)).toLowerCase()
+        if (taken.has(notesName)) continue
+        taken.add(notesName)
+        break
+      }
       await copyFile(source, target)
       check.push({ source, target })
       opts.progress({ phase: 'preparing', completed: copies.size, total: sources.size, file })

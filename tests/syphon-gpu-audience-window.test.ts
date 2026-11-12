@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { join } from 'node:path'
 
 const mocks = vi.hoisted(() => {
   class MockBrowserWindow {
@@ -7,6 +8,10 @@ const mocks = vi.hoisted(() => {
     contentSize: number[]
     getContentSize = vi.fn(() => this.contentSize)
     setContentSize = vi.fn((width: number, height: number) => { this.contentSize = [width, height] })
+    getSize = vi.fn(() => this.contentSize)
+    setSize = vi.fn((width: number, height: number) => {
+      if (!mocks.refuseResize) this.contentSize = [width + mocks.resizeRounding[0], height + mocks.resizeRounding[1]]
+    })
     webContents = { setFrameRate: vi.fn() }
     loadFile = vi.fn().mockResolvedValue(undefined)
     loadURL = vi.fn().mockResolvedValue(undefined)
@@ -17,6 +22,7 @@ const mocks = vi.hoisted(() => {
     getBounds = vi.fn(() => ({ x: 0, y: 0, width: 1920, height: 1080 }))
     isFullScreen = vi.fn(() => false)
     setAlwaysOnTop = vi.fn()
+    removeMenu = vi.fn()
     setBounds = vi.fn()
     isDestroyed = vi.fn(() => false)
     constructor(options: any) {
@@ -29,6 +35,8 @@ const mocks = vi.hoisted(() => {
     MockBrowserWindow,
     displayScale: 2,
     initialHeightLimit: Infinity,
+    resizeRounding: [0, 0],
+    refuseResize: false,
     registerWindow: vi.fn(),
     unregisterWindow: vi.fn(),
     registeredWindow: vi.fn(() => undefined as any),
@@ -62,18 +70,31 @@ vi.mock('../src/main/state.js', () => ({
 }))
 vi.mock('../src/main/audience-close-guard.js', () => ({ attachAudienceCloseGuard: vi.fn() }))
 
-import { acquireGhost, applyLayout, createGpuAudienceWindow, createHiddenAudienceWindow, getActiveWindows, reconcileGpuAudienceDisplay, releaseGhost } from '../src/main/windows'
+import { acquireGhost, applyLayout, createGpuAudienceWindow, createGpuPrompterWindow, createHiddenAudienceWindow, getActiveWindows, reconcileGpuAudienceDisplay, releaseGhost } from '../src/main/windows'
 import { clearGpuAudienceGuard, setGpuAudienceGuard } from '../src/main/gpu-audience-arbiter'
 
 beforeEach(() => {
   mocks.displayScale = 2
   mocks.initialHeightLimit = Infinity
+  mocks.resizeRounding = [0, 0]
+  mocks.refuseResize = false
   mocks.MockBrowserWindow.instances = []
   vi.clearAllMocks()
   delete process.env.ELECTRON_RENDERER_URL
 })
 
 describe('real GPU audience window factory', () => {
+  it('renders the real prompter without taking the physical speaker registration', () => {
+    mocks.initialHeightLimit = 941
+    mocks.resizeRounding = [1, 1]
+    const win = createGpuPrompterWindow() as any
+    expect(win.options.webPreferences.offscreen).toEqual({ useSharedTexture: true, deviceScaleFactor: 1 })
+    expect(win.options.thickFrame).toBe(false)
+    expect(win.getSize()).toEqual([1920, 1080])
+    expect(win.loadFile.mock.calls[0][0]).toContain(join('renderer', 'presenter', 'index.html'))
+    expect(win.loadFile.mock.calls[0][1].search).toContain('role=speaker')
+    expect(mocks.registerWindow).toHaveBeenCalledExactlyOnceWith('gpu-prompter', win)
+  })
   it.each([1, 1.15, 1.25, 1.3, 1.5, 1.75, 2, 2.25, 2.5])('uses a fixed Full HD offscreen texture at desktop scale %s', (scale) => {
     mocks.displayScale = scale
     const win = createGpuAudienceWindow(1920, 1080) as any
@@ -81,15 +102,16 @@ describe('real GPU audience window factory', () => {
     expect(win.options.width).toBe(1920)
     expect(win.options.height).toBe(1080)
     expect(win.options.show).toBe(false)
+    expect(win.options.thickFrame).toBe(false)
     expect(win.options.useContentSize).toBe(true)
     expect(win.options.enableLargerThanScreen).toBe(true)
     expect(win.options.webPreferences.offscreen).toEqual({ useSharedTexture: true, deviceScaleFactor: 1 })
     expect(win.webContents.setFrameRate).toHaveBeenCalledWith(30)
-    expect(win.options.webPreferences.preload).toContain('preload/index.cjs')
+    expect(win.options.webPreferences.preload).toContain(join('preload', 'index.cjs'))
     expect(win.options.webPreferences.backgroundThrottling).toBe(false)
     expect(win.loadFile).toHaveBeenCalledOnce()
     const [path, options] = win.loadFile.mock.calls[0]
-    expect(path).toContain('renderer/audience/index.html')
+    expect(path).toContain(join('renderer', 'audience', 'index.html'))
     expect(path).not.toContain('gpu-test')
     expect(options.search).toContain('role=audience')
     expect(mocks.registerWindow).toHaveBeenCalledWith('audience', win)
@@ -98,9 +120,29 @@ describe('real GPU audience window factory', () => {
   it('restores Full HD before loading when Windows clamps initial height to the work area', () => {
     mocks.initialHeightLimit = 1040
     const win = createGpuAudienceWindow() as any
-    expect(win.setContentSize).toHaveBeenCalledWith(1920, 1080)
+    expect(win.setSize).toHaveBeenCalledWith(1920, 1080)
     expect(win.getContentSize()).toEqual([1920, 1080])
-    expect(win.setContentSize.mock.invocationCallOrder[0]).toBeLessThan(win.loadFile.mock.invocationCallOrder[0])
+    expect(win.setSize.mock.invocationCallOrder[0]).toBeLessThan(win.loadFile.mock.invocationCallOrder[0])
+  })
+
+  it('corrects Windows fractional-DPI round trips before loading the audience renderer', () => {
+    mocks.initialHeightLimit = 941
+    mocks.resizeRounding = [1, 1]
+    const win = createGpuAudienceWindow() as any
+    expect(win.setSize.mock.calls).toEqual([[1920, 1080], [1919, 1079]])
+    expect(win.getSize()).toEqual([1920, 1080])
+    expect(win.setContentSize).not.toHaveBeenCalled()
+    expect(win.setSize.mock.invocationCallOrder[1]).toBeLessThan(win.loadFile.mock.invocationCallOrder[0])
+  })
+
+  it('destroys a window that cannot reach the target instead of loading a wrong-sized GPU surface', () => {
+    mocks.initialHeightLimit = 941
+    mocks.refuseResize = true
+    expect(() => createGpuAudienceWindow()).toThrow('GPU audience window size 1920x941')
+    const win = mocks.MockBrowserWindow.instances[0]
+    expect(win.setSize).toHaveBeenCalledTimes(4)
+    expect(win.destroy).toHaveBeenCalledOnce()
+    expect(win.loadFile).not.toHaveBeenCalled()
   })
 
   it('never hands a GPU ghost to a normal hidden-audience holder', () => {
@@ -125,7 +167,7 @@ describe('real GPU audience window factory', () => {
     const guard = { stop: vi.fn(), attachPhysical: vi.fn() }
     setGpuAudienceGuard(guard)
     const physical = applyLayout('presenter-audience', { operator: 1, audience: 2 }).get('audience') as any
-    expect(physical.loadFile.mock.calls[0][0]).toContain('renderer/gpu-view/index.html')
+    expect(physical.loadFile.mock.calls[0][0]).toContain(join('renderer', 'gpu-view', 'index.html'))
     expect(guard.attachPhysical).toHaveBeenCalledWith(physical)
     expect(mocks.registerWindow).not.toHaveBeenCalledWith('audience', physical)
     expect(guard.stop).not.toHaveBeenCalled()
@@ -133,7 +175,7 @@ describe('real GPU audience window factory', () => {
     expect(getActiveWindows().has('audience')).toBe(false)
     expect(guard.stop).not.toHaveBeenCalled()
     const reopened = applyLayout('presenter-audience', { operator: 1, audience: 2 }).get('audience') as any
-    expect(reopened.loadFile.mock.calls[0][0]).toContain('renderer/gpu-view/index.html')
+    expect(reopened.loadFile.mock.calls[0][0]).toContain(join('renderer', 'gpu-view', 'index.html'))
     clearGpuAudienceGuard(guard)
     applyLayout('solo', { operator: 1 })
   })
@@ -161,20 +203,20 @@ describe('real GPU audience window factory', () => {
 
   it('replaces an existing physical audience with mirror then restores the normal renderer', () => {
     const normal = applyLayout('presenter-audience', { operator: 1, audience: 2 }).get('audience') as any
-    expect(normal.loadFile.mock.calls[0][0]).toContain('renderer/audience/index.html')
+    expect(normal.loadFile.mock.calls[0][0]).toContain(join('renderer', 'audience', 'index.html'))
     const guard = { stop: vi.fn(), attachPhysical: vi.fn() }
     setGpuAudienceGuard(guard)
     reconcileGpuAudienceDisplay()
     const mirror = getActiveWindows().get('audience') as any
     expect(normal.destroy).toHaveBeenCalledOnce()
     expect(mirror).not.toBe(normal)
-    expect(mirror.loadFile.mock.calls[0][0]).toContain('renderer/gpu-view/index.html')
+    expect(mirror.loadFile.mock.calls[0][0]).toContain(join('renderer', 'gpu-view', 'index.html'))
     expect(mocks.registerWindow).not.toHaveBeenCalledWith('audience', mirror)
     clearGpuAudienceGuard(guard)
     reconcileGpuAudienceDisplay()
     const restored = getActiveWindows().get('audience') as any
     expect(mirror.destroy).toHaveBeenCalledOnce()
-    expect(restored.loadFile.mock.calls[0][0]).toContain('renderer/audience/index.html')
+    expect(restored.loadFile.mock.calls[0][0]).toContain(join('renderer', 'audience', 'index.html'))
     expect(mocks.registerWindow).toHaveBeenCalledWith('audience', restored)
     applyLayout('solo', { operator: 1 })
   })

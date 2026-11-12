@@ -86,6 +86,39 @@ function makeDeps(overrides: Partial<SyphonManagerDeps> = {}): {
 
 beforeEach(() => vi.clearAllMocks())
 
+it('keeps two publishers independent through rename, stop and timeout', async () => {
+  const hall = makeDeps(), prompter = makeDeps({
+    loadSettings: () => ({ settings: { enabled: false, name: 'CueDeck Prompter' }, stored: true }),
+  })
+  const hallManager = new SyphonGpuManager(hall.deps), prompterManager = new SyphonGpuManager(prompter.deps)
+  await hallManager.configure({ enabled: true })
+  await prompterManager.configure({ enabled: true })
+  hall.created[0].first();prompter.created[0].first()
+  await prompterManager.configure({ name: 'Prompter renamed' })
+  expect(hall.created[0].stopped).toBe(0)
+  expect(hallManager.getStatus().state).toBe('on')
+  expect(prompter.created[0].stopped).toBe(1)
+  prompter.created[1].stopResult = { released: false, timedOut: true }
+  await prompterManager.configure({ enabled: false })
+  expect(prompterManager.getStatus().reason).toBe('stop-timeout')
+  await hallManager.configure({ enabled: false })
+  await hallManager.configure({ enabled: true })
+  expect(hall.created).toHaveLength(2)
+})
+
+it('rejects conflicting source settings without saving or restarting', async () => {
+  const { deps, created } = makeDeps({ validateSettings: s => s.name === 'Reserved' ? 'Duplicate source' : null })
+  const manager = new SyphonGpuManager(deps)
+  await manager.configure({ enabled: true })
+  created[0].first()
+  vi.mocked(deps.saveSettings).mockClear()
+  const result = await manager.configure({ name: 'Reserved' })
+  expect(result).toMatchObject({ ok: false, error: 'Duplicate source' })
+  expect(created[0].stopped).toBe(0)
+  expect(deps.saveSettings).not.toHaveBeenCalled()
+  expect(manager.getStatus().name).toBe('CueDeck Audience')
+})
+
 describe('Syphon settings input', () => {
   it('keeps the old QA env starting the source, but only in a dev macOS run', () => {
     const stored = { enabled: false, name: 'Operator name' }

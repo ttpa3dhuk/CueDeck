@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { inflateRawSync } from 'node:zlib'
 import { createHash, randomBytes } from 'node:crypto'
-const mock = vi.hoisted(() => ({root:'', selected:[] as string[], handlers:new Map<string,Function>(), sender:{send:()=>{}}, state: null as unknown as import('../src/shared/types').AppState}))
+const mock = vi.hoisted(() => ({root:'', selected:[] as string[], prefs:{} as Record<string, unknown>, windows:[] as any[], handlers:new Map<string,Function>(), sender:{send:()=>{}}, state: null as unknown as import('../src/shared/types').AppState}))
 vi.mock('electron', () => ({app:{getVersion:()=> 'test',getPath:()=>mock.root,getLocale:()=> 'en',isPackaged:false},BrowserWindow:{},dialog:{showOpenDialog:async()=>({canceled:false,filePaths:mock.selected})},ipcMain:{on:vi.fn(),handle:(name:string,fn:Function)=>mock.handlers.set(name,fn)},screen:{getPrimaryDisplay:()=>({id:1}),getAllDisplays:()=>[]},shell:{}}))
 vi.mock('electron-log/main',()=>({default:{info:vi.fn(),warn:vi.fn(),error:vi.fn(),transports:{file:{getFile:()=>({path:join(mock.root,'absent.log')})}}}}))
-vi.mock('../src/main/display-mapping',()=>({dumpPrefs:()=>({}),getCleanExit:()=>true,setCleanExit:vi.fn()}))
+vi.mock('../src/main/display-mapping',()=>({dumpPrefs:()=>mock.prefs,getCleanExit:()=>true,setCleanExit:vi.fn()}))
 vi.mock('../src/main/state', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/main/state')>()
   return { ...actual, store: { get: () => mock.state } }
 })
-vi.mock('../src/main/windows',()=>({getActiveWindows:()=>[],getOperatorWindow:()=>({webContents:mock.sender})}))
+vi.mock('../src/main/windows',()=>({getActiveWindows:()=>mock.windows,getOperatorWindow:()=>({webContents:mock.sender})}))
 import { initialState } from '../src/main/state'
 import { buildReport, registerDiagIpc, markMoment } from '../src/main/diag'
 function entries(zip:Buffer):Map<string,Buffer>{
@@ -25,8 +25,27 @@ function entries(zip:Buffer):Map<string,Buffer>{
   expect(zip.readUInt32LE(at)).toBe(0x02014b50)
   return result
 }
-beforeEach(async()=>{mock.state=initialState();mock.state.notes={1:'private note'};mock.root=await mkdtemp(join(tmpdir(),'cuedeck-report-zip-'));mock.handlers.clear();registerDiagIpc()})
+beforeEach(async()=>{mock.prefs={};mock.windows=[];mock.state=initialState();mock.state.notes={1:'private note'};mock.root=await mkdtemp(join(tmpdir(),'cuedeck-report-zip-'));mock.handlers.clear();registerDiagIpc()})
 afterEach(async()=>{await rm(mock.root,{recursive:true,force:true})})
+it('removes full-URL and separate keys from the actual ZIP, including historical logs', async()=>{
+  mock.state.stream.settings.destinations=[{id:'test',name:'',enabled:false,url:'rtmps://stream.example/live/EMBEDDED_TEST_KEY?token=QUERY_TEST_KEY',key:''}]
+  mock.prefs={stream:{destinations:[{url:'rtmp://second.example/live',key:'SEPARATE_TEST_KEY'}]}}
+  await writeFile(join(mock.root,'absent.log'),'old rtmp://old.example/live/HISTORICAL_TEST_KEY\nSEPARATE_TEST_KEY rejected')
+  await mkdir(join(mock.root,'streams'));await writeFile(join(mock.root,'streams','old.log'),'rtmps://old.example/live/OLD_STREAM_KEY')
+  const result=await buildReport('Issue at rtmps://stream.example/live/EMBEDDED_TEST_KEY')
+  if(!result.ok)throw Error(result.error)
+  const files=entries(await readFile(result.path));expect(files.has('streams/old.log')).toBe(true)
+  for(const data of files.values())expect(data.toString()).not.toMatch(/EMBEDDED_TEST_KEY|QUERY_TEST_KEY|SEPARATE_TEST_KEY|HISTORICAL_TEST_KEY|OLD_STREAM_KEY/)
+  expect(mock.state.stream.settings.destinations[0].url).toContain('EMBEDDED_TEST_KEY')
+})
+it('omits the operator image when stream credentials are visible', async()=>{
+  const capturePage=vi.fn()
+  mock.windows=[['operator',{isDestroyed:()=>false,webContents:{executeJavaScript:vi.fn(async()=>true),capturePage}}]]
+  const result=await buildReport('')
+  if(!result.ok)throw Error(result.error)
+  const files=entries(await readFile(result.path));expect(files.has('screen-operator.jpg')).toBe(false)
+  expect(files.has('screen-operator.txt')).toBe(true);expect(capturePage).not.toHaveBeenCalled()
+})
 it('does not attach even selected files without consent; attaches exact bytes with the token',async()=>{
   const file=join(mock.root,'Доклад.pptx');await writeFile(file,'original presentation');mock.selected=[file]
   const choose=()=>mock.handlers.get('diag:choose-materials')!({sender:mock.sender})

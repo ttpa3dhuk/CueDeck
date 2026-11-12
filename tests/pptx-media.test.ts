@@ -246,6 +246,16 @@ describe('PPTX animated GIF', () => {
     expect(result.slideMedia.filter(m => m.kind === 'gif')).toHaveLength(2)
     expect(slideMediaAt('pptx', result.slideMedia, 1)?.file).toBe('media1.mp4')
   })
+  it('reads geometry after Office metadata extensions on GIFs and foreground pictures', async () => {
+    const metadata = '<a:extLst><a:ext uri="{OFFICE-METADATA}"/></a:extLst>'
+    const officePic = pic.replace('<p:cNvPr id="6" name="GIF"/>', `<p:cNvPr id="6" name="GIF">${metadata}</p:cNvPr>`)
+    const foreground = `<p:pic><p:nvPicPr><p:cNvPr id="8" name="separate">${metadata}</p:cNvPr></p:nvPicPr><p:spPr><a:xfrm><a:off x="10000000" y="100000"/><a:ext cx="100000" cy="100000"/></a:xfrm></p:spPr></p:pic>`
+    const result = await preparePptxMedia(await buildDeck(dir, files(officePic + foreground)), 'gif-office-ext')
+    expect(result.slideMedia).toMatchObject([{ kind: 'gif', rect: { x: .1, y: .1, w: .5, h: .5 } }])
+    const rebuilt = execFileSync('unzip', ['-p', result.convertSource, 'ppt/slides/slide1.xml'], { encoding: 'utf8' })
+    expect(rebuilt).not.toContain('name="GIF"')
+    expect(rebuilt).toContain('name="separate"')
+  })
   it('does not animate hidden slides or unsupported group coordinates', async () => {
     for (const [body, hidden, sha] of [[pic, true, 'gif-hidden'], [`<p:grpSp>${pic}</p:grpSp>`, false, 'gif-group']] as const) {
       const result = await preparePptxMedia(await buildDeck(dir, files(body, hidden)), sha)
@@ -266,6 +276,68 @@ describe('PPTX animated GIF', () => {
     await writeFile(cachedPdfPathFor('gif-old-cache'), 'old static GIF PDF')
     expect((await preparePptxMedia(deck, 'gif-old-cache')).temporary).toBe(true)
     expect((await preparePptxMedia(deck, 'gif-old-cache')).slideMedia.some(m => m.kind === 'gif')).toBe(true)
+  })
+})
+
+describe('PPTX chart previews and authored slide numbers', () => {
+  const dir = join(tmpdir(), 'cuedeck-chart-preview-deck')
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
+  const picture = '<p:pic><p:nvPicPr><p:cNvPr id="22" name="Chart preview"/></p:nvPicPr><p:blipFill><a:blip r:embed="rIdPreview"/></p:blipFill><p:spPr><a:xfrm><a:off x="100" y="200"/><a:ext cx="300" cy="400"/></a:xfrm></p:spPr></p:pic>'
+  const alternate = (uri = 'http://schemas.microsoft.com/office/drawing/2014/chartex') =>
+    `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="cx1"><p:graphicFrame><a:graphic><a:graphicData uri="${uri}"><cx:chart r:id="rIdChart"/></a:graphicData></a:graphic></p:graphicFrame></mc:Choice><mc:Fallback>${picture}</mc:Fallback></mc:AlternateContent>`
+  const files = (body: string, preview: Buffer | null = png) => ({
+    ...NOTES_DECK,
+    'ppt/slides/slide1.xml': slideXml(body),
+    'ppt/slides/_rels/slide1.xml.rels': slideRels(null).replace('</Relationships>', `<Relationship Id="rIdPreview" Type="${REL}/image" Target="../media/chart.png"/></Relationships>`),
+    ...(preview ? { 'ppt/media/chart.png': preview } : {}),
+  })
+  afterAll(async () => { await rm(dir, { recursive: true, force: true }) })
+
+  it('uses the saved Office chart image without changing its geometry or unrelated objects', async () => {
+    const result = await preparePptxMedia(await buildDeck(dir, files(alternate() + '<p:sp id="annotation"/>')), 'chart-preview')
+    const xml = execFileSync('unzip', ['-p', result.convertSource, 'ppt/slides/slide1.xml'], { encoding: 'utf8' })
+    expect(xml).not.toContain('cx:chart')
+    expect(xml).not.toContain('mc:AlternateContent')
+    expect(xml).toContain('r:embed="rIdPreview"')
+    expect(xml).toContain('<a:off x="100" y="200"/><a:ext cx="300" cy="400"/>')
+    expect(xml).toContain('<p:sp id="annotation"/>')
+  })
+
+  it.each([null, Buffer.from('not a raster')])('retains chart definitions when the saved image is missing or invalid', async preview => {
+    const result = await preparePptxMedia(await buildDeck(dir, files(alternate(), preview)), 'chart-no-image')
+    const xml = execFileSync('unzip', ['-p', result.convertSource, 'ppt/slides/slide1.xml'], { encoding: 'utf8' })
+    expect(xml).toContain(alternate())
+  })
+
+  it('does not flatten unrelated AlternateContent', async () => {
+    const result = await preparePptxMedia(await buildDeck(dir, files(alternate('other-drawing-type'))), 'chart-unrelated')
+    expect(execFileSync('unzip', ['-p', result.convertSource, 'ppt/slides/slide1.xml'], { encoding: 'utf8' })).toContain(alternate('other-drawing-type'))
+  })
+
+  it('freezes only slide-number fields on all build pages and subsequent source slides', async () => {
+    const field = (value: string, type = 'slidenum') => `<a:fld id="field" type="${type}"><a:rPr sz="2400"/><a:t>${value}</a:t></a:fld>`
+    const deckFiles = { ...NOTES_DECK,
+      'ppt/slides/slide3.xml': slideXml(`<p:sp><p:txBody><a:p>${field('7')}${field('date', 'datetime1')}</a:p></p:txBody></p:sp>`).replace('</p:sld>', TIMING + '</p:sld>'),
+      'ppt/slides/slide4.xml': slideXml(`<p:sp><p:txBody><a:p>${field('8')}</a:p></p:txBody></p:sp>`),
+    }
+    const result = await preparePptxMedia(await buildDeck(dir, deckFiles), 'number-builds')
+    for (const name of ['slide3.xml', 'slide3_cd1.xml', 'slide3_cd2.xml', 'slide4.xml']) {
+      const xml = execFileSync('unzip', ['-p', result.convertSource, `ppt/slides/${name}`], { encoding: 'utf8' })
+      expect(xml).not.toContain('type="slidenum"')
+      expect(xml).toContain(`<a:r><a:rPr sz="2400"/><a:t>${name.startsWith('slide3') ? '7' : '8'}</a:t></a:r>`)
+      if (name.startsWith('slide3')) expect(xml).toContain('type="datetime1"')
+    }
+  })
+
+  it('invalidates a v9 PDF even when only the chart preview changes', async () => {
+    const sha = 'chart-cache-v9', deck = await buildDeck(dir, files(alternate()))
+    await preparePptxMedia(deck, sha)
+    const path = join(dirname(mediaDirFor(sha)), `${sha}.media.json`)
+    const manifest = JSON.parse(await readFile(path, 'utf8')); manifest.version = 9
+    await writeFile(path, JSON.stringify(manifest)); await writeFile(cachedPdfPathFor(sha), 'old line-chart PDF')
+    const result = await preparePptxMedia(deck, sha)
+    expect(result.temporary).toBe(true)
+    expect(existsSync(cachedPdfPathFor(sha))).toBe(false)
   })
 })
 

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, session, shell } from 'electron'
 import log from 'electron-log/main'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
-import { copyFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type {
   StreamDestination,
@@ -16,6 +16,7 @@ import type {
   StreamStatus,
 } from '../../shared/types.js'
 import { t } from '../../shared/i18n.js'
+import { redactRtmpText, streamSecretValues } from '../../shared/stream-redaction.js'
 import { fileStamp, logsDir } from '../diag.js'
 import { store } from '../state.js'
 import { getStreamSettings, sanitizeStreamSettings, setStreamSettings } from '../display-mapping.js'
@@ -115,6 +116,7 @@ function patchStream(p: Partial<StreamStatus>): void {
 
 /** Строка в журнал трансляции (окно оператора), в общий журнал программы и в файл этого эфира. */
 function note(level: StreamLogEntry['level'], text: string, side?: StreamSide): void {
+  text = redactRtmpText(text, streamSecretValues(settings()))
   journal = [{ at: Date.now(), level, side, text }, ...journal].slice(0, LOG_MAX)
   const line = `stream: ${side ? `[${side}] ` : ''}${text}`
   if (level === 'info') log.info(line)
@@ -312,7 +314,7 @@ function scheduleRetry(d: Dest, why: { side: StreamSide; text: string }): void {
 }
 
 function label(d: Dest): string {
-  return d.cfg.name || d.cfg.url
+  return redactRtmpText(d.cfg.name || d.cfg.url, streamSecretValues({ destinations: [d.cfg] }))
 }
 
 function sendHeaders(d: Dest): void {
@@ -591,7 +593,7 @@ export function stopStream(): void {
 
 /** Что не так с площадкой, у которой не разбирается адрес: чаще всего — не вставлен ключ. */
 function destProblem(d: StreamDestination): string {
-  const name = d.name || d.url
+  const name = redactRtmpText(d.name || d.url, streamSecretValues({ destinations: [d] }))
   if (/^rtmps?:\/\/[^/]+\/[^/?#]+\/?(\?[^#]*)?$/i.test(d.url.trim()) && !d.key.trim()) {
     return t('«{name}»: нет ключа потока — скопируй его на площадке и вставь в поле «Ключ потока»', { name })
   }
@@ -667,7 +669,7 @@ async function saveLog(): Promise<{ ok: true; path: string } | { ok: false; erro
   if (!src || !existsSync(src)) return { ok: false, error: t('Ещё не было ни одного эфира') }
   try {
     const out = join(app.getPath('desktop'), `CueDeck-${src.split(/[/\\]/).pop()}`)
-    await copyFile(src, out)
+    await writeFile(out, redactRtmpText(await readFile(src, 'utf8'), streamSecretValues(settings())), 'utf8')
     shell.showItemInFolder(out)
     return { ok: true, path: out }
   } catch (err) {

@@ -322,6 +322,7 @@ export interface PresenterApi {
       { ok: true; status: SyphonStatus } | { ok: false; error: string; status: SyphonStatus }
     >
   }
+  syphonPrompter: PresenterApi['syphon']
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */
     pathFor(file: File): string

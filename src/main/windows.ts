@@ -431,6 +431,9 @@ export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080,
     enableLargerThanScreen: true,
     backgroundColor: '#000000',
     title: 'CueDeck (GPU audience)',
+    // Windows' invisible resize border contributes to the OSR surface size,
+    // even for frame:false. At fractional DPI it can add 1–2 pixels.
+    thickFrame: false,
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
@@ -443,11 +446,42 @@ export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080,
   })
   // Windows constrains initial window bounds to the screen/work area, even
   // for hidden OSR windows. Resize after construction, before the first frame.
-  const [actualWidth, actualHeight] = win.getContentSize()
-  if (actualWidth !== width || actualHeight !== height) win.setContentSize(width, height)
+  // OSR uses the native window's OUTER size. Windows also rounds DIP -> native
+  // pixels -> DIP (e.g. requesting 1920 at 115% can return 1921). Correct the
+  // request by the observed error, rather than repeating the same rounded size.
+  let requestedWidth = width
+  let requestedHeight = height
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const [actualWidth, actualHeight] = win.getSize()
+    if (actualWidth === width && actualHeight === height) break
+    if (attempt > 0) {
+      requestedWidth += width - actualWidth
+      requestedHeight += height - actualHeight
+    }
+    win.setSize(requestedWidth, requestedHeight)
+  }
+  const [actualWidth, actualHeight] = win.getSize()
+  if (actualWidth !== width || actualHeight !== height) {
+    win.destroy()
+    throw new Error(`GPU audience window size ${actualWidth}x${actualHeight} does not match target ${width}x${height}`)
+  }
   win.webContents.setFrameRate(30)
   if (load) loadGpuAudiencePage(win)
   return win
+}
+
+/** Render the real confidence monitor using the same DPI-corrected GPU factory. */
+export function createGpuPrompterWindow(load = true): BrowserWindow {
+  const win = createGpuAudienceWindow(1920, 1080, false)
+  if (load) loadGpuPrompterPage(win)
+  return win
+}
+
+/** Keep the physical/OMT speaker registration independent of this GPU output. */
+export function loadGpuPrompterPage(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  loadRenderer(win, { entry: 'presenter', role: 'speaker' })
+  store.registerWindow('gpu-prompter', win)
 }
 
 /** A display-only GPU consumer: no audience state registration or media load. */

@@ -6,7 +6,7 @@
 import type { SlideMedia } from './types.js'
 
 /** Версия OOXML-манифеста (pptx-media). Формат уже используется проектами. */
-export const PPTX_MANIFEST_VERSION = 9
+export const PPTX_MANIFEST_VERSION = 10
 
 /** Папка versioned-кэша внутри userData/pptx-cache. */
 export const PREPARED_CACHE_FOLDER = 'prepared'

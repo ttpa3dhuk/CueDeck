@@ -63,6 +63,12 @@ afterAll(async () => {
 })
 
 describe('remote HTTP method compatibility', () => {
+  it.each(['GET', 'POST'])('rejects cross-site %s without executing a command when the key is off', async method => {
+    const res = await request(method, '/api/timer/start', { origin: 'https://attacker.example', 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'no-cors' })
+    expect(res.status).toBe(403)
+    expect(starts).not.toHaveBeenCalled()
+    expect(store.get().timer.running).toBe(false)
+  })
   it.each(['GET', 'POST'])('%s still executes an existing controller command exactly once', async method => {
     const res = await request(method, '/api/timer/start')
     expect(res.status).toBe(200)

@@ -229,6 +229,10 @@ const api: PresenterApi = {
     status: () => ipcRenderer.invoke('syphon:status'),
     configure: (settings) => ipcRenderer.invoke('syphon:configure', settings),
   },
+  syphonPrompter: {
+    status: () => ipcRenderer.invoke('syphon-prompter:status'),
+    configure: (settings) => ipcRenderer.invoke('syphon-prompter:configure', settings),
+  },
   files: {
     // Sandboxed renderer has no File.path (removed in Electron 32) — this is
     // the only way to resolve a dropped File to its filesystem path.

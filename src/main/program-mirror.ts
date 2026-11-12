@@ -1,11 +1,10 @@
 import { programVideoSource, programVideoOwner } from '../shared/program-source.js'
 import { ipcMain, MessageChannelMain, type WebContents } from 'electron'
-import { store } from './state.js'
-import type { Role } from '../shared/types.js'
+import { store, type WindowKey } from './state.js'
 
 // Windows can share a pressured program decoder; 0 disables it, 1 forces it for QA.
 export const programMirrorEnabled = process.platform === 'win32' && process.env.CUEDECK_SHARED_VIDEO !== '0'
-const roles: Role[] = ['operator', 'speaker', 'audience']
+const roles: WindowKey[] = ['operator', 'speaker', 'audience', 'gpu-prompter']
 
 export function expectedProgramVideo(): string | null { return programVideoSource(store.get()) }
 

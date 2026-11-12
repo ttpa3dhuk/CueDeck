@@ -944,12 +944,13 @@
                   <p id="omt-error" class="remote-status error hidden"></p>
                 </div>
               </div>
-              <div id="syphon-settings" class="output-group syphon-card">
+              <div id="syphon-settings" class="output-group">
                 <div class="output-title-row">
                   <h3 id="local-gpu-title" class="output-title">Syphon</h3>
                   <span id="local-gpu-platform" class="output-badge">macOS</span>
                 </div>
                 <p class="audio-hint">Локальный видеовыход для Resolume и OBS. Только картинка, без звука.</p>
+                <div id="syphon-audience-settings" class="syphon-card">
                 <div class="syphon-row">
                   <label class="windowed-label">
                     <input id="syphon-enabled" type="checkbox" />
@@ -960,6 +961,19 @@
                   <span id="syphon-status" class="syphon-status remote-status" role="status"></span>
                 </div>
                 <p class="audio-hint">Работает вместе с окном зала. OMT «Зал» и стрим занимают этот выход.</p>
+                </div>
+                <div id="syphon-prompter-settings" class="syphon-card">
+                  <div class="syphon-row">
+                    <label class="windowed-label">
+                      <input id="syphon-prompter-enabled" type="checkbox" />
+                      <span>Суфлёр</span>
+                    </label>
+                    <input id="syphon-prompter-name" class="syphon-name" type="text" maxlength="64" spellcheck="false" aria-label="Имя источника суфлёра" />
+                    <span class="syphon-resolution" title="Разрешение">1920×1080</span>
+                    <span id="syphon-prompter-status" class="syphon-status remote-status" role="status"></span>
+                  </div>
+                  <p class="audio-hint">Отдельный выход суфлёра. Работает независимо от выхода зала и физических экранов.</p>
+                </div>
               </div>
             </section>
             <section class="settings-section hidden" data-section="midi">

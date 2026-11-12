@@ -53,6 +53,18 @@ it('returns the real runtime status to the operator', () => {
   expect(target.getStatus).toHaveBeenCalledOnce()
 })
 
+it('keeps the prompter channels separate and applies the same operator check', async () => {
+  const prompter = { getStatus: vi.fn(() => ({ ...status, name: 'CueDeck Prompter' })),
+    configure: vi.fn(async () => ({ ok: true as const, status: { ...status, name: 'CueDeck Prompter' } })) }
+  registerSyphonIpc(prompter, 'syphon-prompter')
+  await expect(call('syphon-prompter:configure', { sender: {} }, { enabled: true })).rejects.toThrow('Operator')
+  await expect(call('syphon-prompter:configure', operator, { enabled: true })).resolves.toMatchObject({ ok: true })
+  expect(prompter.configure).toHaveBeenCalledWith({ enabled: true })
+  expect(target.configure).not.toHaveBeenCalled()
+  expect(call('syphon-prompter:status', operator).name).toBe('CueDeck Prompter')
+  expect(call('syphon:status', operator).name).toBe(status.name)
+})
+
 it('accepts private main-process remote identity and rejects a forged copy', async () => {
   const { REMOTE_EVENT } = await import('../src/main/remote/event')
   await expect(call('syphon:configure', { ...REMOTE_EVENT }, { enabled: true })).rejects.toThrow('Operator')

@@ -472,6 +472,8 @@ export interface AppState {
   omt: OmtStatus
   /** Syphon/Spout для Resolume/OBS: настройка + фактический статус. */
   syphon: SyphonStatus
+  /** Independent local GPU output of the confidence monitor. */
+  syphonPrompter: SyphonStatus
 }
 
 /**
@@ -599,6 +601,11 @@ export const SYPHON_NAME_MAX = 64
 export const DEFAULT_SYPHON_SETTINGS: SyphonSettings = {
   enabled: false,
   name: 'CueDeck Program',
+}
+
+export const DEFAULT_SYPHON_PROMPTER_SETTINGS: SyphonSettings = {
+  enabled: false,
+  name: 'CueDeck Prompter',
 }
 
 export function defaultSyphonStatus(): SyphonStatus {

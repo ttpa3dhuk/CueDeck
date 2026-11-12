@@ -40,7 +40,7 @@ const PLAYABLE_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm'])
 const STRIP_EXTS = new Set([...PLAYABLE_EXTS, 'avi', 'wmv', 'mpg', 'mpeg', 'mkv', '3gp', 'asf'])
 
 const MANIFEST_VERSION = PPTX_MANIFEST_VERSION
-/** Geometry/crop updates only change overlays; the stripped PDF stays compatible. */
+/** Older PDFs remain reusable only when no changed chart/field/GIF pixels are found. */
 const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5, 6, 7, 8, 9])
 
 const SLIDE_CONTENT_TYPE =
@@ -447,6 +447,43 @@ function topLevelBlocks(fragment: string, tag: string): string[] {
   }
 }
 
+/** Use Office's own raster preview when its newer chart cannot be rendered faithfully. */
+function preferChartPreviews(xml: string, imageExists: (rid: string) => boolean): string {
+  for (const alternate of topLevelBlocks(xml, 'mc:AlternateContent')) {
+    const choices = topLevelBlocks(alternate, 'mc:Choice')
+    if (!choices.some(choice => /<a:graphicData\b[^>]*\buri="http:\/\/schemas\.microsoft\.com\/office\/drawing\/2014\/chartex"/.test(choice))) continue
+    const fallback = topLevelBlocks(alternate, 'mc:Fallback')[0]
+    if (!fallback) continue
+    const inner = fallback.replace(/^<mc:Fallback\b[^>]*>/, '').replace(/<\/mc:Fallback>$/, '')
+    const pictures = topLevelBlocks(inner, 'p:pic')
+    if (pictures.length !== 1 || inner.replace(pictures[0], '').trim()) continue
+    const blip = pictures[0].match(/<a:blip\b[^>]*>/)?.[0]
+    if (!blip || !imageExists(attrsOf(blip)['r:embed'])) continue
+    // The wrapper may own namespace bindings used inside the fallback picture.
+    const namespaces = new Map<string, string>()
+    for (const opening of [alternate.match(/^<[^>]*>/)?.[0], fallback.match(/^<[^>]*>/)?.[0]]) {
+      for (const match of (opening ?? '').matchAll(/\s(xmlns(?::[\w.-]+)?)="([^"]*)"/g)) namespaces.set(match[1], match[2])
+    }
+    let picture = pictures[0]
+    const opening = picture.match(/^<[^>]*>/)![0]
+    const bindings = [...namespaces].filter(([key]) => !(key in attrsOf(opening)))
+      .map(([key, value]) => ` ${key}="${value}"`).join('')
+    picture = picture.replace(/^<p:pic\b/, `<p:pic${bindings}`)
+    xml = xml.replace(alternate, picture)
+  }
+  return xml
+}
+
+/** Build pages keep the authored slide number, rather than LibreOffice's new page index. */
+function freezeSlideNumbers(xml: string): string {
+  return xml.replace(/<a:fld\b[^>]*>[\s\S]*?<\/a:fld>/g, field => {
+    if (attrsOf(field.match(/^<[^>]*>/)![0]).type !== 'slidenum') return field
+    const text = topLevelBlocks(field, 'a:t')[0]
+    if (!text) return field
+    return `<a:r>${topLevelBlocks(field, 'a:rPr')[0] ?? ''}${text}</a:r>`
+  })
+}
+
 // ── Разбор presentation.xml ──────────────────────────────────────────────────
 
 interface Presentation {
@@ -584,9 +621,11 @@ function findSlideGifs(pres: Presentation, text: (name: string) => string | null
       const entry = entries.get(mediaEntry)
       if (extOf(mediaEntry) !== 'gif' || !entry || !isAnimatedGif(readEntry(data, entry))) continue
       const shape = pic.match(/<p:cNvPr\b[^>]*>/)?.[0]
-      const transform = pic.match(/<a:xfrm\b[^>]*>/)?.[0]
-      if (!shape || !transform || Number(attrsOf(transform).rot ?? 0) || ['1', 'true'].includes(attrsOf(transform).flipH) || ['1', 'true'].includes(attrsOf(transform).flipV)) continue
-      const off = pic.match(/<a:off\b[^>]*>/)?.[0], ext = pic.match(/<a:ext\b[^>]*>/)?.[0]
+      const transform = topLevelBlocks(pic, 'a:xfrm')[0]
+      const transformAttrs = transform ? attrsOf(transform.match(/^<[^>]*>/)![0]) : {}
+      if (!shape || !transform || Number(transformAttrs.rot ?? 0) || ['1', 'true'].includes(transformAttrs.flipH) || ['1', 'true'].includes(transformAttrs.flipV)) continue
+      // a:ext also occurs in metadata extension lists before the real geometry.
+      const off = transform.match(/<a:off\b[^>]*>/)?.[0], ext = transform.match(/<a:ext\b[^>]*>/)?.[0]
       if (!off || !ext) continue
       const x = Number(attrsOf(off).x), y = Number(attrsOf(off).y)
       const w = Number(attrsOf(ext).cx), h = Number(attrsOf(ext).cy)
@@ -600,7 +639,8 @@ function findSlideGifs(pres: Presentation, text: (name: string) => string | null
       const after = xml.slice(xml.indexOf(pic) + pic.length)
       const foreground = ['p:sp', 'p:pic', 'p:graphicFrame', 'p:cxnSp', 'p:grpSp'].flatMap(tag => topLevelBlocks(after, tag))
       if (foreground.some(block => {
-        const off = block.match(/<a:off\b[^>]*>/)?.[0], ext = block.match(/<a:ext\b[^>]*>/)?.[0]
+        const geometry = topLevelBlocks(block, 'a:xfrm')[0] ?? topLevelBlocks(block, 'p:xfrm')[0] ?? ''
+        const off = geometry.match(/<a:off\b[^>]*>/)?.[0], ext = geometry.match(/<a:ext\b[^>]*>/)?.[0]
         if (!off || !ext) return true
         const a = attrsOf(off), b = attrsOf(ext)
         return Number(a.x) < x + w && Number(a.y) < y + h && Number(a.x) + Number(b.cx) > x && Number(a.y) + Number(b.cy) > y
@@ -870,21 +910,39 @@ interface TransformResult {
   videos: FoundVideo[]
   pageNotes: Record<number, string>
   fonts: string[]
+  requiresFreshPdf: boolean
 }
 
 function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   const byName = new Map(entries.map((e) => [e.name, e]))
   const textCache = new Map<string, string | null>()
+  const compatibleSlides = new Map<string, Buffer>()
   const text = (name: string): string | null => {
     if (!textCache.has(name)) {
       const e = byName.get(name)
-      textCache.set(name, e ? readEntry(data, e).toString('utf8') : null)
+      let xml = e ? readEntry(data, e).toString('utf8') : null
+      if (xml && /^ppt\/slides\/[^/]+\.xml$/.test(name)) {
+        const original = xml
+        const rels = parseRels(text(relsPathOf(name)) ?? '')
+        xml = preferChartPreviews(xml, rid => {
+          const target = rels.get(rid)
+          const image = target && byName.get(normalizeSlideTarget(target))
+          if (!image) return false
+          const bytes = readEntry(data, image)
+          return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+            bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255])) ||
+            ['GIF87a', 'GIF89a'].includes(bytes.subarray(0, 6).toString('ascii'))
+        })
+        xml = freezeSlideNumbers(xml)
+        if (xml !== original) compatibleSlides.set(name, Buffer.from(xml))
+      }
+      textCache.set(name, xml)
     }
     return textCache.get(name)!
   }
 
   const pres = parsePresentation(text)
-  if (!pres) return { zip: null, slideMedia: [], videos: [], pageNotes: {}, fonts: [] }
+  if (!pres) return { zip: null, slideMedia: [], videos: [], pageNotes: {}, fonts: [], requiresFreshPdf: false }
 
   const videos = findSlideVideos(pres, text, (n) => byName.has(n))
   const gifs = findSlideGifs(pres, text, data, byName)
@@ -957,9 +1015,10 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   }
   videos.push(...gifs)
 
-  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0) return { zip: null, slideMedia, slideTransitions, videos, pageNotes, fonts }
+  const requiresFreshPdf = compatibleSlides.size > 0 || gifs.length > 0
+  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0 && compatibleSlides.size === 0) return { zip: null, slideMedia, slideTransitions, videos, pageNotes, fonts, requiresFreshPdf }
 
-  const replace = new Map<string, Buffer>()
+  const replace = new Map(compatibleSlides)
   const add: { name: string; data: Buffer }[] = []
 
   if (stepsBySlide.size > 0) {
@@ -1036,7 +1095,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
       }
     }
   }
-  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, slideTransitions, videos, pageNotes, fonts }
+  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, slideTransitions, videos, pageNotes, fonts, requiresFreshPdf }
 }
 
 // ── Публичный вход ───────────────────────────────────────────────────────────
@@ -1151,7 +1210,7 @@ export async function preparePptxMedia(
     const parsed = { ...original, slideMedia: t.slideMedia, slideTransitions: t.slideTransitions, pageNotes: t.pageNotes, fonts: t.fonts }
     if (!t.zip) return parsed
     // Манифест прошлой версии: PDF собран от такой же пересборки — годен.
-    if (pdfValid && !t.slideMedia.some(media => media.kind === 'gif') && existsSync(roots.pdfPath(sha1))) return parsed
+    if (pdfValid && !t.requiresFreshPdf && existsSync(roots.pdfPath(sha1))) return parsed
 
     // PDF в кэше сделан до пересборки (без шагов, с видео внутри) — пересоздать.
     await rm(roots.pdfPath(sha1), { force: true }).catch(() => undefined)
