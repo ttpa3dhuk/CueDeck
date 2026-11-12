@@ -23,6 +23,7 @@ export interface ReportMarkerContext {
   timerMode?: TimerMode
   audienceTimer?: AudienceTimerState
   slideFadeMs?: number
+  slideFadeMode?: 'file' | 'custom' | 'cut'
   takeFadeMs?: number
   takeTransition?: { id: string; durationMs: number } | null
   listIndex?: number

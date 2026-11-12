@@ -8,6 +8,12 @@ const url = new URL('http://192.0.2.20:9420/api/timer/start')
 const host = '192.0.2.20:9420'
 
 describe('optional network access key', () => {
+  it.each([{ origin: 'https://attacker.example' }, { referer: 'https://attacker.example/page' }, { origin: 'null' }, { 'sec-fetch-site': 'cross-site' }])('rejects foreign browser origins with protection disabled: %j', headers => {
+    expect(remoteHttpAccess(false, null, network, { host, ...headers }, url)).toBe(403)
+  })
+  it('allows same-origin browser requests with the optional key disabled', () => {
+    expect(remoteHttpAccess(false, null, network, { host, origin: `http://${host}`, 'sec-fetch-site': 'same-origin' }, url)).toBeNull()
+  })
   it('preserves requests without credentials when protection is off', () => {
     expect(remoteHttpAccess(false, null, network, { host }, url)).toBeNull()
   })

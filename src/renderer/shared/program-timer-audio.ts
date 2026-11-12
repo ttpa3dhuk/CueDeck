@@ -1,7 +1,7 @@
 import type { AppState, Role } from '../../shared/types'
 import type { AudienceTimerState } from '../../shared/audience-timer'
 import { remainingMs } from './timer'
-import { shouldMute } from './video'
+import { shouldMuteMix } from './video'
 
 export type TimerCue = 'tick' | 'gong'
 
@@ -62,7 +62,7 @@ export class ProgramTimerAudio {
 
   update(state: AppState): void {
     const cues = this.tracker.update(state.audienceTimer)
-    this.muted = shouldMute(state, this.role)
+    this.muted = shouldMuteMix(state, this.role)
     // Speaker windows never create an audio graph.
     if (this.role === 'speaker') return
     if (!this.context && !this.muted && (state.audienceTimer.tickEnabled || state.audienceTimer.gongEnabled)) {

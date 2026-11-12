@@ -4,10 +4,10 @@ import { log } from './diag.js'
 import { mkdir, rename, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, parse } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { localPptxCacheDir, pdfCachePath, pptxReadCacheDir } from './project-cache.js'
 import { getSofficePath, setSofficePath } from './display-mapping.js'
 import { t } from '../shared/i18n.js'
+import { convertSourceToPdf } from './presentation-preparation-convert.js'
 
 /**
  * Где искать LibreOffice. Пути платформозависимы — на Windows их не было
@@ -155,14 +155,6 @@ export function sofficeSearchPaths(): string[] {
 
 const cacheDir = localPptxCacheDir
 
-// Эти параметры влияют на число и вид страниц, с которыми работает CueDeck.
-const pdfExportFilter = 'pdf:impress_pdf_Export:' + JSON.stringify({
-  ExportHiddenSlides: { type: 'boolean', value: 'false' },
-  ExportNotesPages: { type: 'boolean', value: 'false' },
-  ExportNotes: { type: 'boolean', value: 'false' },
-  ReduceImageResolution: { type: 'boolean', value: 'false' },
-})
-
 export class LibreOfficeMissingError extends Error {
   constructor() {
     super(t('LibreOffice не установлен — скачай с libreoffice.org и перезапусти CueDeck'))
@@ -207,33 +199,17 @@ export async function convertPptxToPdf(pptxPath: string, sourceSha1: string, ori
   const t0 = performance.now()
   log.info(`soffice: конвертация ${pptxPath} (${soffice})`)
   try {
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(soffice, [
-        `-env:UserInstallation=${pathToFileURL(profileDir).href}`,
-        '--headless',
-        '--norestore',
-        '--nologo',
-        '--nofirststartwizard',
-        '--convert-to',
-        pdfExportFilter,
-        '--outdir',
-        tmpDir,
-        pptxPath,
-      ])
-      let stderr = ''
-      proc.stderr.on('data', (d) => (stderr += String(d)))
-      proc.on('error', (err) => reject(err))
-      proc.on('close', (code) => {
-        if (code === 0) resolve()
-        else reject(new Error(`LibreOffice exit ${code}: ${stderr.trim() || 'unknown error'}`))
-      })
+    const generated = await convertSourceToPdf({
+      sofficePath: soffice,
+      sourcePath: pptxPath,
+      outputDir: tmpDir,
+      profileDir,
+      log: (level, message, err) => {
+        if (level === 'error') log.error(message, err)
+        else if (level === 'warn') log.warn(message)
+        else log.info(message)
+      },
     })
-
-    const parsed = parse(pptxPath)
-    const generated = join(tmpDir, `${parsed.name}.pdf`)
-    if (!existsSync(generated)) {
-      throw new Error(t('LibreOffice не создал PDF (возможно, файл повреждён)'))
-    }
     await mkdir(join(cacheDir(), readableCacheFolder(originalPath)), { recursive: true })
     await rename(generated, target)
     log.info(`soffice: готово за ${Math.round(performance.now() - t0)} мс → ${target}`)

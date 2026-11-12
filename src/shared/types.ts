@@ -195,6 +195,8 @@ export interface SlideMediaRect {
  * тот же, что и для «файл целиком — видео».
  */
 export interface SlideMedia {
+  /** Отсутствует у видео из прежних проектов. GIF играет независимо от видеотранспорта. */
+  kind?: 'gif'
   /** Номер страницы (1-based, совпадает с currentSlide). */
   slide: number
   rect: SlideMediaRect
@@ -225,6 +227,8 @@ export interface PlaylistFolder {
 }
 
 export interface PlaylistEntry {
+  /** Per-input audio switch, independent of the program mix mute. Missing = audible. */
+  sourceMuted?: boolean
   folderId?: string
   id: string
   kind: FileKind
@@ -253,6 +257,7 @@ export interface PlaylistEntry {
   fadeMs?: number
   /** PDF/PPTX slide crossfade; absent/zero keeps a cut. */
   slideFadeMs?: number
+  slideFadeMode?: 'file' | 'custom' | 'cut'
   /**
    * Зациклить ролик этой записи: видео-заставка крутится, пока спикер на
    * сцене, а обычный ролик доигрывает и встаёт. Настройка живёт у записи, а не
@@ -278,6 +283,8 @@ export interface PlaylistEntry {
  * program fields. Keeping program top-level avoids touching audience/speaker code.
  */
 export interface DeckState {
+  /** Applied input mute, retained even if its playlist card is removed. */
+  sourceMuted?: boolean
   /** Transient staging of a report snapshot; never a venue/project preference. */
   recoveryTake?: boolean
   path: string | null
@@ -290,6 +297,7 @@ export interface DeckState {
   playlistId: string | null
   /** Видео, вшитые в слайды (только PPTX; пусто для остальных форматов). */
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
 }
 
 export interface ProjectTransferStatus {
@@ -302,6 +310,11 @@ export interface ProjectTransferStatus {
 }
 
 export interface AppState {
+  programOverlay?: import('./program-overlay').ProgramOverlayConfig
+  /** Runtime conversion status by source path; never stored in project/session files. */
+  preparations: Record<string, { phase: 'queued' | 'preparing' | 'ready' | 'error'; error?: string }>
+  /** Applied program input mute; video.muted remains the independent mix switch. */
+  sourceMuted?: boolean
   startup: StartupSettings
   recoveryStartup: boolean
   autosaveError: string | null
@@ -319,6 +332,7 @@ export interface AppState {
   video: VideoState
   /** Видео, вшитые в слайды программного PPTX (см. SlideMedia). */
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
   materialSettings: import('./material-settings.js').MaterialSettings
   timer: TimerState
   /** Independent countdown over the audience feed; speaker timer is unaffected. */
@@ -430,7 +444,6 @@ export interface AppState {
   timerAdjustments: number[]
   timerPresets: number[]
   /** Opt-in double-click TAKE; false keeps playlist activation in Preview. */
-  playlistDoubleClickTake: boolean
   /**
    * Global clicker: PgUp/PgDn switch program slides system-wide (globalShortcut),
    * so the speaker keeps clicking while the operator works in a browser/Finder.
@@ -459,6 +472,8 @@ export interface AppState {
   omt: OmtStatus
   /** Syphon/Spout для Resolume/OBS: настройка + фактический статус. */
   syphon: SyphonStatus
+  /** Independent local GPU output of the confidence monitor. */
+  syphonPrompter: SyphonStatus
 }
 
 /**
@@ -585,7 +600,12 @@ export const SYPHON_NAME_MAX = 64
 
 export const DEFAULT_SYPHON_SETTINGS: SyphonSettings = {
   enabled: false,
-  name: 'CueDeck Audience',
+  name: 'CueDeck Program',
+}
+
+export const DEFAULT_SYPHON_PROMPTER_SETTINGS: SyphonSettings = {
+  enabled: false,
+  name: 'CueDeck Prompter',
 }
 
 export function defaultSyphonStatus(): SyphonStatus {

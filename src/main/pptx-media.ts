@@ -2,10 +2,11 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { deflateRawSync, inflateRawSync } from 'node:zlib'
 import { join } from 'node:path'
-import { localPptxCacheDir, pptxReadCacheDir, PPTX_MANIFEST_VERSION } from './project-cache.js'
+import { PPTX_MANIFEST_VERSION } from '../shared/presentation-preparation.js'
 import type { SlideMedia } from '../shared/types.js'
-import { cachedPdfPathFor } from './pptx-converter.js'
 import { requestedFonts } from './pptx-fonts.js'
+import { isAnimatedGif } from '../shared/gif.js'
+import { pptxFadeDuration } from '../shared/pptx-transition.js'
 
 /**
  * PPTX-препроцессор перед конвертацией в PDF. Закрывает две фичи:
@@ -39,8 +40,8 @@ const PLAYABLE_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm'])
 const STRIP_EXTS = new Set([...PLAYABLE_EXTS, 'avi', 'wmv', 'mpg', 'mpeg', 'mkv', '3gp', 'asf'])
 
 const MANIFEST_VERSION = PPTX_MANIFEST_VERSION
-/** Geometry/crop updates only change overlays; the stripped PDF stays compatible. */
-const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5, 6, 7])
+/** Older PDFs remain reusable only when no changed chart/field/GIF pixels are found. */
+const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5, 6, 7, 8, 9])
 
 const SLIDE_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'
@@ -57,6 +58,7 @@ interface MediaManifest {
   /** Исходник пересобирался (стрип видео и/или шаги) → конвертируем копию. */
   rebuilt: boolean
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
   /** Заметки докладчика: номер страницы PDF (1-based) → текст. */
   pageNotes: Record<number, string>
   /** Шрифты, которые просит презентация (проверка подмены — pptx-fonts.ts). */
@@ -65,6 +67,7 @@ interface MediaManifest {
 
 export interface PreparedPptxMedia {
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
   /** Заметки докладчика из PPTX по страницам PDF (1-based). */
   pageNotes: Record<number, string>
   /** Шрифты, которые просит презентация. */
@@ -75,15 +78,63 @@ export interface PreparedPptxMedia {
   temporary: boolean
 }
 
-const cacheDir = localPptxCacheDir
+/**
+ * Куда писать артефакты и откуда читать manifest. В main это локальный кэш
+ * (с учётом project-cache), в utilityProcess — приватный stage текущего job.
+ * Модуль не знает про Electron: пути передаются снаружи.
+ */
+export interface PptxMediaRoots {
+  /** Пересобранная копия и извлечённые ролики нового разбора. */
+  writeDir: string
+  /** Где искать manifest/media (может быть project-cache или versioned-root). */
+  readDir(sha1: string): string
+  /** Готовый PDF для этого sha1, если он уже есть. */
+  pdfPath(sha1: string): string
+}
+
+type PptxMediaRootsResolver = () => PptxMediaRoots
+let configuredRoots: PptxMediaRootsResolver | null = null
+let fallbackRoots: PptxMediaRoots | null = null
+
+/**
+ * Main регистрирует резолвер один раз (project-cache). Worker передаёт roots
+ * аргументом и сюда не попадает; импорт модуля сам по себе Electron не тянет.
+ */
+export function configurePptxMediaRoots(resolver: PptxMediaRootsResolver): void {
+  configuredRoots = resolver
+}
+
+function currentRoots(): PptxMediaRoots | null {
+  return configuredRoots ? configuredRoots() : fallbackRoots
+}
+
+/** Ленивый резолвер для main/старых тестов: динамический импорт, не статический. */
+async function resolveRoots(roots?: PptxMediaRoots): Promise<PptxMediaRoots> {
+  if (roots) return roots
+  const ready = currentRoots()
+  if (ready) return ready
+  const pc = await import('./project-cache.js') as typeof import('./project-cache.js')
+  const pdfPath: (sha1: string) => string = (sha1) => {
+    const root = pc.pptxReadCacheDir(sha1)
+    return pc.pdfCachePath(root, sha1) ?? join(root, `${sha1}.pdf`)
+  }
+  fallbackRoots = {
+    writeDir: pc.localPptxCacheDir(),
+    readDir: (sha1) => pc.pptxReadCacheDir(sha1),
+    pdfPath,
+  }
+  return fallbackRoots
+}
 
 /** Папка с извлечёнными роликами данного PPTX (раздаётся через cuedeck-media://). */
 export function mediaDirFor(sha1: string): string {
-  return join(pptxReadCacheDir(sha1), `${sha1}.media`)
+  const roots = currentRoots()
+  if (!roots) throw new Error('pptx-media: roots are not configured')
+  return join(roots.readDir(sha1), `${sha1}.media`)
 }
 
-function manifestPathFor(sha1: string): string {
-  return join(pptxReadCacheDir(sha1), `${sha1}.media.json`)
+function manifestPathFor(sha1: string, roots: PptxMediaRoots): string {
+  return join(roots.readDir(sha1), `${sha1}.media.json`)
 }
 
 function extOf(name: string): string {
@@ -396,6 +447,43 @@ function topLevelBlocks(fragment: string, tag: string): string[] {
   }
 }
 
+/** Use Office's own raster preview when its newer chart cannot be rendered faithfully. */
+function preferChartPreviews(xml: string, imageExists: (rid: string) => boolean): string {
+  for (const alternate of topLevelBlocks(xml, 'mc:AlternateContent')) {
+    const choices = topLevelBlocks(alternate, 'mc:Choice')
+    if (!choices.some(choice => /<a:graphicData\b[^>]*\buri="http:\/\/schemas\.microsoft\.com\/office\/drawing\/2014\/chartex"/.test(choice))) continue
+    const fallback = topLevelBlocks(alternate, 'mc:Fallback')[0]
+    if (!fallback) continue
+    const inner = fallback.replace(/^<mc:Fallback\b[^>]*>/, '').replace(/<\/mc:Fallback>$/, '')
+    const pictures = topLevelBlocks(inner, 'p:pic')
+    if (pictures.length !== 1 || inner.replace(pictures[0], '').trim()) continue
+    const blip = pictures[0].match(/<a:blip\b[^>]*>/)?.[0]
+    if (!blip || !imageExists(attrsOf(blip)['r:embed'])) continue
+    // The wrapper may own namespace bindings used inside the fallback picture.
+    const namespaces = new Map<string, string>()
+    for (const opening of [alternate.match(/^<[^>]*>/)?.[0], fallback.match(/^<[^>]*>/)?.[0]]) {
+      for (const match of (opening ?? '').matchAll(/\s(xmlns(?::[\w.-]+)?)="([^"]*)"/g)) namespaces.set(match[1], match[2])
+    }
+    let picture = pictures[0]
+    const opening = picture.match(/^<[^>]*>/)![0]
+    const bindings = [...namespaces].filter(([key]) => !(key in attrsOf(opening)))
+      .map(([key, value]) => ` ${key}="${value}"`).join('')
+    picture = picture.replace(/^<p:pic\b/, `<p:pic${bindings}`)
+    xml = xml.replace(alternate, picture)
+  }
+  return xml
+}
+
+/** Build pages keep the authored slide number, rather than LibreOffice's new page index. */
+function freezeSlideNumbers(xml: string): string {
+  return xml.replace(/<a:fld\b[^>]*>[\s\S]*?<\/a:fld>/g, field => {
+    if (attrsOf(field.match(/^<[^>]*>/)![0]).type !== 'slidenum') return field
+    const text = topLevelBlocks(field, 'a:t')[0]
+    if (!text) return field
+    return `<a:r>${topLevelBlocks(field, 'a:rPr')[0] ?? ''}${text}</a:r>`
+  })
+}
+
 // ── Разбор presentation.xml ──────────────────────────────────────────────────
 
 interface Presentation {
@@ -505,6 +593,8 @@ export function parseVideoPlayback(slideXml: string, shapeId: string): { autoPla
 }
 
 interface FoundVideo {
+  kind?: 'gif'
+  shapeId?: string
   /** Индекс слайда в порядке показа (0-based). */
   slideIdx: number
   mediaEntry: string // имя записи в zip: ppt/media/media1.mp4
@@ -512,6 +602,55 @@ interface FoundVideo {
   crop?: SlideMedia['crop']
   autoPlay: boolean
   loop: boolean
+}
+
+function findSlideGifs(pres: Presentation, text: (name: string) => string | null, data: Buffer, entries: Map<string, ZipEntry>): FoundVideo[] {
+  const found: FoundVideo[] = []
+  pres.slidePaths.forEach((path, slideIdx) => {
+    if (pres.hidden.has(slideIdx)) return
+    const xml = text(path) ?? ''
+    const rels = parseRels(text(relsPathOf(path)) ?? '')
+    // Group coordinates/rotated shapes need their own transform, retain the PDF fallback.
+    let plain = xml
+    for (const group of topLevelBlocks(xml, 'p:grpSp')) plain = plain.replace(group, '')
+    for (const pic of topLevelBlocks(plain, 'p:pic')) {
+      const blip = pic.match(/<a:blip\b[^>]*>/)?.[0]
+      const target = blip && rels.get(attrsOf(blip)['r:embed'])
+      if (!target) continue
+      const mediaEntry = normalizeSlideTarget(target)
+      const entry = entries.get(mediaEntry)
+      if (extOf(mediaEntry) !== 'gif' || !entry || !isAnimatedGif(readEntry(data, entry))) continue
+      const shape = pic.match(/<p:cNvPr\b[^>]*>/)?.[0]
+      const transform = topLevelBlocks(pic, 'a:xfrm')[0]
+      const transformAttrs = transform ? attrsOf(transform.match(/^<[^>]*>/)![0]) : {}
+      if (!shape || !transform || Number(transformAttrs.rot ?? 0) || ['1', 'true'].includes(transformAttrs.flipH) || ['1', 'true'].includes(transformAttrs.flipV)) continue
+      // a:ext also occurs in metadata extension lists before the real geometry.
+      const off = transform.match(/<a:off\b[^>]*>/)?.[0], ext = transform.match(/<a:ext\b[^>]*>/)?.[0]
+      if (!off || !ext) continue
+      const x = Number(attrsOf(off).x), y = Number(attrsOf(off).y)
+      const w = Number(attrsOf(ext).cx), h = Number(attrsOf(ext).cy)
+      if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) continue
+      const srcRect = pic.match(/<a:srcRect\b[^>]*>/)?.[0]
+      const c = srcRect ? attrsOf(srcRect) : {}
+      const [left, top, right, bottom] = ['l', 't', 'r', 'b'].map(key => Number(c[key] ?? 0) / 100_000)
+      if (![left, top, right, bottom].every(Number.isFinite) || left + right >= 1 || top + bottom >= 1) continue
+      // A single PDF backdrop cannot reproduce static foreground objects above
+      // a live image. Retain the original picture rather than cover that content.
+      const after = xml.slice(xml.indexOf(pic) + pic.length)
+      const foreground = ['p:sp', 'p:pic', 'p:graphicFrame', 'p:cxnSp', 'p:grpSp'].flatMap(tag => topLevelBlocks(after, tag))
+      if (foreground.some(block => {
+        const geometry = topLevelBlocks(block, 'a:xfrm')[0] ?? topLevelBlocks(block, 'p:xfrm')[0] ?? ''
+        const off = geometry.match(/<a:off\b[^>]*>/)?.[0], ext = geometry.match(/<a:ext\b[^>]*>/)?.[0]
+        if (!off || !ext) return true
+        const a = attrsOf(off), b = attrsOf(ext)
+        return Number(a.x) < x + w && Number(a.y) < y + h && Number(a.x) + Number(b.cx) > x && Number(a.y) + Number(b.cy) > y
+      })) continue
+      found.push({ kind: 'gif', shapeId: attrsOf(shape).id, slideIdx, mediaEntry,
+        rect: { x: x / pres.slideW, y: y / pres.slideH, w: w / pres.slideW, h: h / pres.slideH },
+        crop: { left, top, right, bottom }, autoPlay: true, loop: true })
+    }
+  })
+  return found
 }
 
 function findSlideVideos(
@@ -767,26 +906,46 @@ interface TransformResult {
   /** null — пересборка не нужна (нет ни видео, ни клик-анимаций). */
   zip: Buffer | null
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
   videos: FoundVideo[]
   pageNotes: Record<number, string>
   fonts: string[]
+  requiresFreshPdf: boolean
 }
 
 function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   const byName = new Map(entries.map((e) => [e.name, e]))
   const textCache = new Map<string, string | null>()
+  const compatibleSlides = new Map<string, Buffer>()
   const text = (name: string): string | null => {
     if (!textCache.has(name)) {
       const e = byName.get(name)
-      textCache.set(name, e ? readEntry(data, e).toString('utf8') : null)
+      let xml = e ? readEntry(data, e).toString('utf8') : null
+      if (xml && /^ppt\/slides\/[^/]+\.xml$/.test(name)) {
+        const original = xml
+        const rels = parseRels(text(relsPathOf(name)) ?? '')
+        xml = preferChartPreviews(xml, rid => {
+          const target = rels.get(rid)
+          const image = target && byName.get(normalizeSlideTarget(target))
+          if (!image) return false
+          const bytes = readEntry(data, image)
+          return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+            bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255])) ||
+            ['GIF87a', 'GIF89a'].includes(bytes.subarray(0, 6).toString('ascii'))
+        })
+        xml = freezeSlideNumbers(xml)
+        if (xml !== original) compatibleSlides.set(name, Buffer.from(xml))
+      }
+      textCache.set(name, xml)
     }
     return textCache.get(name)!
   }
 
   const pres = parsePresentation(text)
-  if (!pres) return { zip: null, slideMedia: [], videos: [], pageNotes: {}, fonts: [] }
+  if (!pres) return { zip: null, slideMedia: [], videos: [], pageNotes: {}, fonts: [], requiresFreshPdf: false }
 
   const videos = findSlideVideos(pres, text, (n) => byName.has(n))
+  const gifs = findSlideGifs(pres, text, data, byName)
   const fonts = requestedFonts(
     entries.map((e) => e.name),
     text,
@@ -834,10 +993,32 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
     ...(v.crop ? { crop: v.crop } : {}),
     file: mediaFileName(v.mediaEntry),
   }))
+  const slideTransitions: Record<number, number> = {}
+  pres.slidePaths.forEach((path, index) => {
+    if (pres.hidden.has(index)) return
+    const duration = pptxFadeDuration(text(path) ?? '')
+    slideTransitions[firstPage[index]] = duration
+  })
 
-  if (strip.size === 0 && stepsBySlide.size === 0) return { zip: null, slideMedia, videos, pageNotes, fonts }
+  for (const gif of gifs) {
+    const original = text(pres.slidePaths[gif.slideIdx])!
+    const steps = stepsBySlide.get(gif.slideIdx) ?? []
+    for (let step = 0; step <= steps.length; step++) {
+      const visible = buildStepXml(original, steps.slice(step).flat())
+      if (!topLevelBlocks(visible, 'p:pic').some(pic => {
+        const shape = pic.match(/<p:cNvPr\b[^>]*>/)?.[0]
+        return shape && attrsOf(shape).id === gif.shapeId
+      })) continue
+      slideMedia.push({ kind: 'gif', slide: firstPage[gif.slideIdx] + step,
+        rect: gif.rect, crop: gif.crop, file: mediaFileName(gif.mediaEntry) })
+    }
+  }
+  videos.push(...gifs)
 
-  const replace = new Map<string, Buffer>()
+  const requiresFreshPdf = compatibleSlides.size > 0 || gifs.length > 0
+  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0 && compatibleSlides.size === 0) return { zip: null, slideMedia, slideTransitions, videos, pageNotes, fonts, requiresFreshPdf }
+
+  const replace = new Map(compatibleSlides)
   const add: { name: string; data: Buffer }[] = []
 
   if (stepsBySlide.size > 0) {
@@ -902,7 +1083,19 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
     replace.set('[Content_Types].xml', Buffer.from(contentTypes))
   }
 
-  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, videos, pageNotes, fonts }
+  // Remove only animated instances; a static first frame underneath would ghost
+  // through transparent/disposal frames. Keep the original GIF bytes for extraction.
+  for (const gif of gifs) {
+    const path = pres.slidePaths[gif.slideIdx]
+    const original = replace.get(path)?.toString('utf8') ?? text(path)!
+    replace.set(path, Buffer.from(removeShape(original, gif.shapeId!)))
+    for (const extra of add) {
+      if (extra.name.startsWith(path.replace(/\.xml$/, '_cd')) && extra.name.endsWith('.xml')) {
+        extra.data = Buffer.from(removeShape(extra.data.toString('utf8'), gif.shapeId!))
+      }
+    }
+  }
+  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, slideTransitions, videos, pageNotes, fonts, requiresFreshPdf }
 }
 
 // ── Публичный вход ───────────────────────────────────────────────────────────
@@ -914,9 +1107,10 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
  */
 async function readManifest(
   sha1: string,
+  roots: PptxMediaRoots,
 ): Promise<{ current: MediaManifest | null; pdfValid: boolean }> {
   try {
-    const raw = await readFile(manifestPathFor(sha1), 'utf8')
+    const raw = await readFile(manifestPathFor(sha1, roots), 'utf8')
     const parsed = JSON.parse(raw) as MediaManifest
     if (!Array.isArray(parsed.slideMedia)) return { current: null, pdfValid: false }
     const current =
@@ -933,9 +1127,9 @@ async function readManifest(
 }
 
 /** Прогнать трансформацию и положить пересобранную копию в кэш; вернуть её путь. */
-async function writeRebuilt(sha1: string, zip: Buffer): Promise<string> {
-  const out = join(cacheDir(), `${sha1}.rebuilt.pptx`)
-  await mkdir(cacheDir(), { recursive: true })
+async function writeRebuilt(sha1: string, zip: Buffer, roots: PptxMediaRoots): Promise<string> {
+  const out = join(roots.writeDir, `${sha1}.rebuilt.pptx`)
+  await mkdir(roots.writeDir, { recursive: true })
   await writeFile(out, zip)
   return out
 }
@@ -946,7 +1140,11 @@ async function writeRebuilt(sha1: string, zip: Buffer): Promise<string> {
  * развёрнутыми шаг-страницами анимаций). Любая ошибка разбора → деградация к
  * старому поведению (конвертируем оригинал, без оверлеев и шагов).
  */
-export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<PreparedPptxMedia> {
+export async function preparePptxMedia(
+  pptxPath: string,
+  sha1: string,
+  rootsOverride?: PptxMediaRoots,
+): Promise<PreparedPptxMedia> {
   const original: PreparedPptxMedia = {
     slideMedia: [],
     pageNotes: {},
@@ -957,25 +1155,28 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
   // Парсим только настоящие .pptx: ppt — OLE-бинарь, odp/key — другой XML.
   if (extOf(pptxPath) !== 'pptx') return original
 
+  const roots = await resolveRoots(rootsOverride)
   try {
-    const { current: cached, pdfValid } = await readManifest(sha1)
+    const { current: cached, pdfValid } = await readManifest(sha1, roots)
     if (cached) {
       const fromCache = {
         ...original,
         slideMedia: cached.slideMedia,
+        slideTransitions: cached.slideTransitions ?? {},
         pageNotes: cached.pageNotes,
         fonts: cached.fonts,
       }
-      if (!cached.rebuilt || existsSync(cachedPdfPathFor(sha1))) return fromCache
+      if (!cached.rebuilt || existsSync(roots.pdfPath(sha1))) return fromCache
       // PDF из кэша пропал — пересобираем копию заново.
       const data = await readFile(pptxPath)
       const t = transformPptx(data, parseZip(data))
       if (!t.zip) return fromCache
       return {
         slideMedia: t.slideMedia,
+        slideTransitions: t.slideTransitions ?? {},
         pageNotes: t.pageNotes,
         fonts: t.fonts,
-        convertSource: await writeRebuilt(sha1, t.zip),
+        convertSource: await writeRebuilt(sha1, t.zip, roots),
         temporary: true,
       }
     }
@@ -986,7 +1187,7 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
 
     // Извлечь ролики (для оверлеев), даже если пересборка не нужна.
     if (t.videos.length > 0) {
-      const dir = join(cacheDir(), `${sha1}.media`)
+      const dir = join(roots.writeDir, `${sha1}.media`)
       await mkdir(dir, { recursive: true })
       const byName = new Map(entries.map((e) => [e.name, e]))
       for (const v of t.videos) {
@@ -995,24 +1196,25 @@ export async function preparePptxMedia(pptxPath: string, sha1: string): Promise<
       }
     }
 
-    await mkdir(cacheDir(), { recursive: true })
+    await mkdir(roots.writeDir, { recursive: true })
     const manifest: MediaManifest = {
       version: MANIFEST_VERSION,
       rebuilt: t.zip !== null,
       slideMedia: t.slideMedia,
+      slideTransitions: t.slideTransitions ?? {},
       pageNotes: t.pageNotes,
       fonts: t.fonts,
     }
-    await writeFile(join(cacheDir(), `${sha1}.media.json`), JSON.stringify(manifest))
+    await writeFile(join(roots.writeDir, `${sha1}.media.json`), JSON.stringify(manifest))
 
-    const parsed = { ...original, slideMedia: t.slideMedia, pageNotes: t.pageNotes, fonts: t.fonts }
+    const parsed = { ...original, slideMedia: t.slideMedia, slideTransitions: t.slideTransitions, pageNotes: t.pageNotes, fonts: t.fonts }
     if (!t.zip) return parsed
     // Манифест прошлой версии: PDF собран от такой же пересборки — годен.
-    if (pdfValid && existsSync(cachedPdfPathFor(sha1))) return parsed
+    if (pdfValid && !t.requiresFreshPdf && existsSync(roots.pdfPath(sha1))) return parsed
 
     // PDF в кэше сделан до пересборки (без шагов, с видео внутри) — пересоздать.
-    await rm(cachedPdfPathFor(sha1), { force: true }).catch(() => undefined)
-    return { ...parsed, convertSource: await writeRebuilt(sha1, t.zip), temporary: true }
+    await rm(roots.pdfPath(sha1), { force: true }).catch(() => undefined)
+    return { ...parsed, convertSource: await writeRebuilt(sha1, t.zip, roots), temporary: true }
   } catch (err) {
     console.warn('[pptx-media] разбор не удался, конвертирую оригинал:', (err as Error).message)
     return original

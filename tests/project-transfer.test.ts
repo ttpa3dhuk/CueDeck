@@ -28,6 +28,23 @@ function options() {
 }
 
 describe('project transfer', () => {
+  it.each([true, false])('reserves notes names across extensions, including missing sidecars: %s', async firstHasNotes => {
+    const a = join(dir, 'a'), b = join(dir, 'b')
+    await mkdir(a); await mkdir(b)
+    const pdf = join(a, 'Show.pdf'), pptx = join(b, 'show.pptx')
+    await writeFile(pdf, 'PDF'); await writeFile(pptx, 'PPTX')
+    if (firstHasNotes) await writeFile(sidecarPathFor(pdf), 'PDF notes')
+    await writeFile(sidecarPathFor(pptx), 'PPTX notes')
+    const result = await transferProject({ ...options(), playlist: [entry(pdf), { ...entry(pptx, 'two'), kind: 'pptx' }] })
+    const loaded = await loadProjectFile(result.path)
+    const [outPdf, outPptx] = loaded.playlist.map(e => e.filePath)
+    expect(sidecarPathFor(outPdf).toLowerCase()).not.toBe(sidecarPathFor(outPptx).toLowerCase())
+    expect(await readFile(sidecarPathFor(outPptx), 'utf8')).toBe('PPTX notes')
+    if (firstHasNotes) expect(await readFile(sidecarPathFor(outPdf), 'utf8')).toBe('PDF notes')
+    else expect(existsSync(sidecarPathFor(outPdf))).toBe(false)
+    expect(await readFile(pdf, 'utf8')).toBe('PDF')
+    expect(await readFile(pptx, 'utf8')).toBe('PPTX')
+  })
   it('publishes a readable project with relative paths, notes and verified material', async () => {
     await writeFile(sidecarPathFor(source), '{"notes":{"1":"operator"}}')
     const statuses: ProjectTransferStatus[] = []

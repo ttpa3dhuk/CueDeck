@@ -12,6 +12,7 @@ import type { AppState, DiagInfo, DiagMarker, ReportResult } from '../shared/typ
 import { WINDOW_TITLES } from '../shared/window-titles.js'
 import { dumpPrefs, getCleanExit, setCleanExit } from './display-mapping.js'
 import { store } from './state.js'
+import { redactRtmpText, redactStreamDiagnostic, redactStreamSettings, streamSecretValues } from '../shared/stream-redaction.js'
 import { getActiveWindows, getOperatorWindow } from './windows.js'
 
 /**
@@ -389,7 +390,10 @@ export async function buildReport(comment: string, materialToken?: string, marke
   const stamp = new Date()
   log.info(`report: сборка отчёта${comment ? ` (комментарий ${comment.length} симв.)` : ''}`)
   const files: { name: string; data: Buffer }[] = []
+  const reportPrefs = dumpPrefs()
+  const secrets = [...streamSecretValues(store.get().stream.settings), ...streamSecretValues(reportPrefs.stream)]
   const push = (name: string, data: Buffer | string): void => {
+    if (/\.(json|txt|log)$/i.test(name)) data = redactRtmpText(typeof data === 'string' ? data : data.toString('utf8'), secrets)
     files.push({ name, data: typeof data === 'string' ? Buffer.from(data, 'utf8') : data })
   }
 
@@ -405,7 +409,7 @@ export async function buildReport(comment: string, materialToken?: string, marke
     push('markers.json', JSON.stringify(markers, null, 2))
     push('report.txt', reportText(comment, stamp))
     push('state.json', JSON.stringify(redactState(store.get()), null, 2))
-    push('prefs.json', JSON.stringify({ ...dumpPrefs(), stream: hideStreamKeys(dumpPrefs().stream) }, null, 2))
+    push('prefs.json', JSON.stringify({ ...reportPrefs, stream: hideStreamKeys(reportPrefs.stream) }, null, 2))
 
     const logPath = logFilePath()
     const logDir = dirname(logPath)
@@ -438,6 +442,15 @@ export async function buildReport(comment: string, materialToken?: string, marke
     for (const [role, win] of getActiveWindows()) {
       if (win.isDestroyed()) continue
       try {
+        // Do not photograph connection credentials behind the report dialog.
+        // A failed visibility check skips this screenshot via the existing catch.
+        if (role === 'operator' && (redactRtmpText(comment, secrets) !== comment ||
+          await withTimeout(win.webContents.executeJavaScript(
+            "Boolean(document.getElementById('stream-modal') && !document.getElementById('stream-modal').classList.contains('hidden'))",
+          ), CAPTURE_TIMEOUT_MS))) {
+          push('screen-operator.txt', 'Operator screenshot omitted: stream settings or credentials are visible.')
+          continue
+        }
         const shot = await withTimeout(win.webContents.capturePage(), CAPTURE_TIMEOUT_MS)
         const scaled = shot.getSize().width > SCREENSHOT_MAX_WIDTH ? shot.resize({ width: SCREENSHOT_MAX_WIDTH }) : shot
         push(`screen-${role}.jpg`, scaled.toJPEG(80))
@@ -484,9 +497,7 @@ function reportText(comment: string, stamp: Date): string {
 
 /** Ключ потока → «***»: его увидел бы любой, кому тестер перешлёт отчёт. */
 function hideStreamKeys<T>(v: T): T {
-  const o = v as { destinations?: Array<{ key?: string }> } | null
-  if (!o || typeof o !== 'object' || !Array.isArray(o.destinations)) return v
-  return { ...o, destinations: o.destinations.map((d) => ({ ...d, key: d.key ? '***' : '' })) } as T
+  return redactStreamSettings(v)
 }
 
 /** Текст заметок спикера → длина: в отчёте им делать нечего. */
@@ -497,7 +508,7 @@ function redactState(s: AppState): unknown {
     ...s,
     notes: redactNotes(s.notes),
     preview: { ...s.preview, notes: redactNotes(s.preview.notes) },
-    stream: { ...s.stream, settings: hideStreamKeys(s.stream.settings) },
+    stream: redactStreamDiagnostic({ ...s.stream, settings: hideStreamKeys(s.stream.settings) }, streamSecretValues(s.stream.settings)),
   }
 }
 

@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { runInNewContext } from 'node:vm'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { resolveFrameStepDeck, resolveRangeActionForKey } from '../src/renderer/shared/video-focus'
 
@@ -13,6 +15,45 @@ const base = {
   hasProgramVideo: true,
   hasPreviewVideo: true,
 }
+
+describe('player control click focus', () => {
+  const source = readFileSync(join(__dirname, '../src/renderer/presenter/main.ts'), 'utf8')
+  const typingGuard = source.slice(source.indexOf('function isTypingTarget('), source.indexOf('function focusedFrameDeck('))
+  const keyboard = source.slice(source.indexOf('function setupKeyboard('))
+  const clickHandler = keyboard.slice(keyboard.indexOf("window.addEventListener('click',"), keyboard.indexOf('\n  // Frame stepping'))
+
+  function click(tag: string, type = ''): { focused: number; blurred: number } {
+    const result = { focused: 0, blurred: 0 }
+    const player = { focus: () => result.focused++ }
+    class Element {
+      type = type
+      closest(selector: string): unknown { return selector === '[data-frame-player]' ? player : null }
+      blur(): void { result.blurred++ }
+    }
+    class Select extends Element {}
+    class Input extends Element {}
+    class TextArea extends Element {}
+    const activeElement = tag === 'select' ? new Select() : tag === 'input' ? new Input() : tag === 'textarea' ? new TextArea() : new Element()
+    runInNewContext(ts.transpile(typingGuard + clickHandler), {
+      HTMLElement: Element, HTMLSelectElement: Select, HTMLInputElement: Input, HTMLTextAreaElement: TextArea,
+      document: { activeElement, body: {} },
+      window: { addEventListener: (_: string, callback: () => void) => callback() },
+    })
+    return result
+  }
+
+  it('keeps an opened native select and editable fields focused inside a player', () => {
+    for (const [tag, type] of [['select', ''], ['textarea', ''], ['input', 'text'], ['input', 'number']]) {
+      expect(click(tag, type)).toEqual({ focused: 0, blurred: 0 })
+    }
+  })
+
+  it('still transfers transport button, checkbox and scrub focus to the player', () => {
+    for (const [tag, type] of [['button', ''], ['input', 'checkbox'], ['input', 'range']]) {
+      expect(click(tag, type)).toEqual({ focused: 1, blurred: 0 })
+    }
+  })
+})
 
 describe('frame-step focus contract', () => {
   it('steps the focused video player only', () => {

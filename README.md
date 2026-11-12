@@ -19,7 +19,7 @@ Group several materials for one speaker into a folder and collapse it. Cmd/Ctrl 
 
 ## Three screens, one operator
 
-![Operator laptop, speaker's prompter and the hall screen side by side](docs/screenshots/screens.png?v=26ae1db32312)
+![Operator laptop, speaker's prompter and the hall screen side by side](docs/screenshots/screens.png?v=ccb6178d13b8)
 
 ## A prompter speakers actually read
 
@@ -27,7 +27,7 @@ Current and next slide, your notes in real time, a timer that turns yellow and r
 
 | | |
 |---|---|
-| ![Prompter: slide, next slide, notes, timer](docs/screenshots/prompter.png?v=bd7eb23fb9d5) | ![Timer-only prompter mode](docs/screenshots/prompter-timer.png?v=c783b50d4727) |
+| ![Prompter: slide, next slide, notes, timer](docs/screenshots/prompter.png?v=a7065573f228) | ![Timer-only prompter mode](docs/screenshots/prompter-timer.png?v=c783b50d4727) |
 
 Drag the timer and messages wherever you want them:
 
@@ -37,7 +37,7 @@ Drag the timer and messages wherever you want them:
 
 The STREAM button sends the hall picture and sound to YouTube, VK and Telegram, up to 5 destinations at once. You can add or drop one while live. Stats show whether a problem is your computer, the network or the platform.
 
-![Stream window with YouTube, VK and Telegram destinations](docs/screenshots/stream.png?v=5a12a9a9e95b)
+![Stream window with two destinations: YouTube and VK](docs/screenshots/stream.png?v=78fd98eb6e93)
 
 ## Window capture and OMT input
 

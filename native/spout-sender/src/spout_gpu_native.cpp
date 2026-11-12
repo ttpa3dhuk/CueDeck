@@ -151,7 +151,9 @@ struct Publisher {
     // Do not return ownership of Electron's handle until GPU work is complete.
     for (;;) {
       BOOL finished = FALSE;
-      hr = context->GetData(query.Get(), &finished, sizeof(finished), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+      // Allow the driver to submit pending query work. DONOTFLUSH can starve
+      // completion on NVIDIA even after Flush(), holding Electron's frame.
+      hr = context->GetData(query.Get(), &finished, sizeof(finished), 0);
       if (hr == S_OK && finished) break;
       if (FAILED(hr)) {
         // Device failure terminates GPU work; no successful publication claim.

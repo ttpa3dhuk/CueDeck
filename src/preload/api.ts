@@ -97,6 +97,17 @@ export type {
 export type Unsubscribe = () => void
 
 export interface PresenterApi {
+  programOverlay: {
+    set(config: import('../shared/program-overlay').ProgramOverlayConfig): Promise<void>
+    chooseImage(): Promise<string | null>
+    read(): Promise<{ bytes: Uint8Array; mime: string } | null>
+  }
+  mobileClicker: {
+    resetLink(): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    status(): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    qr(index: number): Promise<string | null>
+    setEnabled(enabled: boolean): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+  }
   gpuMirror: { ready(result: { error?: string; adapter?: string }): void }
   programMirror: {
     available(): Promise<boolean>
@@ -122,8 +133,6 @@ export interface PresenterApi {
   clicker: {
     next(): Promise<void>
     prev(): Promise<void>
-    /** Opt in to playlist double-click TAKE. Disabled by default. */
-    setDoubleClickTake(value: boolean): Promise<boolean>
     /** Global PgUp/PgDn clicker. Resolves to what actually got enabled (registration can fail). */
     setGlobal(value: boolean): Promise<boolean>
     /** Also grab ←/→ globally (Spotlight-style clickers). Resolves to the applied value. */
@@ -134,6 +143,7 @@ export interface PresenterApi {
    * entry lands here; `take()` promotes it to the program (audience) feed.
    */
   preview: {
+    toggleSourceMuted(identity: FrameStepIdentity): Promise<void>
     openDialog(): Promise<OpenPdfResult>
     openPath(path: string): Promise<OpenPdfResult>
     read(): Promise<{ bytes: Uint8Array; mime: string } | null>
@@ -161,6 +171,7 @@ export interface PresenterApi {
     setFontSize(px: number): Promise<void>
   }
   timer: {
+    resetStyle(): Promise<void>
     start(): Promise<void>
     pause(): Promise<void>
     reset(): Promise<void>
@@ -311,11 +322,13 @@ export interface PresenterApi {
       { ok: true; status: SyphonStatus } | { ok: false; error: string; status: SyphonStatus }
     >
   }
+  syphonPrompter: PresenterApi['syphon']
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */
     pathFor(file: File): string
   }
   playlist: {
+    prepare(id: string): Promise<void>
     /** Reveal the original media; list items must name a path belonging to this entry. */
     revealSource(id: string, itemPath?: string): Promise<{ ok: boolean; error?: string }>
     add(): Promise<PlaylistEntry[]>
@@ -335,7 +348,7 @@ export interface PresenterApi {
     /** Copy a playlist record after its source without duplicating media or changing decks. */
     duplicate(id: string): Promise<PlaylistEntry | null>
     reorder(ids: string[]): Promise<void>
-    update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number; liveFit?: LiveFit; loop?: boolean; slideFadeMs?: number }): Promise<void>
+    update(id: string, payload: { displayName?: string; speakerName?: string; durationMs?: number; liveFit?: LiveFit; loop?: boolean; slideFadeMs?: number; slideFadeMode?: 'file' | 'custom' | 'cut' }): Promise<void>
     /** Load entry into the off-air preview deck (safe; does not touch the audience feed). */
     activate(id: string): Promise<OpenPdfResult>
     /** Load entry straight to the program/audience feed (double-click / Take-now). */

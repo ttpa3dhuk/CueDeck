@@ -22,12 +22,12 @@ function requireOperator(event: IpcMainInvokeEvent): void {
     event.senderFrame !== operator.webContents.mainFrame)) throw new Error('Operator window required')
 }
 
-export function registerSyphonIpc(target: SyphonIpcTarget): void {
-  ipcMain.handle('syphon:status', (event) => {
+export function registerSyphonIpc(target: SyphonIpcTarget, channel = 'syphon'): void {
+  ipcMain.handle(`${channel}:status`, (event) => {
     requireOperator(event)
     return target.getStatus()
   })
-  ipcMain.handle('syphon:configure', async (event, raw: unknown) => {
+  ipcMain.handle(`${channel}:configure`, async (event, raw: unknown) => {
     requireOperator(event)
     // The manager re-validates too; this keeps the channel contract explicit.
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Settings object required')

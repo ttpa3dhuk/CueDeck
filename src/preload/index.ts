@@ -73,11 +73,22 @@ const api: PresenterApi = {
   clicker: {
     next: () => ipcRenderer.invoke('clicker:next'),
     prev: () => ipcRenderer.invoke('clicker:prev'),
-    setDoubleClickTake: (value) => ipcRenderer.invoke('clicker:set-double-click-take', value),
     setGlobal: (value) => ipcRenderer.invoke('clicker:set-global', Boolean(value)),
     setGlobalArrows: (value) => ipcRenderer.invoke('clicker:set-global-arrows', Boolean(value)),
   },
+  mobileClicker: {
+    resetLink: () => ipcRenderer.invoke('mobile-clicker:reset'),
+    status: () => ipcRenderer.invoke('mobile-clicker:status'),
+    qr: (index) => ipcRenderer.invoke('mobile-clicker:qr', index),
+    setEnabled: (enabled) => ipcRenderer.invoke('mobile-clicker:enabled', enabled),
+  },
+  programOverlay: {
+    set: (config) => ipcRenderer.invoke('program-overlay:set', config),
+    chooseImage: () => ipcRenderer.invoke('program-overlay:choose'),
+    read: () => ipcRenderer.invoke('program-overlay:read'),
+  },
   preview: {
+    toggleSourceMuted: (identity) => ipcRenderer.invoke('preview:toggle-source-muted', identity),
     openDialog: () => ipcRenderer.invoke('preview:open-dialog'),
     openPath: (path) => ipcRenderer.invoke('preview:open-path', path),
     read: () => ipcRenderer.invoke('preview:read'),
@@ -104,6 +115,7 @@ const api: PresenterApi = {
     setFontSize: (px) => ipcRenderer.invoke('notes:set-font-size', px),
   },
   timer: {
+    resetStyle: () => ipcRenderer.invoke('timer:reset-style'),
     start: () => ipcRenderer.invoke('timer:start'),
     pause: () => ipcRenderer.invoke('timer:pause'),
     reset: () => ipcRenderer.invoke('timer:reset'),
@@ -217,12 +229,17 @@ const api: PresenterApi = {
     status: () => ipcRenderer.invoke('syphon:status'),
     configure: (settings) => ipcRenderer.invoke('syphon:configure', settings),
   },
+  syphonPrompter: {
+    status: () => ipcRenderer.invoke('syphon-prompter:status'),
+    configure: (settings) => ipcRenderer.invoke('syphon-prompter:configure', settings),
+  },
   files: {
     // Sandboxed renderer has no File.path (removed in Electron 32) — this is
     // the only way to resolve a dropped File to its filesystem path.
     pathFor: (file) => webUtils.getPathForFile(file),
   },
   playlist: {
+    prepare: (id) => ipcRenderer.invoke('playlist:prepare', id),
     revealSource: (id, itemPath) => ipcRenderer.invoke('playlist:reveal-source', id, itemPath),
     add: () => ipcRenderer.invoke('playlist:add'),
     addPaths: (paths, position) => ipcRenderer.invoke('playlist:add-paths', paths, position),

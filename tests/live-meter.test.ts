@@ -40,3 +40,38 @@ it('reuses a capture stream while its tracks appear after playback starts', () =
   expect(elementAudioStream(element)).toBe(stream)
   expect(captureStream).toHaveBeenCalledOnce()
 })
+
+it('recaptures after EOF removes the audio track and the same file starts again', () => {
+  const audio = { readyState: 'live', stop: vi.fn() }
+  const video = { stop: vi.fn() }
+  let tracks = [audio]
+  const first = { getAudioTracks: () => tracks, getTracks: () => [video] }
+  const second = { getAudioTracks: () => [audio] }
+  const captureStream = vi.fn().mockReturnValueOnce(first).mockReturnValue(second)
+  const element = { currentSrc: 'cuedeck-media://stream/program?v=loop', paused: false, ended: false, captureStream }
+  expect(elementAudioStream(element as unknown as HTMLMediaElement)).toBe(first)
+  tracks = []
+  element.ended = true
+  expect(elementAudioStream(element as unknown as HTMLMediaElement)).toBe(first)
+  element.ended = false
+  expect(elementAudioStream(element as unknown as HTMLMediaElement)).toBe(second)
+  expect(video.stop).toHaveBeenCalledOnce()
+  expect(elementAudioStream(element as unknown as HTMLMediaElement)).toBe(second)
+  expect(captureStream).toHaveBeenCalledTimes(2)
+})
+
+it('waits for play before replacing a capture whose audio track ended', () => {
+  const audio = { readyState: 'live', stop: vi.fn() }
+  const first = { getAudioTracks: () => [audio], getTracks: () => [audio] }
+  const next = { getAudioTracks: () => [{ readyState: 'live' }] }
+  const captureStream = vi.fn().mockReturnValueOnce(first).mockReturnValue(next)
+  const element = { currentSrc: 'cuedeck-media://stream/program?v=paused', paused: false, ended: false, captureStream }
+  elementAudioStream(element as unknown as HTMLMediaElement)
+  audio.readyState = 'ended'
+  element.paused = true
+  expect(elementAudioStream(element as unknown as HTMLMediaElement)).toBe(first)
+  expect(captureStream).toHaveBeenCalledOnce()
+  element.paused = false
+  expect(elementAudioStream(element as unknown as HTMLMediaElement)).toBe(next)
+  expect(audio.stop).toHaveBeenCalledOnce()
+})

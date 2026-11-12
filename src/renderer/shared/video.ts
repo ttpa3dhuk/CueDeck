@@ -35,17 +35,23 @@ export function isVideoPath(path: string | null | undefined): boolean {
  * на время перехода. Blob-ссылку старого кадра нельзя освобождать сразу —
  * этим занимается вызывающий (см. отложенное освобождение в рендерерах).
  */
+const imageFadeOwners = new WeakMap<HTMLImageElement, object>()
+
 export async function crossfadeToImage(
   img: HTMLImageElement,
   under: HTMLImageElement | null,
   src: string,
   fadeMs: number,
 ): Promise<void> {
+  const owner = {}
+  imageFadeOwners.set(img, owner)
   fadeMs = Number.isFinite(fadeMs) ? Math.max(0, Math.min(FADE_MAX_MS, fadeMs)) : 0
   const prev = img.getAttribute('src')
   const canFade = fadeMs > 0 && Boolean(prev) && !img.classList.contains('hidden') && under
 
   if (!canFade) {
+    under?.classList.add('hidden')
+    under?.removeAttribute('src')
     img.style.transition = ''
     img.style.opacity = '1'
     img.src = src
@@ -62,6 +68,7 @@ export async function crossfadeToImage(
   img.src = src
   // Ждём декодирование: иначе проявится наполовину отрисованный кадр.
   await img.decode?.().catch(() => undefined)
+  if (imageFadeOwners.get(img) !== owner) return
 
   // Форсируем применение opacity:0 до включения перехода — иначе браузер
   // склеит оба присваивания и наплыва не будет.
@@ -70,6 +77,7 @@ export async function crossfadeToImage(
   img.style.opacity = '1'
 
   await new Promise((r) => setTimeout(r, fadeMs + 40))
+  if (imageFadeOwners.get(img) !== owner) return
   under!.classList.add('hidden')
   under!.removeAttribute('src')
 }
@@ -91,7 +99,7 @@ export function slideMediaAt(
   slide: number,
 ): SlideMedia | undefined {
   if (kind !== 'pptx') return undefined
-  return slideMedia.find((m) => m.slide === slide)
+  return slideMedia.find((m) => m.slide === slide && m.kind !== 'gif')
 }
 
 /**
@@ -182,8 +190,13 @@ export function audioRole(layout: Layout, streaming = false): Role {
  * hall never keeps blasting the video's audio (playback itself keeps running —
  * un-blackout brings the sound back at the live position).
  */
-export function shouldMute(state: AppState, role: Role): boolean {
+export function shouldMuteMix(state: AppState, role: Role): boolean {
   return role !== audioRole(state.layout, programCaptured(state)) || state.video.muted || state.blackout || state.testScreen?.manual === true
+}
+
+/** Input mute also gates clips embedded in presentations and live input audio. */
+export function shouldMute(state: AppState, role: Role): boolean {
+  return shouldMuteMix(state, role) || state.sourceMuted === true
 }
 
 /**

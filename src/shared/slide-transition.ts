@@ -9,15 +9,21 @@ export function sanitizeSlideFadeMs(value: unknown): number {
 }
 
 export function slideNavigationPatch(
-  state: Pick<AppState, 'fileKind' | 'currentSlide' | 'totalSlides' | 'playlist' | 'currentPlaylistId' | 'slideMedia' | 'video'>,
+  state: Pick<AppState, 'fileKind' | 'currentSlide' | 'totalSlides' | 'playlist' | 'currentPlaylistId' | 'slideMedia' | 'slideTransitions' | 'video'>,
   slide: number, id: string, now = Date.now(),
 ): Partial<AppState> | null {
   if ((state.fileKind !== 'pdf' && state.fileKind !== 'pptx') ||
     !Number.isInteger(slide) || slide < 1 || slide > state.totalSlides || slide === state.currentSlide) return null
   const entry = state.playlist.find(item => item.id === state.currentPlaylistId)
+  const mode = entry?.slideFadeMode ?? (entry?.slideFadeMs !== undefined ? (entry.slideFadeMs > 0 ? 'custom' : 'cut') : 'file')
+  const sourcePage = (page: number): number | undefined => Object.keys(state.slideTransitions ?? {}).map(Number)
+    .filter(start => start > 0 && start <= page).sort((a, b) => b - a)[0]
+  const sameSourceSlide = sourcePage(state.currentSlide) !== undefined && sourcePage(state.currentSlide) === sourcePage(slide)
+  const fade = mode === 'cut' ? 0 : mode === 'custom' ? entry?.slideFadeMs
+    : state.fileKind === 'pptx' && !sameSourceSlide ? state.slideTransitions?.[slide] : 0
   return {
     currentSlide: slide,
-    takeTransition: { id, durationMs: sanitizeSlideFadeMs(entry?.slideFadeMs), scope: 'slide' },
+    takeTransition: { id, durationMs: sanitizeSlideFadeMs(fade), scope: 'slide' },
     ...(state.fileKind === 'pptx' ? initialSlideVideo(state.fileKind, state.slideMedia, slide, state.video.muted, now) : {}),
   }
 }

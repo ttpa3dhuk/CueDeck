@@ -415,13 +415,13 @@ export function loadGpuAudiencePage(win: BrowserWindow): void {
  * with a shared texture. Never shown and never used as a normal hidden audience
  * for stream/OMT/capture. One instance is registered in store as `audience` by
  * the GPU audience mode through the ghost lease. Target is PHYSICAL texture
- * pixels; BrowserWindow dimensions are DIP, so Retina scale is divided out and
- * the actual codedSize is checked by GpuTexturePublisher.
+ * pixels. The offscreen renderer uses its own fixed 1x scale so fractional
+ * desktop DPI cannot round a Full HD texture to 1921 pixels. The actual
+ * codedSize is still checked by GpuTexturePublisher.
  */
 export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080, load = true): BrowserWindow {
-  const scaleFactor = screen.getPrimaryDisplay().scaleFactor || 1
-  const width = Math.max(16, Math.round(targetWidth / scaleFactor))
-  const height = Math.max(16, Math.round(targetHeight / scaleFactor))
+  const width = Math.max(16, Math.round(targetWidth))
+  const height = Math.max(16, Math.round(targetHeight))
   const win = new BrowserWindow({
     width,
     height,
@@ -431,6 +431,9 @@ export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080,
     enableLargerThanScreen: true,
     backgroundColor: '#000000',
     title: 'CueDeck (GPU audience)',
+    // Windows' invisible resize border contributes to the OSR surface size,
+    // even for frame:false. At fractional DPI it can add 1–2 pixels.
+    thickFrame: false,
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
@@ -438,12 +441,47 @@ export function createGpuAudienceWindow(targetWidth = 1920, targetHeight = 1080,
       nodeIntegration: false,
       backgroundThrottling: false,
       autoplayPolicy: 'no-user-gesture-required',
-      offscreen: { useSharedTexture: true, deviceScaleFactor: scaleFactor },
+      offscreen: { useSharedTexture: true, deviceScaleFactor: 1 },
     },
   })
+  // Windows constrains initial window bounds to the screen/work area, even
+  // for hidden OSR windows. Resize after construction, before the first frame.
+  // OSR uses the native window's OUTER size. Windows also rounds DIP -> native
+  // pixels -> DIP (e.g. requesting 1920 at 115% can return 1921). Correct the
+  // request by the observed error, rather than repeating the same rounded size.
+  let requestedWidth = width
+  let requestedHeight = height
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const [actualWidth, actualHeight] = win.getSize()
+    if (actualWidth === width && actualHeight === height) break
+    if (attempt > 0) {
+      requestedWidth += width - actualWidth
+      requestedHeight += height - actualHeight
+    }
+    win.setSize(requestedWidth, requestedHeight)
+  }
+  const [actualWidth, actualHeight] = win.getSize()
+  if (actualWidth !== width || actualHeight !== height) {
+    win.destroy()
+    throw new Error(`GPU audience window size ${actualWidth}x${actualHeight} does not match target ${width}x${height}`)
+  }
   win.webContents.setFrameRate(30)
   if (load) loadGpuAudiencePage(win)
   return win
+}
+
+/** Render the real confidence monitor using the same DPI-corrected GPU factory. */
+export function createGpuPrompterWindow(load = true): BrowserWindow {
+  const win = createGpuAudienceWindow(1920, 1080, false)
+  if (load) loadGpuPrompterPage(win)
+  return win
+}
+
+/** Keep the physical/OMT speaker registration independent of this GPU output. */
+export function loadGpuPrompterPage(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  loadRenderer(win, { entry: 'presenter', role: 'speaker' })
+  store.registerWindow('gpu-prompter', win)
 }
 
 /** A display-only GPU consumer: no audience state registration or media load. */

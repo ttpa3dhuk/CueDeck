@@ -1,9 +1,10 @@
+import { defaultSpeakerTimerStyle } from '../shared/speaker-timer-style.js'
 import { DEFAULT_TEST_SCREEN, hasTestScreenContent } from '../shared/test-screen.js'
 import { DEFAULT_TIMER_ADJUSTMENTS } from '../shared/timer-controls.js'
 import { DEFAULT_STARTUP_SETTINGS } from '../shared/startup-settings.js'
 import { DEFAULT_TAKE_FADE_MS } from '../shared/take-transition.js'
 import { BrowserWindow } from 'electron'
-import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS, defaultSyphonStatus } from '../shared/types.js'
+import { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF, DEFAULT_REMOTE_SETTINGS, DEFAULT_STREAM_SETTINGS, DEFAULT_SPEAKER_MSG_PRESETS, DEFAULT_TIMER_PRESETS, DEFAULT_SYPHON_PROMPTER_SETTINGS, defaultSyphonStatus } from '../shared/types.js'
 import type { AppState, DeckState, Role, TimerState, VideoState } from '../shared/types.js'
 import { createAudienceTimer } from '../shared/audience-timer.js'
 
@@ -44,6 +45,7 @@ export function initialVideoState(): VideoState {
 
 export function initialDeckState(): DeckState {
   return {
+    sourceMuted: false,
     recoveryTake: false,
     path: null,
     sha1: null,
@@ -59,6 +61,8 @@ export function initialDeckState(): DeckState {
 
 export function initialState(): AppState {
   return {
+    preparations: {},
+    sourceMuted: false,
     startup: { ...DEFAULT_STARTUP_SETTINGS },
     recoveryStartup: false,
     autosaveError: null,
@@ -77,12 +81,7 @@ export function initialState(): AppState {
     audienceTimer: createAudienceTimer(),
     materialSettings: { defaultDurationMs: 0, autoStartTimer: false },
     timerMode: 'countdown',
-    timerPosition: 'top-right',
-    timerScale: 1,
-    timerFree: { x: 0.85, y: 0.12 },
-    timerFont: 'system',
-    timerColor: null,
-    timerWarnColors: true,
+    ...defaultSpeakerTimerStyle(),
     speakerToolbarScale: 1,
     speakerLayout: { sidebarPct: 37, nextPct: null },
     speakerMsgLayout: { pos: null, scale: 1 },
@@ -120,7 +119,6 @@ export function initialState(): AppState {
     timerLoop: false,
     timerAdjustments: [...DEFAULT_TIMER_ADJUSTMENTS],
     timerPresets: [...DEFAULT_TIMER_PRESETS],
-    playlistDoubleClickTake: false,
     clickerGlobal: false,
     clickerGlobalArrows: false,
     outputMonitorsEnabled: true,
@@ -165,6 +163,7 @@ export function initialState(): AppState {
       },
     },
     syphon: defaultSyphonStatus(),
+    syphonPrompter: { ...defaultSyphonStatus(), ...DEFAULT_SYPHON_PROMPTER_SETTINGS },
   }
 }
 
@@ -178,7 +177,7 @@ function positionOf(v: VideoState): number {
 }
 
 /** Окна, которым рассылается состояние: роли раскладки + служебные (оверлей OMT). */
-export type WindowKey = Role | 'omt-timer'
+export type WindowKey = Role | 'omt-timer' | 'gpu-prompter'
 
 type Listener = (state: AppState, patch: Partial<AppState>) => void
 

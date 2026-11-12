@@ -6,6 +6,7 @@ import { initialDeckState, initialVideoState, store } from './state.js'
 /** Clear the previous show even when a recovered deck is empty or unavailable. */
 export function clearSessionDecks(): void {
   store.patch({ pdfPath: null, pdfSha1: null, fileKind: null, totalSlides: 0,
+    sourceMuted: false,
     currentSlide: 1, currentPlaylistId: null, notes: {}, slideMedia: [],
     video: initialVideoState(), videoLoop: false, takeTransition: null,
     preview: initialDeckState(),
@@ -25,6 +26,7 @@ export async function restoreSessionDecks(saved: SessionCheckpoint, loaders: {
       if (result.ok) {
         const state = store.get()
         store.patch({ currentSlide: Math.max(1, Math.min(state.totalSlides || 1, saved.program.slide)),
+          sourceMuted: saved.program.sourceMuted ?? state.sourceMuted,
           video: { ...state.video, ...saved.program.video, playing: false, anchorAt: null } })
       }
     }
@@ -34,6 +36,7 @@ export async function restoreSessionDecks(saved: SessionCheckpoint, loaders: {
       if (previewResult.ok) {
         const preview = store.get().preview
         store.patchPreview({ currentSlide: Math.max(1, Math.min(preview.totalSlides || 1, saved.preview.slide)),
+          sourceMuted: saved.preview.sourceMuted ?? preview.sourceMuted,
           video: { ...preview.video, ...saved.preview.video, playing: false, anchorAt: null } })
       } else if (result.ok) result = previewResult
     }

@@ -8,7 +8,13 @@ import { slideNavigationPatch, sanitizeSlideFadeMs } from '../shared/slide-trans
 import { clearSessionDecks, restoreSessionDecks } from './session-restore.js'
 import { assertSessionIdle, waitForSessionRestore, beginSessionRestore, finishSessionRestore, beginEmptyProject, finishEmptyProject, configureStartup, flushSessionCheckpoint, initSessionLifecycle, shouldRestoreAtStartup } from './session-lifecycle.js'
 import { recoveryTakeFrame } from '../shared/recovery-take.js'
+import { togglePreviewSourceMute } from '../shared/source-audio.js'
 import { createClickerNavigation } from './clicker-navigation.js'
+import { mobileClickerStorage } from './mobile-clicker-storage.js'
+import { defaultSpeakerTimerStyle } from '../shared/speaker-timer-style.js'
+import { MobileClicker } from './mobile-clicker.js'
+import { programOverlay } from '../shared/program-overlay.js'
+import { timerView } from '../renderer/shared/timer.js'
 import { audienceTimerConfig, createAudienceTimer } from '../shared/audience-timer.js'
 import { createAudienceTimerCommands } from './audience-timer.js'
 import { getAudienceTimer, setAudienceTimer } from './display-mapping.js'
@@ -32,6 +38,7 @@ import {
 import { frameTimelines } from './frame-timeline.js'
 import { VideoInOutController } from './video-inout.js'
 import { VideoBoundaryScheduler } from './video-boundary.js'
+import { autoVideoIdentity, autoVideoStillTargets, autoVideoTarget } from '../shared/video-auto-advance.js'
 import { registerVideoInOutIpc } from './video-inout-ipc.js'
 import { app, dialog, globalShortcut, ipcMain, screen, shell } from 'electron'
 import { homedir } from 'node:os'
@@ -40,6 +47,7 @@ import { randomUUID } from 'node:crypto'
 import { basename, isAbsolute, join } from 'node:path'
 import type { DisplayMap, Layout } from './layout.js'
 import type {
+  AppState,
   DeckState,
   FileKind,
   ListItem,
@@ -101,7 +109,6 @@ import {
   setTimerLoop,
   getAskLayoutOnStartup,
   setAskLayoutOnStartup,
-  setPlaylistDoubleClickTake,
   setClickerGlobal,
   getClickerGlobalArrows,
   setClickerGlobalArrows,
@@ -115,13 +122,13 @@ import {
 } from './display-mapping.js'
 import { indexFolder, pickBestCandidate } from './project-files.js'
 import { countPdfPages } from './pdf-pages.js'
-import { cachedPdfPathFor, convertPptxToPdf, findSoffice, LibreOfficeMissingError, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
+import { cachedPdfPathFor, findSoffice, LibreOfficeMissingError, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
 import { beginProjectTransfer, endProjectTransfer, isProjectTransferRunning, transferProject } from './project-transfer.js'
 import { runPptxWork } from './pptx-work.js'
+import { preparePresentation, cancelPresentationPreparations, cancelPresentationPreparation, onPreparationStatus } from './presentation-preparation.js'
+import { PreparationUiState } from './preparation-ui-state.js'
 import type { ProjectTransferStatus } from '../shared/types.js'
-import { clearLocalCache, exportProjectCache, forgetProjectCache, localCacheStats, localPptxCacheDir, useProjectCache } from './project-cache.js'
-import { preparePptxMedia } from './pptx-media.js'
-import { substitutedFonts } from './pptx-fonts.js'
+import { clearLocalCache, exportProjectCache, localCacheStats, localPptxCacheDir } from './project-cache.js'
 import { log, setRecoveryStager } from './diag.js'
 import { adjustPatch } from '../renderer/shared/timer.js'
 import { addFonts, addedFontsCount, removeAddedFonts, type FontHooks } from './user-fonts.js'
@@ -201,6 +208,7 @@ interface InspectedFile {
   notes: Record<number, string>
   sha1Mismatch: boolean
   slideMedia: SlideMedia[]
+  slideTransitions?: Record<number, number>
 }
 
 /**
@@ -235,6 +243,19 @@ function setFontIssues(filePath: string, fonts: string[]): void {
 }
 
 /** Read a file's identity + page count + sidecar notes. Shared by both decks. */
+const preparationUi = new PreparationUiState(store, preparePresentation, cancelPresentationPreparations,
+  (path, prepared, options) => {
+    if (options.reportFontIssues !== false) setFontIssues(path, prepared.fonts)
+  })
+let programOpenGeneration = 0
+let previewOpenGeneration = 0
+let pendingDeckLoads = 0
+function resetPreparation(): void {
+  programOpenGeneration++
+  previewOpenGeneration++
+  preparationUi.reset()
+}
+
 async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; cacheSourcePath?: string; cacheProjectPath?: string | null; reportFontIssues?: boolean } = {}): Promise<InspectedFile> {
   if (store.get().testScreen.automatic) store.patch({ testScreen: { ...store.get().testScreen, automatic: false } })
   const kind = kindOf(filePath)
@@ -250,6 +271,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
   let sha1: string
   let totalSlides = 1
   let slideMedia: SlideMedia[] = []
+  let slideTransitions: Record<number, number> = {}
   let pptxNotes: Record<number, string> = {}
 
   if (kind === 'pdf') {
@@ -258,24 +280,16 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     sha1 = sha1FromBuffer(buf)
     totalSlides = countPdfPages(buf)
   } else if (kind === 'pptx') {
-    sha1 = await computePdfSha1(filePath)
-    await runPptxWork(async () => {
-      if (!opts.forceLocalCache) await useProjectCache(sha1, opts.cacheSourcePath ?? filePath, opts.cacheProjectPath === undefined ? store.get().projectPath : opts.cacheProjectPath)
-      // Вшитые видео (2.10): извлечь ролики + manifest, LibreOffice получает
-      // копию без видеофайлов — иначе он зашивает mp4 внутрь PDF целиком.
-      const prepared = await preparePptxMedia(filePath, sha1)
-      slideMedia = prepared.slideMedia
-      pptxNotes = prepared.pageNotes
-      pptxNotesBySha1.set(sha1, pptxNotes)
-      try {
-        const cachedPath = await convertPptxToPdf(prepared.convertSource, sha1, filePath)
-        const buf = await readFile(cachedPath)
-        totalSlides = countPdfPages(buf)
-        if (opts.reportFontIssues !== false) setFontIssues(filePath, substitutedFonts(prepared.fonts, buf))
-      } finally {
-        if (prepared.temporary) await rm(prepared.convertSource, { force: true }).catch(() => undefined)
-      }
+    const prepared = await preparationUi.prepare(filePath, {
+      ...opts, priority: 'foreground',
+      cacheProjectPath: opts.cacheProjectPath === undefined ? store.get().projectPath : opts.cacheProjectPath,
     })
+    sha1 = prepared.sha1
+    totalSlides = prepared.totalSlides
+    slideMedia = prepared.slideMedia
+    slideTransitions = prepared.slideTransitions ?? {}
+    pptxNotes = prepared.pageNotes
+    pptxNotesBySha1.set(sha1, pptxNotes)
   } else if (kind === 'video') {
     // video: don't read the whole (possibly multi-GB) file — id from stat only
     sha1 = await computeStatSha1(filePath)
@@ -294,6 +308,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     notes: { ...pptxNotes, ...loaded.notes },
     sha1Mismatch: loaded.sha1Mismatch,
     slideMedia,
+    slideTransitions,
   }
 }
 
@@ -444,14 +459,20 @@ function cancelFrameProbeIfUnused(path: string | null): void {
 
 async function openFile(
   filePath: string,
-  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; startOnTake?: boolean; transition?: TakeTransition; restorePaused?: boolean } = {},
+  opts: { playlistId?: string | null; durationMs?: number; fromList?: boolean; startOnTake?: boolean; transition?: TakeTransition; restorePaused?: boolean; expectedProgram?: string; autoPlayVideo?: boolean } = {},
 ): Promise<OpenPdfResult> {
+  const generation = ++programOpenGeneration
+  pendingDeckLoads++
   // Любая загрузка в эфир мимо проигрывателя снимает список с эфира — иначе
   // его таймер продолжил бы подменять картинку под уже другим материалом.
   if (!opts.fromList) stopListPlayback()
   const previousFramePath = store.get().fileKind === 'video' ? store.get().pdfPath : null
   try {
     const info = await inspectFile(filePath)
+    if (generation !== programOpenGeneration) return { ok: false, cancelled: true }
+    if (opts.expectedProgram && autoVideoIdentity(store.get()) !== opts.expectedProgram) return { ok: false, cancelled: true }
+    if (opts.expectedProgram && !autoVideoStillTargets(store.get(), opts.playlistId, filePath)) return { ok: false, cancelled: true }
+    if (opts.playlistId && !store.get().playlist.some(e => e.id === opts.playlistId)) return { ok: false, cancelled: true }
     const playlistId = opts.playlistId ?? null
     const timerPatch: Partial<import('./state.js').TimerState> = {
       startedAt: null,
@@ -490,12 +511,14 @@ async function openFile(
       currentSlide: 1,
       notes: info.notes,
       slideMedia: info.slideMedia,
+      slideTransitions: info.slideTransitions ?? {},
       currentPlaylistId: playlistId,
+      sourceMuted: entry?.sourceMuted === true,
       // Reset the playback clock for every file load; keep audience-mute preference.
       video: {
-        playing: false,
+        playing: info.kind === 'video' && opts.autoPlayVideo === true,
         anchorSec: entryRange?.inSec ?? 0,
-        anchorAt: null,
+        anchorAt: info.kind === 'video' && opts.autoPlayVideo === true ? Date.now() : null,
         durationSec: reusedDuration,
         muted: store.get().video.muted,
         range: entryRange,
@@ -523,7 +546,10 @@ async function openFile(
       kind: info.kind,
     }
   } catch (err) {
-    return { ok: false, error: openErrorMessage(err, filePath), needsLibreOffice: err instanceof LibreOfficeMissingError }
+    if (generation !== programOpenGeneration) return { ok: false, cancelled: true }
+    return { ok: false, error: openErrorMessage(err, filePath), needsLibreOffice: err instanceof LibreOfficeMissingError || (err as { code?: string }).code === 'libreoffice_missing' }
+  } finally {
+    pendingDeckLoads--
   }
 }
 
@@ -532,9 +558,13 @@ async function loadPreview(
   filePath: string,
   opts: { playlistId?: string | null } = {},
 ): Promise<OpenPdfResult> {
+  const generation = ++previewOpenGeneration
+  pendingDeckLoads++
   const previousFramePath = store.get().preview.kind === 'video' ? store.get().preview.path : null
   try {
     const info = await inspectFile(filePath)
+    if (generation !== previewOpenGeneration) return { ok: false, cancelled: true }
+    if (opts.playlistId && !store.get().playlist.some(e => e.id === opts.playlistId)) return { ok: false, cancelled: true }
     const playlistId = opts.playlistId ?? null
     const entry = playlistId ? store.get().playlist.find((e) => e.id === playlistId) : undefined
     const beforePreview = store.get().preview
@@ -551,7 +581,9 @@ async function loadPreview(
       currentSlide: 1,
       notes: info.notes,
       playlistId,
+      sourceMuted: entry?.sourceMuted === true,
       slideMedia: info.slideMedia,
+      slideTransitions: info.slideTransitions ?? {},
       video: {
         playing: false,
         anchorSec: entryRange?.inSec ?? 0,
@@ -571,7 +603,10 @@ async function loadPreview(
       kind: info.kind,
     }
   } catch (err) {
-    return { ok: false, error: openErrorMessage(err, filePath), needsLibreOffice: err instanceof LibreOfficeMissingError }
+    if (generation !== previewOpenGeneration) return { ok: false, cancelled: true }
+    return { ok: false, error: openErrorMessage(err, filePath), needsLibreOffice: err instanceof LibreOfficeMissingError || (err as { code?: string }).code === 'libreoffice_missing' }
+  } finally {
+    pendingDeckLoads--
   }
 }
 
@@ -602,7 +637,7 @@ async function programNext(): Promise<void> {
   // стартует видео тем же кликером. Следующий «далее» листает дальше. Ролик,
   // который уже играл (позиция > 0 или доигран), клик не перезапускает.
   if (state.fileKind === 'pptx' && !state.video.playing && state.video.anchorSec === 0) {
-    const m = state.slideMedia.find((mm) => mm.slide === currentSlide)
+    const m = state.slideMedia.find((mm) => mm.slide === currentSlide && mm.kind !== 'gif')
     if (m) {
       store.patchVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
       return
@@ -679,6 +714,14 @@ function programSeekBy(deltaSec: number): void {
  * a key; a failed pair is fully released so we never end up half-on.
  */
 const clickerNavigation = createClickerNavigation(() => store.get().fileKind, programNext, programPrev)
+const mobileClicker = new MobileClicker(() => {
+  const state = store.get()
+  return { current: state.currentSlide, total: state.totalSlides,
+    remaining: Math.max(0, state.totalSlides - state.currentSlide),
+    canNavigate: Boolean(state.pdfPath) && (state.fileKind === 'pdf' || state.fileKind === 'pptx'),
+    timer: timerView(state.timer, state.timerMode) }
+}, direction => { log.info('clicker:mobile', direction); return clickerNavigation[direction]() }, undefined, undefined, mobileClickerStorage)
+app.once('will-quit', () => { void mobileClicker.dispose() })
 const clickerShortcuts = createClickerShortcutManager(
   globalShortcut,
   () => Boolean(getOperatorWindow()?.isFocused()),
@@ -694,7 +737,33 @@ function persistPlaylist(): void {
 }
 
 const videoInOut = new VideoInOutController(store, frameTimelines, persistPlaylist)
-const videoBoundary = new VideoBoundaryScheduler(store)
+let autoVideoPending: string | null = null
+const autoVideoAdvance = {
+  eligible: (state: AppState): boolean => autoVideoPending ? autoVideoIdentity(state) === autoVideoPending : Boolean(autoVideoTarget(state)),
+  run: (state: AppState): boolean => {
+    if (autoVideoPending) return autoVideoIdentity(state) === autoVideoPending
+    const target = autoVideoTarget(state)
+    if (!target) return false
+    if ('slide' in target) { changeProgramSlide(target.slide); return true }
+    const entry = state.playlist.find(e => e.id === target.entryId)
+    if (!entry) return false
+    const expectedProgram = autoVideoIdentity(state)
+    autoVideoPending = expectedProgram
+    void openFile(entry.filePath, { playlistId: entry.id, durationMs: entry.durationMs, startOnTake: true,
+      transition: { id: randomUUID(), durationMs: target.fadeMs }, expectedProgram,
+      autoPlayVideo: state.videoTakeMode !== 'hold-first' })
+      .then(result => {
+        if (!result.ok && autoVideoIdentity(store.get()) === expectedProgram)
+          store.patchVideo(endVideo(store.get().video, false))
+      })
+      .finally(() => {
+        if (autoVideoPending === expectedProgram) autoVideoPending = null
+        videoBoundary.sync()
+      })
+    return true
+  },
+}
+const videoBoundary = new VideoBoundaryScheduler(store, autoVideoAdvance)
 videoBoundary.start()
 
 /** Правка таймера в эфире становится длительностью именно этой записи. */
@@ -774,6 +843,7 @@ export async function saveProject(
       playlistFolders: state.playlistFolders,
       keyVisualPath: state.keyVisualPath,
       audienceTimer: audienceTimerConfig(state.audienceTimer),
+      programOverlay: state.programOverlay,
     })
     store.patch({ projectPath: target })
     setProjectPath(target)
@@ -787,6 +857,7 @@ async function restoreLastSession(backupId?: string): Promise<OpenPdfResult & { 
   let saved: ReturnType<typeof beginSessionRestore>
   try { saved = beginSessionRestore(backupId) }
   catch (error) { return { ok: false, hadSession: false, error: error instanceof Error ? error.message : String(error) } }
+  resetPreparation()
   let success = false
   try {
     stopListPlayback()
@@ -795,6 +866,7 @@ async function restoreLastSession(backupId?: string): Promise<OpenPdfResult & { 
     const id = saved ? saved.program.playlistId : getCurrentPlaylistId()
     const path = saved ? saved.program.path : getLastPdfPath()
     store.patch({ playlist: normalizeFolderPlaylist(playlist, folders), playlistFolders: folders,
+      programOverlay: programOverlay(saved?.programOverlay),
       currentPlaylistId: id, keyVisualPath: saved ? saved.keyVisualPath : getKeyVisualPath(),
       projectPath: saved ? saved.projectPath : getProjectPath(), audienceTimer: createAudienceTimer(getAudienceTimer()) })
     void refreshMissingFiles()
@@ -814,16 +886,31 @@ async function restoreLastSession(backupId?: string): Promise<OpenPdfResult & { 
     return { ...result, hadSession: Boolean(path || playlist.length || folders.length) }
   } finally {
     finishSessionRestore(success)
+    if (success) preparationUi.background(store.get().playlist, store.get().projectPath)
     if (success && backupId) flushSessionCheckpoint()
   }
 }
 
 export function registerIpcHandlers(): void {
+  void mobileClicker.setEnabled().catch(() => log.warn('mobile clicker: restore failed; saved link retained'))
+  const requireOperator = (event: import('electron').IpcMainInvokeEvent): void => {
+    if (event.sender !== getOperatorWindow()?.webContents || event.senderFrame !== getOperatorWindow()?.webContents.mainFrame)
+      throw new Error('Operator window required')
+  }
+  onPreparationStatus((path, status) => preparationUi.phase(path, status))
+  ipcMain.handle('playlist:prepare', async (event, id: unknown) => {
+    const operator = getOperatorWindow()
+    if (!operator || event.sender !== operator.webContents || event.senderFrame !== operator.webContents.mainFrame) throw new Error('Operator window required')
+    if (typeof id !== 'string') return
+    const entry = store.get().playlist.find(e => e.id === id && e.kind === 'pptx')
+    if (!entry) return
+    await preparationUi.prepare(entry.filePath, { priority: 'background', forceLocalCache: true, cacheProjectPath: store.get().projectPath })
+  })
   initSessionLifecycle(async () => {
     const state = store.get()
     if (!state.projectPath) return
     await saveProjectFile(state.projectPath, { playlist: state.playlist, playlistFolders: state.playlistFolders,
-      keyVisualPath: state.keyVisualPath, audienceTimer: audienceTimerConfig(state.audienceTimer) })
+      keyVisualPath: state.keyVisualPath, audienceTimer: audienceTimerConfig(state.audienceTimer), programOverlay: state.programOverlay })
   })
   ipcMain.handle('session:configure-startup', (event, raw: unknown) => {
     if (event.sender !== getOperatorWindow()?.webContents) throw new Error('Operator window required')
@@ -910,16 +997,28 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('nav:prev', () => programPrev())
   ipcMain.handle('clicker:next', () => clickerNavigation.next())
   ipcMain.handle('clicker:prev', () => clickerNavigation.prev())
-
-  ipcMain.handle('clicker:set-double-click-take', (event, value: unknown) => {
-    const operator = getOperatorWindow()
-    if (!operator || operator.isDestroyed() || event.sender !== operator.webContents ||
-      event.senderFrame !== operator.webContents.mainFrame) throw new Error('Operator window required')
-    if (typeof value !== 'boolean') throw new Error('Boolean required')
-    const enabled = value
-    setPlaylistDoubleClickTake(enabled)
-    store.patch({ playlistDoubleClickTake: enabled })
-    return enabled
+  ipcMain.handle('mobile-clicker:reset', event => { requireOperator(event); return mobileClicker.resetLink() })
+  ipcMain.handle('mobile-clicker:status', event => { requireOperator(event); return mobileClicker.status() })
+  ipcMain.handle('mobile-clicker:qr', (event, index: number) => { requireOperator(event); return mobileClicker.qr(index) })
+  ipcMain.handle('mobile-clicker:enabled', (event, enabled: boolean) => { requireOperator(event); return mobileClicker.setEnabled(enabled === true) })
+  ipcMain.handle('program-overlay:set', (event, config: unknown) => {
+    requireOperator(event)
+    const overlay = programOverlay(config)
+    if (overlay.mode === 'image' && overlay.path && kindOf(overlay.path) !== 'image') throw Error('Overlay supports images only')
+    store.patch({ programOverlay: overlay })
+  })
+  ipcMain.handle('program-overlay:choose', async event => {
+    requireOperator(event)
+    const chosen = await dialog.showOpenDialog(getOperatorWindow()!, { title: t('Картинка для Overlay'), properties: ['openFile'],
+      filters: [{ name: t('Изображения'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] })
+    return chosen.canceled ? null : chosen.filePaths[0] ?? null
+  })
+  ipcMain.handle('program-overlay:read', async () => {
+    const overlay = programOverlay(store.get().programOverlay)
+    if (overlay.mode !== 'image' || !overlay.path || kindOf(overlay.path) !== 'image') return null
+    const info = await stat(overlay.path)
+    if (!info.isFile() || info.size > 50 * 1024 * 1024) throw Error(t('Картинка Overlay должна быть меньше 50 МБ'))
+    return { bytes: await readFile(overlay.path), mime: mimeOf(overlay.path) }
   })
 
   ipcMain.handle('clicker:set-global', (_e, value: boolean) => {
@@ -1032,6 +1131,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('preview:clear', () => {
+    previewOpenGeneration++
     const path = store.get().preview.kind === 'video' ? store.get().preview.path : null
     store.patch({ preview: initialDeckState() })
     cancelFrameProbeIfUnused(path)
@@ -1045,6 +1145,8 @@ export function registerIpcHandlers(): void {
     const state = store.get()
     const p = state.preview
     if (!p.path) return
+    programOpenGeneration++
+    previewOpenGeneration++
     const transition: TakeTransition = {
       id: randomUUID(),
       durationMs: mode === 'fade' ? sanitizeTakeFadeMs(state.takeFadeMs) : 0,
@@ -1112,6 +1214,7 @@ export function registerIpcHandlers(): void {
     // takes ping-pong the two decks. If program was empty, preview becomes empty.
     const oldProgramPos = store.videoPositionSec()
     const newPreview: DeckState = {
+      sourceMuted: state.sourceMuted === true,
       recoveryTake: false,
       path: state.pdfPath,
       sha1: state.pdfSha1,
@@ -1121,6 +1224,7 @@ export function registerIpcHandlers(): void {
       notes: state.notes,
       playlistId: state.currentPlaylistId,
       slideMedia: state.slideMedia,
+      slideTransitions: state.slideTransitions ?? {},
       video:
         state.fileKind === 'video'
           ? {
@@ -1142,11 +1246,13 @@ export function registerIpcHandlers(): void {
       pdfPath: p.path,
       pdfSha1: p.sha1,
       fileKind: p.kind,
+      sourceMuted: p.sourceMuted === true,
       totalSlides: p.totalSlides,
       currentSlide: takeSlide,
       notes: p.notes,
       currentPlaylistId: p.playlistId,
       slideMedia: p.slideMedia,
+      slideTransitions: p.slideTransitions ?? {},
       video,
       // Цикл берём у выдаваемой записи: ролик-заставка должен уйти в эфир
       // зациклённым сразу, без второго действия оператора.
@@ -1180,7 +1286,17 @@ export function registerIpcHandlers(): void {
   })
 
   // Preview video transport — mirrors the program clock helpers on preview.video.
-  // Preview audio is always muted (the operator monitors it silently).
+  ipcMain.handle('preview:toggle-source-muted', (event, identity: import('../shared/types.js').FrameStepIdentity) => {
+    const operator = getOperatorWindow()
+    if (!operator || operator.isDestroyed() || event.sender !== operator.webContents ||
+      event.senderFrame !== operator.webContents.mainFrame) throw new Error('Operator window required')
+    const patch = togglePreviewSourceMute(store.get(), identity)
+    if (!patch) return
+    store.patch(patch)
+    if (patch.playlist) persistPlaylist()
+  })
+
+  // Preview monitoring stays independent of the input's program mute.
   ipcMain.handle('preview:video:pause', () => {
     if (!store.get().preview.video.playing) return
     store.patchPreviewVideo({ playing: false, anchorSec: store.previewVideoPositionSec(), anchorAt: null })
@@ -1305,6 +1421,18 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('timer:set-mode', (_e, mode: TimerMode) => {
     store.patch({ timerMode: mode })
     setTimerMode(mode)
+  })
+
+  ipcMain.handle('timer:reset-style', event => {
+    requireOperator(event)
+    const style = defaultSpeakerTimerStyle()
+    setTimerPosition(style.timerPosition)
+    setTimerScale(style.timerScale)
+    setTimerFree(style.timerFree)
+    setTimerFont(style.timerFont)
+    setTimerColor(style.timerColor)
+    setTimerWarnColors(style.timerWarnColors)
+    store.patch(style)
   })
 
   ipcMain.handle('timer:set-position', (_e, pos: TimerPosition) => {
@@ -1479,6 +1607,8 @@ export function registerIpcHandlers(): void {
   // Real EOF from the operator (the main Out deadline uses endVideo directly).
   // Loop wraps to In; otherwise freeze on Out, not on the file duration.
   ipcMain.handle('video:ended', () => {
+    if (autoVideoPending && autoVideoIdentity(store.get()) === autoVideoPending) return
+    if (autoVideoTarget(store.get()) && autoVideoAdvance.run(store.get())) return
     if (isListPlaying()) {
       void stepList(1)
       return
@@ -1668,6 +1798,7 @@ export function registerIpcHandlers(): void {
       const playlist = insertPlaylistEntries(existing, newEntries, store.get().playlistFolders, position)
       store.patch({ playlist })
       persistPlaylist()
+      preparationUi.background(newEntries, store.get().projectPath)
       void refreshMissingFiles()
       const addedIds = new Set(newEntries.map((entry) => entry.id))
       return playlist.filter((entry) => addedIds.has(entry.id))
@@ -1883,6 +2014,12 @@ export function registerIpcHandlers(): void {
     const state = store.get()
     const removedIds = new Set(removed.map((entry) => entry.id))
     const patch: Partial<import('./state.js').AppState> = { ...extra, playlist: next }
+    for (const path of new Set(removed.filter(e => e.kind === 'pptx').map(e => e.filePath))) {
+      if (!next.some(e => e.filePath === path) && state.pdfPath !== path && state.preview.path !== path) {
+        preparationUi.forget(path)
+        cancelPresentationPreparation(path)
+      }
+    }
     if (state.currentPlaylistId && removedIds.has(state.currentPlaylistId)) {
       if (removed.some((entry) => entry.id === state.currentPlaylistId && entry.kind === 'list')) stopListPlayback()
       patch.currentPlaylistId = null
@@ -1931,6 +2068,7 @@ export function registerIpcHandlers(): void {
         liveFit?: LiveFit
         loop?: boolean
         slideFadeMs?: number
+        slideFadeMode?: 'file' | 'custom' | 'cut'
       },
     ) => {
       const next = store.get().playlist.map((e) =>
@@ -1945,6 +2083,8 @@ export function registerIpcHandlers(): void {
               loop: typeof payload.loop === 'boolean' ? payload.loop : e.loop,
               ...(typeof payload.slideFadeMs === 'number' && (e.kind === 'pdf' || e.kind === 'pptx')
                 ? { slideFadeMs: sanitizeSlideFadeMs(payload.slideFadeMs) } : {}),
+              ...(['file', 'custom', 'cut'].includes(payload.slideFadeMode ?? '') && (e.kind === 'pdf' || e.kind === 'pptx')
+                ? { slideFadeMode: payload.slideFadeMode } : {}),
             }
           : e,
       )
@@ -2082,6 +2222,8 @@ export function registerIpcHandlers(): void {
     }
   })
   ipcMain.handle('pptx-cache:clear', async () => {
+    const preparing = (): boolean => pendingDeckLoads > 0 || Object.values(store.get().preparations).some(s => s.phase === 'queued' || s.phase === 'preparing')
+    if (preparing()) return { ok: false, error: t('Дождись окончания подготовки презентаций перед очисткой кэша') }
     if (isProjectTransferRunning()) return { ok: false, error: t('Дождись окончания сборки проекта перед очисткой кэша') }
     const stats = await runPptxWork(() => localCacheStats(activePptxHashes()))
     if (stats.bytes === stats.protectedBytes) return { ok: true, clearedBytes: 0, remainingBytes: stats.protectedBytes }
@@ -2094,8 +2236,10 @@ export function registerIpcHandlers(): void {
       detail: t('Удалённые PPTX при следующем выборе конвертируются заново. Открытые сейчас презентации и кэш собранных проектов останутся.'),
     })
     if (response !== 1) return { ok: false, cancelled: true }
+    if (preparing()) return { ok: false, error: t('Дождись окончания подготовки презентаций перед очисткой кэша') }
     try {
       const cleared = await runPptxWork(() => clearLocalCache(activePptxHashes()))
+      preparationUi.reset()
       return { ok: true, clearedBytes: cleared.bytes, remainingBytes: cleared.protectedBytes }
     } catch (err) {
       return { ok: false, error: (err as Error).message }
@@ -2111,9 +2255,7 @@ export function registerIpcHandlers(): void {
     try {
       if (isProjectTransferRunning()) return { ok: false, error: t('Дождись окончания сборки проекта перед пересборкой презентации') }
       if (kindOf(filePath) !== 'pptx') return { ok: false, error: t('Это не PPTX') }
-      const sha1 = await computePdfSha1(filePath)
-      forgetProjectCache(sha1)
-      await rm(cachedPdfPathFor(sha1), { force: true })
+      // Rebuild into a new generation. Open decks keep their old files intact.
       await inspectFile(filePath, { forceLocalCache: true })
       return { ok: true, remaining: store.get().fontIssues[filePath] ?? [] }
     } catch (err) {
@@ -2240,6 +2382,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('project:new', () => {
+    resetPreparation()
     beginEmptyProject()
     stopListPlayback()
     // Intentionally do NOT clear persistent storage (lastPdfPath, playlist,
@@ -2248,10 +2391,12 @@ export function registerIpcHandlers(): void {
     store.patch({
       playlist: [],
       playlistFolders: [],
+      programOverlay: programOverlay(null),
       currentPlaylistId: null,
       keyVisualPath: null,
       projectPath: null,
       pdfPath: null,
+      sourceMuted: false,
       pdfSha1: null,
       fileKind: null,
       totalSlides: 0,
@@ -2294,17 +2439,20 @@ export function registerIpcHandlers(): void {
         assertSessionIdle()
         if (store.get().testScreen.automatic) store.patch({ testScreen: { ...store.get().testScreen, automatic: false } })
         const loaded = await loadProjectFile(path)
+        resetPreparation()
         beginEmptyProject()
         store.patch({
           playlist: loaded.playlist,
           playlistFolders: loaded.playlistFolders,
           keyVisualPath: loaded.keyVisualPath,
+          programOverlay: programOverlay(loaded.programOverlay),
           audienceTimer: createAudienceTimer(loaded.audienceTimer ?? getAudienceTimer()),
           currentPlaylistId: null,
           projectPath: path,
           pdfPath: null,
           pdfSha1: null,
           fileKind: null,
+          sourceMuted: false,
           totalSlides: 0,
           currentSlide: 1,
           notes: {},
@@ -2312,6 +2460,7 @@ export function registerIpcHandlers(): void {
           preview: initialDeckState(),
         })
         persistPlaylist()
+        preparationUi.background(loaded.playlist, path)
         setKeyVisualPath(loaded.keyVisualPath)
         if (loaded.audienceTimer) setAudienceTimer(loaded.audienceTimer)
         setCurrentPlaylistId(null)
@@ -2410,6 +2559,7 @@ export function registerIpcHandlers(): void {
         parent: res.filePaths[0], name,
         playlist: snapshot.playlist, playlistFolders: snapshot.playlistFolders, keyVisualPath: snapshot.keyVisualPath,
         audienceTimer: audienceTimerConfig(snapshot.audienceTimer),
+        programOverlay: snapshot.programOverlay,
         progress,
         prepare: async (source, target, directory) => {
           if (kindOf(source) !== 'pptx') return []

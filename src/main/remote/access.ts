@@ -33,9 +33,11 @@ export function remoteHttpAccess(
   headers: IncomingHttpHeaders,
   url: URL,
 ): 401 | 403 | null {
+  // Browser request provenance is independent of optional controller credentials.
+  if (!browserOriginAllowed(headers)) return 403
   if (!protectedNetwork) return null
   if (isLoopback(address)) {
-    return LOCAL_HOSTS.test(headers.host ?? '') && browserOriginAllowed(headers) ? null : 403
+    return LOCAL_HOSTS.test(headers.host ?? '') ? null : 403
   }
   const authorization = headers.authorization
   const bearer = typeof authorization === 'string' ? /^Bearer ([a-f0-9]{64})$/i.exec(authorization)?.[1] ?? null : null
@@ -43,5 +45,5 @@ export function remoteHttpAccess(
   // If a header was sent, do not silently fall back to a different URL credential.
   const supplied = authorization !== undefined ? bearer : query.length === 1 ? query[0] : null
   if (!matchesKey(supplied, key)) return 401
-  return browserOriginAllowed(headers) ? null : 403
+  return null
 }

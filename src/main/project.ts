@@ -7,6 +7,7 @@ import type { PlaylistFolder, PlaylistEntry } from './state.js'
 import { audienceTimerConfig, type AudienceTimerConfig } from '../shared/audience-timer.js'
 import { sanitizeSlideFadeMs } from '../shared/slide-transition.js'
 import { sanitizeStoredVideoRange } from '../shared/video-range.js'
+import { programOverlay, type ProgramOverlayConfig } from '../shared/program-overlay.js'
 
 /** 2 — пути к материалам внутри папки проекта пишутся относительными. */
 export const PROJECT_SCHEMA_VERSION = 2
@@ -37,6 +38,7 @@ export function fromStoredPath(stored: string, projectPath: string): string {
 }
 
 export interface ProjectFile {
+  programOverlay?: ProgramOverlayConfig
   audienceTimer?: AudienceTimerConfig
   schemaVersion: number
   createdAt: string
@@ -47,6 +49,7 @@ export interface ProjectFile {
 }
 
 export interface LoadedProject {
+  programOverlay?: ProgramOverlayConfig
   audienceTimer?: AudienceTimerConfig
   playlist: PlaylistEntry[]
   playlistFolders: PlaylistFolder[]
@@ -74,7 +77,9 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
     ...(typeof v.folderId === 'string' ? { folderId: v.folderId } : {}),
     ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
     ...(v.loop ? { loop: true } : {}),
+    ...(typeof v.sourceMuted === 'boolean' ? { sourceMuted: v.sourceMuted } : {}),
     ...(typeof v.slideFadeMs === 'number' ? { slideFadeMs: sanitizeSlideFadeMs(v.slideFadeMs) } : {}),
+    ...(['file', 'custom', 'cut'].includes(v.slideFadeMode as string) ? { slideFadeMode: v.slideFadeMode as PlaylistEntry['slideFadeMode'] } : {}),
     ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
     ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),
     ...(range ? { inSec: range.inSec, outSec: range.outSec } : {}),
@@ -105,8 +110,10 @@ export async function loadProjectFile(path: string): Promise<LoadedProject> {
   const keyVisual =
     typeof parsed.keyVisualPath === 'string' ? parsed.keyVisualPath : null
   const playlistFolders = sanitizePlaylistFolders(parsed.playlistFolders)
+  const overlay = programOverlay(parsed.programOverlay)
   return {
     ...(parsed.audienceTimer ? { audienceTimer: audienceTimerConfig(parsed.audienceTimer) } : {}),
+    ...(parsed.programOverlay ? { programOverlay: { ...overlay, path: overlay.path ? fromStoredPath(overlay.path, path) : null } } : {}),
     playlistFolders,
     playlist: normalizeFolderPlaylist(playlist, playlistFolders),
     keyVisualPath: keyVisual ? fromStoredPath(keyVisual, path) : null,
@@ -127,7 +134,7 @@ export async function flushProjectWrites(): Promise<void> {
 /** Manual saves and autosaves share one queue; atomic renames cannot race. */
 export function saveProjectFile(
   path: string,
-  data: { playlist: PlaylistEntry[]; playlistFolders?: PlaylistFolder[]; keyVisualPath: string | null; audienceTimer?: AudienceTimerConfig },
+  data: { playlist: PlaylistEntry[]; playlistFolders?: PlaylistFolder[]; keyVisualPath: string | null; audienceTimer?: AudienceTimerConfig; programOverlay?: ProgramOverlayConfig },
 ): Promise<void> {
   const write = saveChain.then(() => writeProjectFile(path, data))
   saveChain = write.catch(() => undefined)
@@ -136,9 +143,11 @@ export function saveProjectFile(
 
 async function writeProjectFile(
   path: string,
-  data: { playlist: PlaylistEntry[]; playlistFolders?: PlaylistFolder[]; keyVisualPath: string | null; audienceTimer?: AudienceTimerConfig },
+  data: { playlist: PlaylistEntry[]; playlistFolders?: PlaylistFolder[]; keyVisualPath: string | null; audienceTimer?: AudienceTimerConfig; programOverlay?: ProgramOverlayConfig },
 ): Promise<void> {
   const project: ProjectFile = {
+    ...(data.programOverlay ? { programOverlay: { ...programOverlay(data.programOverlay),
+      path: data.programOverlay.path ? toStoredPath(data.programOverlay.path, path) : null } } : {}),
     ...(data.audienceTimer ? { audienceTimer: audienceTimerConfig(data.audienceTimer) } : {}),
     schemaVersion: PROJECT_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),

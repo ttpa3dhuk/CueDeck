@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob:; media-src 'self' blob: mediastream: cuedeck-media:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob: cuedeck-media:; media-src 'self' blob: mediastream: cuedeck-media:;" />
     <title>CueDeck</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -109,7 +109,7 @@
               <input id="playlist-compact-toggle" type="checkbox" />
               <span>Компактно</span>
             </label>
-            <label class="toggle" title="После последнего слайда автоматически перейти к следующему спикеру">
+            <label class="toggle" title="После видео — следующий слайд или материал; после последнего слайда — следующий материал">
               <input id="playlist-auto-advance-toggle" type="checkbox" />
               <span>Автопереход</span>
             </label>
@@ -233,6 +233,7 @@
             <span id="preview-video-time" class="video-time">00:00 / 00:00</span>
             <button id="preview-loop-btn" class="loop-btn" title="Зациклить этот ролик: доиграв, начинается заново. Настройка сохраняется у записи плейлиста"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button>
           </div>
+          <button id="preview-source-mute" class="source-mute hidden" title="Звук этого источника в эфире вкл/выкл" aria-label="Звук этого источника в эфире вкл/выкл" aria-pressed="false">🔊</button>
           <div class="preview-nav">
             <button id="preview-prev" title="Превью: предыдущий слайд">◀</button>
             <input id="preview-goto-input" class="goto-input" type="number" min="1" placeholder="№" title="Перейти к слайду превью: номер + Enter" />
@@ -331,6 +332,7 @@
         <div class="bottombar-left">
           <button id="stream-btn" class="stream-btn" title="Трансляция: площадки, ключи, качество"><span class="stream-btn-label">STREAM</span><span id="stream-btn-time" class="stream-btn-time"></span></button>
           <button id="omt-btn" class="omt-btn"><span class="omt-btn-label">OMT</span><span id="omt-btn-tally" class="omt-btn-tally"></span></button>
+          <span id="preparation-progress" class="hidden" role="status" aria-live="polite" title="Подготовка презентаций"></span>
 
         </div>
         <div id="program-nav" class="program-nav" role="group" aria-label="Листание эфира">
@@ -528,7 +530,7 @@
           <nav class="settings-nav">
             <button data-section="profiles">Профили площадки</button>
             <button data-section="screens" class="active">Экраны</button>
-            <button data-section="materials">Материалы</button>
+            <button data-section="materials">Таймер материалов</button>
             <button data-section="prompter">Суфлёр</button>
             <button data-section="audience-timer">Таймер зала</button>
             <button data-section="clicker">Кликер</button>
@@ -577,7 +579,7 @@
               </div>
             </section>
             <section id="setup-section" class="settings-section" data-section="screens">
-              <p class="audio-hint">Выбери режим и назначь экраны оператору, залу и суфлёру. Изменения в этом разделе вступят в силу после нажатия «Применить».</p>
+              <p class="audio-hint">Выберите режим работы.</p>
               <div class="layout-picker">
                 <label><input type="radio" name="layout" value="solo" /> 1 экран (только я)</label>
                 <label><input type="radio" name="layout" value="presenter-audience" /> 2 экрана (ноут + проектор)</label>
@@ -600,7 +602,7 @@
               <div id="output-monitors-section" class="windowed-section">
                 <label class="windowed-label">
                   <input id="output-monitors-toggle" type="checkbox" />
-                  <span>Монитор суфлёра под эфиром <span class="windowed-hint">(живой снимок; в 1-экранном режиме — скрытый суфлёр, в 2-экранном — зал)</span></span>
+                  <span>Монитор суфлёра под эфиром</span>
                 </label>
               </div>
               <div class="windowed-section">
@@ -620,18 +622,17 @@
               </div>
             </section>
             <section class="settings-section hidden" data-section="materials">
-              <p class="audio-hint">Время по умолчанию применяется только к новым записям. Для уже добавленных материалов выдели нужные карточки и выбери «Таймер материала…» в меню правой кнопки мыши.</p>
-              <label class="live-field">Таймер новых записей, мин
+              <p class="audio-hint">Время для новых материалов.</p>
+              <label class="live-field">Время по умолчанию, мин
                 <input id="material-default-minutes" type="number" min="0" max="999" step="1" value="0" />
               </label>
-              <p class="audio-hint">0 — время не задано. Новые записи не наследуют время текущего спикера.</p>
+              <p class="audio-hint">0 — без таймера.</p>
               <label class="windowed-label"><input id="material-auto-timer" type="checkbox" /> Запускать таймер при выдаче презентации в эфир</label>
-              <p class="audio-hint">Для PDF и PowerPoint с заданным временем, в режиме обратного отсчёта. Работает при TAKE и прямой выдаче в эфир. Листание слайдов не перезапускает таймер.</p>
-              <button id="material-settings-save">Сохранить настройки материалов</button>
+              <p class="audio-hint">Для презентаций с заданным временем.</p>
+              <button id="material-settings-save">Сохранить</button>
               <p id="material-settings-status" class="audio-hint"></p>
             </section>
             <section class="settings-section hidden" data-section="prompter">
-              <p class="audio-hint">Здесь настраивается экран спикера. Перетаскивай таймер, сообщение и границы колонок на макете. Изменения применяются сразу.</p>
               <div class="remote-row">
                 <label for="prompter-toolbar-scale" class="live-field-label">Верхняя строка</label>
                 <input id="prompter-toolbar-scale" type="range" min="100" max="400" step="10" value="100" />
@@ -649,6 +650,7 @@
               </div>
               <fieldset class="prompter-settings-group">
                 <legend>Таймер суфлёра</legend>
+                <button id="prompter-timer-reset" type="button">По умолчанию</button>
               <div class="remote-row">
                 <span class="live-field-label">Положение</span>
                 <div class="group position-group">
@@ -669,7 +671,7 @@
                 </div>
               </div>
               <div class="remote-row">
-                <label class="windowed-label"><input id="timer-warn-colors" type="checkbox" /> <span>Жёлтый и красный в конце отсчёта <span class="windowed-hint">(поверх своего цвета)</span></span></label>
+                <label class="windowed-label"><input id="timer-warn-colors" type="checkbox" /> <span>Жёлтый и красный в конце отсчёта</span></label>
               </div>
               <div class="remote-row">
                 <label>Шрифт <select id="timer-font"><option value="system">Системный</option><option value="mono">Моноширинный</option><option value="serif">С засечками</option></select></label>
@@ -730,16 +732,26 @@
               </div>
             </section>
             <section class="settings-section hidden" data-section="clicker">
-              <label class="windowed-label"><input id="playlist-double-click-take-toggle" type="checkbox" /> <span>Двойной клик по материалу выводит его в эфир</span></label>
-              <p class="audio-hint">По умолчанию двойной клик открывает материал только в превью. Для вывода в эфир нажми TAKE.</p>
-              <p class="audio-hint">Кнопки листания не запускают и не перематывают отдельные ролики. Видео внутри презентации запускается по настройке слайда; следующее нажатие позволяет идти дальше.</p>
-              <p class="audio-hint">Кликер спикера (Logitech R400, Spotlight, DSan MicroCue…) шлёт PgUp/PgDn или стрелки. Пока CueDeck в фокусе, он работает всегда. Галки ниже — чтобы кликер листал эфир, даже когда оператор сидит в браузере или Finder.</p>
+              <h3>Мобильный кликер</h3>
+              <label class="windowed-label"><input id="mobile-clicker-enabled" type="checkbox" /> <span>Включить кликер с телефона</span></label>
+              <p class="audio-hint">Телефон и компьютер должны быть в одной сети. Отсканируй QR-код камерой телефона: откроются кнопки листания, номер слайда и таймер спикера. Выключение временно блокирует кнопки, ссылка сохраняется и после перезапуска CueDeck. Сброс ссылки отключает ранее подключённые телефоны.</p>
+              <div id="mobile-clicker-details" class="hidden">
+                <div class="mobile-clicker-qr-wrap"><img id="mobile-clicker-qr" alt="QR-код мобильного кликера" width="200" height="200" /><span class="mobile-clicker-qr-brand" aria-hidden="true">QD</span></div>
+                <div class="mobile-clicker-actions">
+                  <select id="mobile-clicker-host" aria-label="Адрес мобильного кликера"></select>
+                  <button id="mobile-clicker-reset" type="button">Сбросить ссылку</button>
+                </div>
+                <input id="mobile-clicker-url" type="text" readonly aria-label="Ссылка мобильного кликера" />
+              </div>
+              <p id="mobile-clicker-error" class="audio-hint" role="status"></p>
+              <h3>Кликеры и клавиатура</h3>
+              <p class="audio-hint">Листание эфира, когда окно оператора неактивно.</p>
               <div class="live-field">
-                <label class="windowed-label" title="PgUp/PgDn листают эфир, даже когда CueDeck не в фокусе (оператор качает файлы в браузере — спикер продолжает кликать). Пока включено, PgUp/PgDn забраны у других приложений. Blank (точка) и Take остаются локальными.">
+                <label class="windowed-label" title="Глобальный перехват Page Up / Page Down">
                     <input id="clicker-global-toggle" type="checkbox" />
                     <span>🌐 Глобально</span>
                   </label>
-                  <label class="windowed-label" title="Для кликеров, шлющих стрелки вместо PgUp/PgDn (Logitech Spotlight, DSan MicroCue на маке): ←/→ тоже листают глобально. Пока включено, стрелки недоступны другим приложениям — включай на время выступления.">
+                  <label class="windowed-label" title="Глобальный перехват стрелок влево / вправо">
                     <input id="clicker-arrows-toggle" type="checkbox" />
                     <span>⬅➡ Стрелки</span>
                   </label>
@@ -766,7 +778,6 @@
               <div class="live-field">
                 <span class="live-field-label">При запуске</span>
                 <select id="startup-mode"><option value="empty">Пустое шоу</option><option value="last">Последняя сессия</option></select>
-                <p class="audio-hint">Восстановление без запуска роликов и таймеров. После двух аварий подряд программа откроется пустой.</p>
               </div>
               <div class="live-field">
                 <div class="autosave-row">
@@ -778,7 +789,6 @@
                   </div>
                 </div>
                 <button id="session-restore-backup" type="button">Восстановить контрольную копию…</button>
-                <p class="audio-hint">До сохранения проекта создаются контрольные копии. После сохранения обновляется файл проекта; последняя сессия запоминается отдельно.</p>
               </div>
               <div class="live-field">
                 <span class="live-field-label">Тема окна</span>
@@ -815,7 +825,6 @@
                 <button id="pptx-cache-open">Открыть папку кэша</button>
                 <button id="pptx-cache-clear">Очистить кэш…</button>
               </div>
-              <p class="audio-hint compact">Очистка не затрагивает открытые PPTX и кэш в папках собранных проектов.</p>
               <div id="fonts-settings" class="hidden">
                 <div class="live-field">
                   <span class="live-field-label">Шрифты из презентаций</span>
@@ -828,7 +837,6 @@
               </div>
             </section>
             <section class="settings-section hidden" data-section="remote">
-              <p class="audio-hint">Stream Deck, Bitfocus Companion, OSC-пульты — команды доходят при любом активном окне. Всё применяется сразу.</p>
     <div id="remote-section" class="remote-section">
       <label class="windowed-label">
         <input id="remote-toggle" type="checkbox" />
@@ -854,10 +862,10 @@
       <div class="remote-row">
         <label class="windowed-label">
           <input id="remote-companion" type="checkbox" />
-          <span>Companion: состояние на кнопках <span class="windowed-hint">(таймер, слайды, ролик)</span></span>
+          <span>Передавать состояние в Companion</span>
         </label>
         <label class="remote-port">адрес <input id="remote-companion-host" type="text" class="remote-host" spellcheck="false" /></label>
-        <button id="remote-companion-page" title="Файл для Companion → Import / Export: кнопки, таймер с миганием, переменные">Страница Companion…</button>
+        <button id="remote-companion-page" title="Экспорт страницы CueDeck для Companion">Экспорт страницы…</button>
       </div>
       <div class="remote-row remote-status-row">
         <span class="remote-status-lines">
@@ -936,12 +944,13 @@
                   <p id="omt-error" class="remote-status error hidden"></p>
                 </div>
               </div>
-              <div id="syphon-settings" class="output-group syphon-card">
+              <div id="syphon-settings" class="output-group">
                 <div class="output-title-row">
                   <h3 id="local-gpu-title" class="output-title">Syphon</h3>
                   <span id="local-gpu-platform" class="output-badge">macOS</span>
                 </div>
                 <p class="audio-hint">Локальный видеовыход для Resolume и OBS. Только картинка, без звука.</p>
+                <div id="syphon-audience-settings" class="syphon-card">
                 <div class="syphon-row">
                   <label class="windowed-label">
                     <input id="syphon-enabled" type="checkbox" />
@@ -952,10 +961,23 @@
                   <span id="syphon-status" class="syphon-status remote-status" role="status"></span>
                 </div>
                 <p class="audio-hint">Работает вместе с окном зала. OMT «Зал» и стрим занимают этот выход.</p>
+                </div>
+                <div id="syphon-prompter-settings" class="syphon-card">
+                  <div class="syphon-row">
+                    <label class="windowed-label">
+                      <input id="syphon-prompter-enabled" type="checkbox" />
+                      <span>Суфлёр</span>
+                    </label>
+                    <input id="syphon-prompter-name" class="syphon-name" type="text" maxlength="64" spellcheck="false" aria-label="Имя источника суфлёра" />
+                    <span class="syphon-resolution" title="Разрешение">1920×1080</span>
+                    <span id="syphon-prompter-status" class="syphon-status remote-status" role="status"></span>
+                  </div>
+                  <p class="audio-hint">Отдельный выход суфлёра. Работает независимо от выхода зала и физических экранов.</p>
+                </div>
               </div>
             </section>
             <section class="settings-section hidden" data-section="midi">
-              <p class="audio-hint">MIDI-устройства, подключённые к этому компьютеру. Галка — CueDeck слушает устройство; можно несколько. Лампочка мигает, когда с устройства приходит сигнал. Назначение кнопок и фейдеров на команды — следующий шаг.</p>
+              <p class="audio-hint">Выберите MIDI-входы.</p>
               <div id="midi-list" class="midi-list"></div>
               <p id="midi-status" class="audio-hint compact"></p>
             </section>
@@ -1062,7 +1084,6 @@
           <button id="lo-download-btn" class="primary lo-download-btn">
             Скачать LibreOffice → libreoffice.org
           </button>
-          <p id="lo-install-hint" class="audio-hint compact"></p>
         </div>
         <div id="lo-command-option" class="lo-install-option">
           <div id="lo-option-label" class="lo-option-label">Вариант 2 — через терминал</div>

@@ -26,6 +26,7 @@ import {
   STREAM_KEYFRAME_SEC,
   STREAM_MAX_DESTINATIONS,
   DEFAULT_SYPHON_SETTINGS,
+  DEFAULT_SYPHON_PROMPTER_SETTINGS,
   SYPHON_NAME_MAX,
   type OmtFps,
   type OmtResolution,
@@ -84,7 +85,6 @@ interface PersistedShape {
   timerGongEnabled: boolean
   timerLoop: boolean
   askLayoutOnStartup: boolean
-  playlistDoubleClickTake: boolean
   clickerGlobal: boolean
   clickerGlobalArrows: boolean
   speakerMsgPresets: string[]
@@ -106,6 +106,7 @@ interface PersistedShape {
   omt: OmtSettings
   /** Syphon для Resolume/OBS (syphon-settings.ts). Нет в файле — не трогали (env QA). */
   syphon?: SyphonSettings
+  syphonPrompter?: SyphonSettings
   /** MIDI-входы, которые слушает CueDeck — имена устройств («Настройки → MIDI»). */
   midiInputs: string[]
   /** Профили площадки (profiles.ts) — список, новые в конце. */
@@ -159,7 +160,6 @@ const STORE_DEFAULTS: PersistedShape = {
   timerGongEnabled: false,
   timerLoop: false,
   askLayoutOnStartup: true,
-  playlistDoubleClickTake: false,
   clickerGlobal: false,
   clickerGlobalArrows: false,
   speakerMsgPresets: [...DEFAULT_SPEAKER_MSG_PRESETS],
@@ -405,6 +405,7 @@ export function getPlaylist(): PlaylistEntry[] {
       ...(typeof v.folderId === 'string' ? { folderId: v.folderId } : {}),
     ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
       ...(v.loop ? { loop: true } : {}),
+      ...(typeof v.sourceMuted === 'boolean' ? { sourceMuted: v.sourceMuted } : {}),
       ...(typeof v.slideFadeMs === 'number' ? { slideFadeMs: sanitizeSlideFadeMs(v.slideFadeMs) } : {}),
       ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
       ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),
@@ -542,14 +543,6 @@ export function getTimerLoop(): boolean {
 
 export function setTimerLoop(value: boolean): void {
   store().set('timerLoop', value)
-}
-
-export function getPlaylistDoubleClickTake(): boolean {
-  return store().get('playlistDoubleClickTake') === true
-}
-
-export function setPlaylistDoubleClickTake(value: boolean): void {
-  store().set('playlistDoubleClickTake', value)
 }
 
 export function getClickerGlobal(): boolean {
@@ -758,6 +751,17 @@ export function setSyphonSettings(value: SyphonSettings): void {
     enabled: value.enabled === true,
     name: cleanSyphonName(value.name, DEFAULT_SYPHON_SETTINGS.name),
   })
+}
+
+export function getSyphonPrompterSettings(): SyphonSettings {
+  const raw = (store().get('syphonPrompter') ?? {}) as Partial<SyphonSettings>
+  return { enabled: raw.enabled === true,
+    name: cleanSyphonName(raw.name, DEFAULT_SYPHON_PROMPTER_SETTINGS.name) }
+}
+
+export function setSyphonPrompterSettings(value: SyphonSettings): void {
+  store().set('syphonPrompter', { enabled: value.enabled === true,
+    name: cleanSyphonName(value.name, DEFAULT_SYPHON_PROMPTER_SETTINGS.name) })
 }
 
 export function setRemoteSettings(value: RemoteSettings): void {

@@ -21,6 +21,7 @@ import { app, BrowserWindow, ipcMain, screen, type NativeImage } from 'electron'
 import log from 'electron-log/main'
 import { store } from '../state.js'
 import { t } from '../../shared/i18n.js'
+import { omtFrameSize } from '../../shared/omt-frame-size.js'
 import {
   OMT_OUTPUTS,
   OMT_OUTPUT_OFF,
@@ -250,11 +251,13 @@ class OmtSender {
     this.encodeNext()
   }
 
-  /** Байты кадра; шире выбранного разрешения (Retina, 4K-проектор) — ужимаем. */
+  /** Байты кадра: вписываем в выбранный предел по обеим сторонам, без обрезки. */
   private toRaw(image: NativeImage): RawFrame | null {
     let img = image
-    const maxWidth = widthOf(this.size)
-    if (img.getSize().width > maxWidth) img = img.resize({ width: maxWidth, quality: 'good' })
+    const source = img.getSize()
+    const target = omtFrameSize(source.width, source.height, this.size)
+    if (!target) return null
+    if (source.width !== target.width || source.height !== target.height) img = img.resize({ ...target, quality: 'good' })
     const { width, height } = img.getSize()
     if (width < 16 || height < 16) return null
     return { width, height, buf: img.toBitmap() }

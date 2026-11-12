@@ -29,6 +29,13 @@ function entry(partial: Partial<PlaylistEntry> = {}): PlaylistEntry {
 }
 
 describe('saveProjectFile + loadProjectFile', () => {
+  it('preserves independent input mute across project saves, including presentations and lists', async () => {
+    const path = join(dir, 'mute.pdpres')
+    const playlist = [entry({ sourceMuted: true }), entry({ id: 'two', sourceMuted: false }),
+      entry({ id: 'list', kind: 'list', filePath: '', sourceMuted: true, items: [{ path: '/v.mp4', kind: 'video', fileName: 'v.mp4' }] })]
+    await saveProjectFile(path, { playlist, keyVisualPath: null })
+    expect((await loadProjectFile(path)).playlist).toEqual(playlist)
+  })
   it('roundtrip: что сохранили, то и загрузили', async () => {
     const path = join(dir, 'show.pdpres')
     const playlist = [entry(), entry({ id: 'id-2', kind: 'video', filePath: '/v.mp4', fileName: 'v.mp4', displayName: 'Ролик' })]

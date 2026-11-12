@@ -544,18 +544,30 @@ const METER_FFT = 2048
  * тап: он не перехватывает выход элемента. `createMediaElementSource` увёл бы
  * звук в граф Web Audio, сломав маршрутизацию через `setSinkId`.
  */
-const capturedStreams = new WeakMap<HTMLMediaElement, { src: string; stream: MediaStream }>()
+const capturedStreams = new WeakMap<HTMLMediaElement, { src: string; stream: MediaStream; hadAudio: boolean }>()
 
 export function elementAudioStream(el: HTMLMediaElement | null): MediaStream | null {
   if (!el || !el.currentSrc) return null
   const cached = capturedStreams.get(el)
-  // Файл сменился — прежние дорожки закончились, нужен новый тап.
-  if (cached && cached.src === el.currentSrc) return cached.stream
+  if (cached && cached.src === el.currentSrc) {
+    const hasAudio = cached.stream.getAudioTracks().some(track => track.readyState !== 'ended')
+    if (hasAudio) cached.hadAudio = true
+    // A new capture can gain tracks asynchronously. After EOF, however,
+    // Chromium removes its tracks and does not revive them on seek/play.
+    if (hasAudio || !cached.hadAudio || el.paused || el.ended) return cached.stream
+  }
+  if (cached) {
+    capturedStreams.delete(el)
+    cached.stream.getTracks().forEach(track => track.stop())
+  }
   const capture = (el as HTMLMediaElement & { captureStream?: () => MediaStream }).captureStream
   if (typeof capture !== 'function') return null
   try {
     const stream = capture.call(el)
-    capturedStreams.set(el, { src: el.currentSrc, stream })
+    capturedStreams.set(el, {
+      src: el.currentSrc, stream,
+      hadAudio: stream.getAudioTracks().some(track => track.readyState !== 'ended'),
+    })
     return stream
   } catch {
     return null

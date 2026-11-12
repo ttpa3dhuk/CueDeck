@@ -18,12 +18,14 @@ export class VideoBoundaryScheduler {
   private timers: Record<VideoDeck, ReturnType<typeof setTimeout> | null> = { program: null, preview: null }
   private unsubscribe: (() => void) | null = null
 
-  constructor(private readonly store: VideoBoundaryStore) {}
+  constructor(private readonly store: VideoBoundaryStore,
+    private readonly advance?: { eligible(state: AppState): boolean; run(state: AppState): boolean }) {}
 
   start(): void {
     if (this.unsubscribe) return
     this.unsubscribe = this.store.onChange((_state, patch) => {
-      if (patch.video || patch.preview) this.sync()
+      if (patch.video || patch.preview || patch.autoAdvance !== undefined || patch.videoLoop !== undefined ||
+          patch.currentSlide !== undefined || patch.pdfPath !== undefined || patch.playlist || patch.slideTransitions) this.sync()
     })
     this.sync()
   }
@@ -64,11 +66,18 @@ export class VideoBoundaryScheduler {
     return Boolean(entry?.loop)
   }
 
+  private boundsOf(deck: VideoDeck, video: VideoState): { inSec: number; outSec: number } | null {
+    return normalizeVideoRange(video.range, video.durationSec) ??
+      (deck === 'program' && this.advance?.eligible(this.store.get()) &&
+       Number.isFinite(video.durationSec) && video.durationSec > 0
+        ? { inSec: 0, outSec: video.durationSec } : null)
+  }
+
   private schedule(deck: VideoDeck): void {
     this.clear(deck)
     const v = this.videoOf(deck)
     if (!v.playing) return
-    const bounds = normalizeVideoRange(v.range, v.durationSec)
+    const bounds = this.boundsOf(deck, v)
     if (!bounds) return
     const remainingMs = Math.max(0, (bounds.outSec - this.positionOf(deck)) * 1000)
     const delay = Math.min(MAX_TIMEOUT_MS, Math.max(0, remainingMs))
@@ -79,16 +88,18 @@ export class VideoBoundaryScheduler {
     this.timers[deck] = null
     const v = this.videoOf(deck)
     if (!v.playing) return
-    const bounds = normalizeVideoRange(v.range, v.durationSec)
+    const bounds = this.boundsOf(deck, v)
     if (!bounds || Math.abs(bounds.outSec - expectedOutSec) > RANGE_EPSILON) {
       // Range changed while the timer was running; the state patch rescheduled it.
       return
     }
+    const state = this.store.get()
     if (this.positionOf(deck) < bounds.outSec - RANGE_EPSILON) {
       // setTimeout fired a hair early; keep the remaining deadline.
       this.schedule(deck)
       return
     }
+    if (deck === 'program' && this.advance?.eligible(state) && this.advance.run(state)) return
     const patch = endVideo(v, this.loopOf(deck))
     if (deck === 'program') this.store.patchVideo(patch)
     else this.store.patchPreviewVideo(patch)
