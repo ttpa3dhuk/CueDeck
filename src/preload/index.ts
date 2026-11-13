@@ -363,6 +363,9 @@ const api: PresenterApi = {
     remove: () => ipcRenderer.invoke('fonts:remove'),
   },
   pptx: {
+    readAnimationFrames: (file, sha) => ipcRenderer.invoke('pptx:read-animation', file, sha),
+    backend: () => ipcRenderer.invoke('pptx:backend'),
+    setBackend: (backend) => ipcRenderer.invoke('pptx:set-backend', backend),
     rebuild: (path: string) => ipcRenderer.invoke('pptx:rebuild', path),
     cacheStats: () => ipcRenderer.invoke('pptx-cache:stats'),
     openCacheFolder: () => ipcRenderer.invoke('pptx-cache:open-folder'),

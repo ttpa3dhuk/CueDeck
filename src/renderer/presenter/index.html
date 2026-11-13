@@ -806,7 +806,15 @@
               </div>
             </section>
             <section class="settings-section hidden" data-section="lo">
-              <p class="audio-hint">LibreOffice превращает PPTX, PPT, ODP и KEY в PDF. Без него открываются только PDF, картинки и видео.</p>
+              <div class="live-field" id="pptx-backend-row">
+                <label class="live-field-label" for="pptx-backend">Импорт PPTX</label>
+                <select id="pptx-backend">
+                  <option value="libreoffice">LibreOffice</option>
+                  <option value="powerpoint-static">PowerPoint (Mac, эксперимент)</option>
+                </select>
+                <p class="audio-hint compact">Экспериментальный режим: PowerPoint рисует слайды, CueDeck воспроизводит извлечённые видео, GIF и поддержанные шаги появления. Сложные анимации не поддерживаются. Выбор действует до закрытия CueDeck.</p>
+              </div>
+              <p class="audio-hint" id="lo-settings-explainer">LibreOffice превращает PPTX, PPT, ODP и KEY в PDF. Без него открываются только PDF, картинки и видео.</p>
               <div class="live-field">
                 <span class="live-field-label">Сейчас</span>
                 <p id="lo-settings-status" class="audio-hint compact">…</p>

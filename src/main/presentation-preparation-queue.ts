@@ -1,3 +1,4 @@
+import type { SlideBuildAnimation } from '../shared/types.js'
 import { resolve } from 'node:path'
 import {
   identityKey,
@@ -10,9 +11,10 @@ import {
   type PreparationWorkerResult,
   type PreparedPresentation,
   type SourceIdentity,
+  type PresentationBackend,
 } from '../shared/presentation-preparation.js'
 import { PresentationCache } from './presentation-preparation-cache.js'
-import { sourceIdentity } from './presentation-preparation-core.js'
+import { sourceIdentity } from './presentation-source-identity.js'
 
 /**
  * Очередь подготовки: один активный job, dedup path+stat, foreground впереди
@@ -36,6 +38,8 @@ export interface WorkerPrepareInput {
   filePath: string
   stageDir: string
   sofficePath: string | null
+  backend: PresentationBackend
+  backendVersion: string
   timeoutMs: number
   language: 'ru' | 'en'
 }
@@ -88,6 +92,7 @@ export interface PreparationQueueOptions {
   createWorker: () => WorkerSession
   /** Путь к soffice и язык — из main, не из worker-окружения. */
   sofficePath: () => Promise<string | null>
+  backend?: (filePath: string) => Promise<{ backend: PresentationBackend; version: string }>
   language: () => 'ru' | 'en'
   /** Проверить project-cache по уже посчитанному SHA1; null — готовить stage. */
   resolveProjectCache?: (sha1: string, job: PreparedJobView) => Promise<ProjectCacheDecision | null>
@@ -106,6 +111,8 @@ export interface PreparedJobView {
 }
 
 interface Job extends PreparedJobView {
+  backend: PresentationBackend
+  backendVersion: string
   id: string
   identity: SourceIdentity
   generation: number
@@ -131,6 +138,7 @@ export class PresentationPreparationQueue {
   private readonly createWorker: () => WorkerSession
   private readonly resolveProjectCache?: (sha1: string, job: PreparedJobView) => Promise<ProjectCacheDecision | null>
   private readonly sofficePath: () => Promise<string | null>
+  private readonly backend: (filePath: string) => Promise<{ backend: PresentationBackend; version: string }>
   private readonly language: () => 'ru' | 'en'
   private readonly log: (level: 'info' | 'warn' | 'error', message: string, error?: unknown) => void
   private readonly listeners = new Set<(path: string, status: PreparationStatus) => void>()
@@ -142,6 +150,7 @@ export class PresentationPreparationQueue {
   private idleTimer: ReturnType<typeof setTimeout> | null = null
   private generation = Date.now() * 1_000
   private stopped = false
+  private uncertainPowerpoint = false
   jobTimeoutMs: number
   cancelGraceMs: number
   workerIdleMs: number
@@ -150,6 +159,7 @@ export class PresentationPreparationQueue {
     this.cache = options.cache
     this.createWorker = options.createWorker
     this.sofficePath = options.sofficePath
+    this.backend = options.backend ?? (async () => ({ backend: 'libreoffice', version: '' }))
     this.language = options.language
     this.resolveProjectCache = options.resolveProjectCache
     this.log = options.log ?? (() => undefined)
@@ -182,7 +192,7 @@ export class PresentationPreparationQueue {
     if (job.watchdog) clearTimeout(job.watchdog)
     job.timeout = null
     job.watchdog = null
-    const key = `${job.filePath}\0${identityKey(job.identity)}`
+    const key = JSON.stringify([job.filePath, identityKey(job.identity), job.backend, job.backendVersion])
     if (this.jobsByKey.get(key) === job) this.jobsByKey.delete(key)
     const set = this.jobsByPath.get(job.filePath)
     set?.delete(job)
@@ -197,7 +207,7 @@ export class PresentationPreparationQueue {
   }
 
   private track(job: Job): void {
-    this.jobsByKey.set(`${job.filePath}\0${identityKey(job.identity)}`, job)
+    this.jobsByKey.set(JSON.stringify([job.filePath, identityKey(job.identity), job.backend, job.backendVersion]), job)
     let set = this.jobsByPath.get(job.filePath)
     if (!set) { set = new Set(); this.jobsByPath.set(job.filePath, set) }
     set.add(job)
@@ -241,13 +251,15 @@ export class PresentationPreparationQueue {
     const forceLocalCache = options.forceLocalCache === true
     const cacheSourcePath = resolve(options.cacheSourcePath ?? canonical)
     const cacheProjectPath = options.cacheProjectPath === undefined ? null : options.cacheProjectPath
+    const { backend, version: backendVersion } = await this.backend(canonical)
     let identity: SourceIdentity
     try {
       identity = await sourceIdentity(canonical)
     } catch (error) {
       throw new PreparationError('io', `File unavailable: ${String(error)}`) // i18n-ok: worker/main error
     }
-    const key = `${canonical}\0${identityKey(identity)}`
+    if (this.stopped) throw new PreparationError('cancelled', 'Preparation stopped') // i18n-ok: worker/main error
+    const key = JSON.stringify([canonical, identityKey(identity), backend, backendVersion])
     if (!forceLocalCache) {
       const current = this.jobsByKey.get(key)
       if (current && !current.settled) {
@@ -259,7 +271,8 @@ export class PresentationPreparationQueue {
         }
         return current.promise
       }
-      const cached = await this.cache.lookupByIdentity(canonical, identity)
+      const cached = backend === 'libreoffice' ? await this.cache.lookupByIdentity(canonical, identity, backend) : null
+      if (this.stopped) throw new PreparationError('cancelled', 'Preparation stopped') // i18n-ok: worker/main error
       if (cached) {
         for (const listener of this.listeners) {
           try { listener(canonical, { phase: 'ready' }) } catch { /* status listener */ }
@@ -280,6 +293,8 @@ export class PresentationPreparationQueue {
       id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
       filePath: canonical,
       identity,
+      backend,
+      backendVersion,
       priority,
       forceLocalCache,
       cacheSourcePath,
@@ -297,6 +312,7 @@ export class PresentationPreparationQueue {
       watchdog: null,
       status: { phase: 'queued' },
     }
+    if (this.stopped) throw new PreparationError('cancelled', 'Preparation stopped') // i18n-ok: worker/main error
     // Caller gets the promise before it is returned; avoid unhandled rejection
     // when the caller is not awaiting a superseded duplicate.
     void promise.catch(() => undefined)
@@ -325,6 +341,7 @@ export class PresentationPreparationQueue {
     job.stale = true
     const session = job.session
     try { session?.cancel(reason) } catch (error) { this.log('warn', 'preparation: cancel failed', error) }
+    if (job.backend === 'powerpoint-static') return
     const timer = setTimeout(() => {
       if (this.active !== job) return
       this.log('warn', `preparation: worker did not confirm cancellation (${reason}) after ${this.cancelGraceMs} ms`) // i18n-ok: worker/main error
@@ -340,6 +357,13 @@ export class PresentationPreparationQueue {
       job.cancelReason = 'timeout'
       job.stale = true
       try { job.session?.cancel('timeout') } catch { /* live handle only */ }
+      if (job.backend === 'powerpoint-static') {
+        this.uncertainPowerpoint = true
+        this.stopped = true
+        this.cancelAll()
+        this.settle(job, new PreparationError('timeout', 'PowerPoint export timed out'))
+        return
+      }
       const kill = setTimeout(() => {
         if (this.active !== job) return
         void job.session?.forceStop().catch(() => undefined)
@@ -378,6 +402,8 @@ export class PresentationPreparationQueue {
         filePath: job.filePath,
         stageDir: job.stageDir,
         sofficePath,
+        backend: job.backend,
+        backendVersion: job.backendVersion,
         timeoutMs: this.jobTimeoutMs,
         language,
       }, {
@@ -409,11 +435,12 @@ export class PresentationPreparationQueue {
       const failure = error instanceof PreparationError
         ? error
         : new PreparationError('worker_crash', error instanceof Error ? error.message : String(error))
-      if (job.cancelReason === 'timeout') this.settle(job, new PreparationError('timeout', 'Preparation exceeded timeout')) // i18n-ok: worker/main error
+      if (failure.code === 'powerpoint_uncertain') this.settle(job, failure)
+      else if (job.cancelReason === 'timeout') this.settle(job, new PreparationError('timeout', 'Preparation exceeded timeout')) // i18n-ok: worker/main error
       else if (job.cancelReason) this.settle(job, new PreparationError(job.cancelReason === 'superseded' ? 'superseded' : 'cancelled', 'Preparation cancelled')) // i18n-ok: worker/main error
       else this.settle(job, failure)
     } finally {
-      if (job.stageDir) await this.cache.discardStage(job.stageDir)
+      if (job.stageDir && !(job.backend === 'powerpoint-static' && (job.cancelReason === 'timeout' || this.stopped))) await this.cache.discardStage(job.stageDir)
       job.stageDir = null
       job.session = null
       if (this.active === job) this.active = null
@@ -424,6 +451,12 @@ export class PresentationPreparationQueue {
   }
 
   private async finish(job: Job, outcome: WorkerOutcome): Promise<void> {
+    if (outcome.type === 'error' && outcome.error.code === 'powerpoint_uncertain') {
+      this.uncertainPowerpoint = true
+      this.stopped = true
+      this.cancelAll()
+      throw new PreparationError('powerpoint_uncertain', outcome.error.message, outcome.error.phase)
+    }
     if (job.stale) {
       const code = job.cancelReason === 'timeout' ? 'timeout' : job.cancelReason === 'superseded' ? 'superseded' : 'cancelled'
       throw new PreparationError(code, code === 'timeout' ? 'Preparation exceeded timeout' : 'Preparation cancelled') // i18n-ok: worker/main error
@@ -449,9 +482,11 @@ export class PresentationPreparationQueue {
     if (outcome.type === 'project-cache') {
       const result: PreparedPresentation = {
         sha1: outcome.result.sha1,
+        sourceSha1: outcome.result.sourceSha1,
         totalSlides: outcome.result.totalSlides,
         slideMedia: outcome.result.slideMedia,
         slideTransitions: outcome.result.slideTransitions ?? {},
+        slideBuilds: outcome.result.slideBuilds ?? {},
         pageNotes: outcome.result.pageNotes,
         fonts: outcome.result.fonts,
         pdfPath: outcome.pdfPath,
@@ -477,12 +512,15 @@ export class PresentationPreparationQueue {
       published = await this.cache.publish({
       artifactsDir: outcome.artifactsDir,
       sha1: outcome.result.sha1,
+      sourceSha1: outcome.result.sourceSha1,
+      backend: job.backend,
       generation: job.generation,
       sourcePath: job.filePath,
       identity: job.identity,
       totalSlides: outcome.result.totalSlides,
       slideMedia: outcome.result.slideMedia,
       slideTransitions: outcome.result.slideTransitions ?? {},
+      slideBuilds: outcome.result.slideBuilds ?? {},
       pageNotes: outcome.result.pageNotes,
       fonts: outcome.result.fonts,
         hasManifest: outcome.hasManifest,
@@ -545,6 +583,11 @@ export class PresentationPreparationQueue {
       })
       await Promise.race([active.promise.catch(() => undefined), bounded])
       if (this.active === active) {
+        if (active.backend === 'powerpoint-static') {
+          this.uncertainPowerpoint = true
+          if (!active.settled) this.settle(active, new PreparationError('timeout', 'PowerPoint is still finishing an AppleEvent'))
+          return // Leave worker and staged copy intact; do not start another job.
+        }
         if (!active.settled) {
           await active.session?.forceStop().catch(() => undefined)
           await new Promise<void>((resolveStop) => {
@@ -561,7 +604,8 @@ export class PresentationPreparationQueue {
     const session = this.session
     this.session = null
     await session?.shutdown().catch((error) => this.log('warn', 'preparation: shutdown failed', error))
-    this.stopped = false
+    // A confirmed normal stop may be reused; an uncertain AppleEvent cannot.
+    this.stopped = this.uncertainPowerpoint
   }
 
 }

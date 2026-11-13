@@ -677,6 +677,8 @@ async function renderCurrent(): Promise<void> {
   if (generation !== programLoadGeneration || !docLoaded || getState().pdfPath !== path || getState().currentSlide !== slide) return
   if (!slidePaint.finish(request)) return
   lastRenderedSlide = slide
+  const upcoming = Object.entries(state.slideBuilds ?? {}).filter(([page, build]) => Number(page) >= slide && build.kind === 'native-frames').sort((a,b)=>Number(a[0])-Number(b[0]))[0]?.[1]
+  void takeFade.prepareNative(upcoming, state.pdfSha1)
 
   const { width: nextWidth, height: nextHeight } = paddingBox(nextCanvas.parentElement!)
   if (slide + 1 <= state.totalSlides) {
@@ -5243,11 +5245,19 @@ function renderUiSection(): void {
 }
 
 async function renderLoSection(): Promise<void> {
+  $('pptx-backend-row').classList.toggle('hidden', window.api.platform !== 'darwin')
+  const backend = await window.api.pptx.backend()
+  ;($('pptx-backend') as HTMLSelectElement).value = backend
+  $('lo-settings-explainer').textContent = backend === 'powerpoint-static'
+    ? t('PowerPoint готовит только PPTX. Для PPT, ODP и KEY нужен LibreOffice.')
+    : t('LibreOffice превращает PPTX, PPT, ODP и KEY в PDF. Без него открываются только PDF, картинки и видео.')
   const status = $('lo-settings-status')
   const path = await window.api.soffice.current()
-  status.textContent = path ? t('✅ Найден: {path}', { path }) : t('⚠ Не найден — PPTX не откроются.')
+  status.textContent = backend === 'powerpoint-static'
+    ? t('PowerPoint выбран для PPTX; LibreOffice остаётся для PPT, ODP и KEY.')
+    : path ? t('✅ Найден: {path}', { path }) : t('⚠ Не найден — PPTX не откроются.')
   const pathsEl = $('lo-settings-paths')
-  if (path) {
+  if (path || backend === 'powerpoint-static') {
     pathsEl.classList.add('hidden')
   } else {
     const paths = await window.api.soffice.paths()
@@ -5323,6 +5333,14 @@ function openSettings(section: SettingsSection = 'screens'): void {
     })
     $('ui-lang-restart').addEventListener('click', () => void window.api.ui.relaunch())
     $('lo-settings-install').addEventListener('click', showLoModal)
+    $('pptx-backend').addEventListener('change', async () => {
+      try {
+        await window.api.pptx.setBackend(($('pptx-backend') as HTMLSelectElement).value as 'libreoffice' | 'powerpoint-static')
+      } catch (error) {
+        showBanner(t('Не удалось выбрать импорт PPTX: {error}', { error: String(error) }), 7000)
+      }
+      void renderLoSection()
+    })
     $('lo-settings-recheck').addEventListener('click', async () => {
       await recheckLibreOffice()
       void renderLoSection()

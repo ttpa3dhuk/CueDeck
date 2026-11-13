@@ -1,3 +1,13 @@
+/** A supported authored entrance between adjacent build pages. Normalized PDF coordinates. */
+export interface SlideBuildAnimation {
+  kind?: 'fade' | 'wipe-down' | 'wipe-up' | 'split-in-vertical' | 'fly-bottom' | 'appear' | 'native-frames'
+  delayMs?: number
+  framesFile?: string
+  frameCount?: number
+  durationMs: number
+  rect: { x: number; y: number; w: number; h: number }
+}
+
 import { FADE_MAX_MS, type TakeTransition } from './take-transition.js'
 import type { StartupSettings } from './startup-settings.js'
 import type { ReportMarkerContext } from './report-recovery.js'
@@ -298,6 +308,7 @@ export interface DeckState {
   /** Видео, вшитые в слайды (только PPTX; пусто для остальных форматов). */
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
 }
 
 export interface ProjectTransferStatus {
@@ -333,6 +344,7 @@ export interface AppState {
   /** Видео, вшитые в слайды программного PPTX (см. SlideMedia). */
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
   materialSettings: import('./material-settings.js').MaterialSettings
   timer: TimerState
   /** Independent countdown over the audience feed; speaker timer is unaffected. */

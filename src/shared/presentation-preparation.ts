@@ -1,3 +1,4 @@
+import type { SlideBuildAnimation } from './types.js'
 /**
  * Контракт фоновой подготовки презентаций. Общий модуль main/worker: здесь
  * только типы, коды ошибок и имена файлов кэша — без Electron, fs и i18n,
@@ -17,6 +18,7 @@ export const PREPARED_METADATA_VERSION = 1
 export const PREPARED_VERSION_PREFIX = 'v-'
 
 export type PreparationPriority = 'foreground' | 'background'
+export type PresentationBackend = 'libreoffice' | 'powerpoint-static'
 export type PreparationPhase = 'queued' | 'preparing' | 'ready' | 'error'
 
 export interface PreparationStatus {
@@ -52,9 +54,11 @@ export function sameIdentity(a: SourceIdentity, b: SourceIdentity): boolean {
 /** Готовый целостный кэш: то, что нужно карточке и рендереру. */
 export interface PreparedPresentation {
   sha1: string
+  sourceSha1?: string
   totalSlides: number
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
   pageNotes: Record<number, string>
   fonts: string[]
   pdfPath: string
@@ -65,6 +69,8 @@ export interface PreparedPresentation {
 export interface PreparedCacheMetadata {
   version: number
   sha1: string
+  sourceSha1?: string
+  backend?: PresentationBackend
   generation: number
   sourcePath: string
   identity: SourceIdentity
@@ -72,6 +78,7 @@ export interface PreparedCacheMetadata {
   fonts: string[]
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
   pageNotes: Record<number, string>
   /** Для pptx в root есть <sha>.media.json версии 7. */
   hasManifest: boolean
@@ -83,6 +90,9 @@ export type PreparationErrorCode =
   | 'timeout'
   | 'source_changed'
   | 'libreoffice_missing'
+  | 'powerpoint_missing'
+  | 'powerpoint_failed'
+  | 'powerpoint_uncertain'
   | 'invalid_archive'
   | 'invalid_cache'
   | 'worker_crash'
@@ -103,6 +113,8 @@ export type PreparationWorkerRequest =
       filePath: string
       stageDir: string
       sofficePath: string | null
+      backend: PresentationBackend
+      backendVersion: string
       timeoutMs: number
       language: 'ru' | 'en'
     }
@@ -113,9 +125,11 @@ export type PreparationWorkerRequest =
 
 export interface PreparationWorkerResult {
   sha1: string
+  sourceSha1?: string
   totalSlides: number
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
   pageNotes: Record<number, string>
   fonts: string[]
 }

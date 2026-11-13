@@ -163,6 +163,18 @@ export class PdfLoader {
     ctx.drawImage(off, 0, 0)
   }
 
+  /** Rasterize only the animation's bounded region, without full-page frame caches. */
+  async renderRegion(pageNum: number, rect: {x:number;y:number;w:number;h:number}, targetWidth: number): Promise<HTMLCanvasElement | null> {
+    const doc=this.doc, token=this.docToken
+    if(!doc || pageNum<1 || pageNum>doc.numPages) return null
+    const page=await doc.getPage(pageNum)
+    if(token!==this.docToken) return null
+    const base=page.getViewport({scale:1}), viewport=page.getViewport({scale:Math.min(targetWidth*devicePixelScale(),1920)/base.width})
+    const out=document.createElement('canvas');out.width=Math.ceil(viewport.width*rect.w);out.height=Math.ceil(viewport.height*rect.h)
+    await page.render({canvasContext:out.getContext('2d')!,viewport,transform:[1,0,0,1,-rect.x*viewport.width,-rect.y*viewport.height]}).promise
+    return token===this.docToken ? out : null
+  }
+
   async prerender(pageNum: number, targetWidth: number): Promise<void> {
     await this.renderToOffscreen(pageNum, targetWidth).catch(() => null)
   }

@@ -332,6 +332,8 @@ async function renderSlide(): Promise<void> {
   if (generation !== programLoadGeneration || !docLoaded || getState().pdfPath !== path || getState().currentSlide !== slide) return
   if (!slidePaint.finish(request)) return
   lastRenderedSlide = slide
+  const upcoming = Object.entries(state.slideBuilds ?? {}).filter(([page, build]) => Number(page) >= slide && build.kind === 'native-frames').sort((a,b)=>Number(a[0])-Number(b[0]))[0]?.[1]
+  void takeFade.prepareNative(upcoming, state.pdfSha1)
   window.api.diag.log('info', `слайд ${state.currentSlide} отрисован за ${Math.round(performance.now() - t0)} мс`)
   if (state.currentSlide + 1 <= state.totalSlides) {
     prerender(state.currentSlide + 1, width).catch(() => undefined)

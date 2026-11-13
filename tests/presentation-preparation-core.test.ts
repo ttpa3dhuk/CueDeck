@@ -68,6 +68,17 @@ function deck(): Buffer {
   })
 }
 
+function hiddenDeck(): Buffer {
+  return zip({
+    '[Content_Types].xml': '<Types></Types>',
+    'ppt/presentation.xml': '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId id="256" r:id="rId1"/><p:sldId id="257" r:id="rId2"/><p:sldId id="258" r:id="rId3"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/></p:presentation>',
+    'ppt/_rels/presentation.xml.rels': `<Relationships><Relationship Id="rId1" Type="${REL}/slide" Target="slides/slide1.xml"/><Relationship Id="rId2" Type="${REL}/slide" Target="slides/slide2.xml"/><Relationship Id="rId3" Type="${REL}/slide" Target="slides/slide3.xml"/></Relationships>`,
+    'ppt/slides/slide1.xml': '<p:sld xmlns:p="p"><p:cSld><p:spTree/></p:cSld></p:sld>',
+    'ppt/slides/slide2.xml': '<p:sld xmlns:p="p" show="0"><p:cSld><p:spTree/></p:cSld></p:sld>',
+    'ppt/slides/slide3.xml': '<p:sld xmlns:p="p"><p:cSld><p:spTree/></p:cSld></p:sld>',
+  })
+}
+
 const PDF = Buffer.from('%PDF-1.7\n1 0 obj<</Type /Page>>endobj\n2 0 obj<</Type /Page>>endobj\n')
 
 let dir: string
@@ -106,6 +117,41 @@ it('rejects a renamed text file before LibreOffice can silently import it as a p
 })
 
 describe('presentation preparation core', () => {
+  it('uses an injected static exporter without launching PowerPoint and publishes only its PDF', async () => {
+    const { source, stage } = await fixture()
+    const staged = await stageSourceCopy(source, stage)
+    const cacheSha = 'b'.repeat(40)
+    const exportStatic = vi.fn(async (_copy: string, outputDir: string, sha: string, _signal: AbortSignal | undefined, exchangeDir: string) => {
+      expect(exchangeDir).toContain('powerpoint-exchange')
+      const path = join(outputDir, `${sha}.pdf`)
+      await writeFile(path, Buffer.from('%PDF-1.7\n1 0 obj<</Type /Page>>endobj\n'))
+      return path
+    })
+    const result = await prepareStagedArtifacts({ stagedPath: staged.stagedPath, originalPath: source,
+      sha1: cacheSha, sourceSha1: staged.sha1, stageDir: stage, identityBefore: staged.identityBefore,
+      sofficePath: null, timeoutMs: 1000, backend: 'powerpoint-static', exportStatic,
+    })
+    expect(exportStatic).toHaveBeenCalledOnce()
+    expect(result).toMatchObject({ sha1: cacheSha, sourceSha1: staged.sha1, totalSlides: 1, slideMedia: [], hasManifest: true })
+    const manifest = JSON.parse(await readFile(join(result.artifactsDir, `${cacheSha}.media.json`), 'utf8'))
+    expect(manifest.slideMedia).toEqual([])
+  })
+
+  it('rejects a PDF that includes a hidden slide instead of mapping notes to a wrong page', async () => {
+    const { source, stage } = await fixture()
+    await writeFile(source, hiddenDeck())
+    const staged = await stageSourceCopy(source, stage)
+    const cacheSha = 'c'.repeat(40)
+    await expect(prepareStagedArtifacts({ stagedPath: staged.stagedPath, originalPath: source,
+      sha1: cacheSha, sourceSha1: staged.sha1, stageDir: stage, identityBefore: staged.identityBefore,
+      sofficePath: null, timeoutMs: 1000, backend: 'powerpoint-static',
+      exportStatic: async (_copy, outputDir, sha) => {
+        const path = join(outputDir, `${sha}.pdf`)
+        await writeFile(path, Buffer.from('%PDF-1.7\n1 0 obj<</Type /Page>>endobj\n2 0 obj<</Type /Page>>endobj\n3 0 obj<</Type /Page>>endobj\n'))
+        return path
+      },
+    })).rejects.toMatchObject({ code: 'io', phase: 'validate' })
+  })
   it('hashes a private copy and never changes the source', async () => {
     const { source, stage } = await fixture()
     const before = await readFile(source)

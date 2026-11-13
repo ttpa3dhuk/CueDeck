@@ -1,3 +1,4 @@
+import type { SlideBuildAnimation } from '../shared/types.js'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve, sep } from 'node:path'
@@ -36,12 +37,15 @@ interface CacheIndex {
 export interface PublishInput {
   artifactsDir: string
   sha1: string
+  sourceSha1?: string
+  backend?: 'libreoffice' | 'powerpoint-static'
   generation: number
   sourcePath: string
   identity: SourceIdentity
   totalSlides: number
   slideMedia: PreparedPresentation['slideMedia']
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
   pageNotes: Record<number, string>
   fonts: string[]
   hasManifest: boolean
@@ -239,9 +243,11 @@ export class PresentationCache {
   private resultOf(meta: PreparedCacheMetadata, pdfPath: string): PreparedPresentation {
     return {
       sha1: meta.sha1,
+      sourceSha1: meta.sourceSha1,
       totalSlides: meta.totalSlides,
       slideMedia: meta.slideMedia,
       slideTransitions: meta.slideTransitions ?? {},
+      slideBuilds: meta.slideBuilds ?? {},
       pageNotes: meta.pageNotes,
       fonts: meta.fonts,
       pdfPath,
@@ -249,7 +255,7 @@ export class PresentationCache {
     }
   }
 
-  async lookupByIdentity(filePath: string, identity: SourceIdentity): Promise<PreparedPresentation | null> {
+  async lookupByIdentity(filePath: string, identity: SourceIdentity, backend: 'libreoffice' | 'powerpoint-static' = 'libreoffice'): Promise<PreparedPresentation | null> {
     await this.ensureIndex()
     const key = `${resolve(filePath)}\0${identityKey(identity)}`
     let locator = this.byPath.get(key)
@@ -259,7 +265,7 @@ export class PresentationCache {
     }
     if (!locator) return null
     const valid = await this.validRoot(locator.sha1, locator.generation)
-    if (!valid) {
+    if (!valid || (valid.meta.backend ?? 'libreoffice') !== backend) {
       this.byPath.delete(key)
       return null
     }
@@ -329,6 +335,8 @@ export class PresentationCache {
     const metadata: PreparedCacheMetadata = {
       version: PREPARED_METADATA_VERSION,
       sha1: input.sha1,
+      sourceSha1: input.sourceSha1,
+      backend: input.backend,
       generation: input.generation,
       sourcePath: input.sourcePath,
       identity: input.identity,
@@ -336,6 +344,7 @@ export class PresentationCache {
       fonts: input.fonts,
       slideMedia: input.slideMedia,
       slideTransitions: input.slideTransitions ?? {},
+      slideBuilds: input.slideBuilds ?? {},
       pageNotes: input.pageNotes,
       hasManifest: input.hasManifest,
       createdAt: Date.now(),

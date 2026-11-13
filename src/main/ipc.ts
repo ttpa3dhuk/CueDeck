@@ -1,3 +1,5 @@
+import { mediaDirFor } from './pptx-media.js'
+import type { SlideBuildAnimation } from '../shared/types.js'
 import { hasLastSession, listSessionBackups } from './session-files.js'
 import { timerFont } from '../shared/timer-font.js'
 import { timerAdjustments } from '../shared/timer-controls.js'
@@ -125,7 +127,8 @@ import { countPdfPages } from './pdf-pages.js'
 import { cachedPdfPathFor, findSoffice, LibreOfficeMissingError, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
 import { beginProjectTransfer, endProjectTransfer, isProjectTransferRunning, transferProject } from './project-transfer.js'
 import { runPptxWork } from './pptx-work.js'
-import { preparePresentation, cancelPresentationPreparations, cancelPresentationPreparation, onPreparationStatus } from './presentation-preparation.js'
+import { presentationNotesPath } from './presentation-notes-path.js'
+import { preparePresentation, cancelPresentationPreparations, cancelPresentationPreparation, onPreparationStatus, getPptxBackend, setPptxBackend } from './presentation-preparation.js'
 import { PreparationUiState } from './preparation-ui-state.js'
 import type { ProjectTransferStatus } from '../shared/types.js'
 import { clearLocalCache, exportProjectCache, localCacheStats, localPptxCacheDir } from './project-cache.js'
@@ -209,6 +212,7 @@ interface InspectedFile {
   sha1Mismatch: boolean
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
 }
 
 /**
@@ -217,6 +221,7 @@ interface InspectedFile {
  * заметок PowerPoint застряла бы в нём и перекрыла обновлённую презентацию.
  */
 const pptxNotesBySha1 = new Map<string, Record<number, string>>()
+const pptxNotesPathBySha1 = new Map<string, string>()
 
 /** Что писать в файл-спутник: всё, кроме страниц, совпадающих с заметкой PPTX. */
 function ownNotes(sha1: string, notes: Record<number, string>): Record<number, string> {
@@ -269,9 +274,11 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
   }
 
   let sha1: string
+  let notesPath = filePath
   let totalSlides = 1
   let slideMedia: SlideMedia[] = []
   let slideTransitions: Record<number, number> = {}
+  let slideBuilds: Record<number, SlideBuildAnimation> = {}
   let pptxNotes: Record<number, string> = {}
 
   if (kind === 'pdf') {
@@ -285,9 +292,15 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
       cacheProjectPath: opts.cacheProjectPath === undefined ? store.get().projectPath : opts.cacheProjectPath,
     })
     sha1 = prepared.sha1
+    // Static PDF pages can differ from LibreOffice's animation-step pages.
+    // Keep operator edits in a separate sidecar so page N never inherits a
+    // note written for a different slide under the other exporter.
+    notesPath = presentationNotesPath(filePath, sha1, prepared.sourceSha1)
+    pptxNotesPathBySha1.set(sha1, notesPath)
     totalSlides = prepared.totalSlides
     slideMedia = prepared.slideMedia
     slideTransitions = prepared.slideTransitions ?? {}
+    slideBuilds = prepared.slideBuilds ?? {}
     pptxNotes = prepared.pageNotes
     pptxNotesBySha1.set(sha1, pptxNotes)
   } else if (kind === 'video') {
@@ -298,7 +311,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     sha1 = await computePdfSha1(filePath)
   }
 
-  const loaded = await loadNotes(filePath, sha1)
+  const loaded = await loadNotes(notesPath, sha1)
   return {
     kind,
     sha1,
@@ -309,6 +322,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     sha1Mismatch: loaded.sha1Mismatch,
     slideMedia,
     slideTransitions,
+    slideBuilds,
   }
 }
 
@@ -512,6 +526,7 @@ async function openFile(
       notes: info.notes,
       slideMedia: info.slideMedia,
       slideTransitions: info.slideTransitions ?? {},
+      slideBuilds: info.slideBuilds ?? {},
       currentPlaylistId: playlistId,
       sourceMuted: entry?.sourceMuted === true,
       // Reset the playback clock for every file load; keep audience-mute preference.
@@ -584,6 +599,7 @@ async function loadPreview(
       sourceMuted: entry?.sourceMuted === true,
       slideMedia: info.slideMedia,
       slideTransitions: info.slideTransitions ?? {},
+      slideBuilds: info.slideBuilds ?? {},
       video: {
         playing: false,
         anchorSec: entryRange?.inSec ?? 0,
@@ -1225,6 +1241,7 @@ export function registerIpcHandlers(): void {
       playlistId: state.currentPlaylistId,
       slideMedia: state.slideMedia,
       slideTransitions: state.slideTransitions ?? {},
+      slideBuilds: state.slideBuilds ?? {},
       video:
         state.fileKind === 'video'
           ? {
@@ -1253,6 +1270,7 @@ export function registerIpcHandlers(): void {
       currentPlaylistId: p.playlistId,
       slideMedia: p.slideMedia,
       slideTransitions: p.slideTransitions ?? {},
+      slideBuilds: p.slideBuilds ?? {},
       video,
       // Цикл берём у выдаваемой записи: ролик-заставка должен уйти в эфир
       // зациклённым сразу, без второго действия оператора.
@@ -1353,7 +1371,7 @@ export function registerIpcHandlers(): void {
     const { slide, text } = payload
     store.patchNotes(slide, text)
     const { pdfPath, pdfSha1, notes } = store.get()
-    if (pdfPath && pdfSha1) notesWriter.schedule(pdfPath, pdfSha1, ownNotes(pdfSha1, notes))
+    if (pdfPath && pdfSha1) notesWriter.schedule(pptxNotesPathBySha1.get(pdfSha1) ?? pdfPath, pdfSha1, ownNotes(pdfSha1, notes))
   })
 
   const audienceTimer = createAudienceTimerCommands(store, setAudienceTimer)
@@ -2198,6 +2216,20 @@ export function registerIpcHandlers(): void {
     }
   })
 
+  ipcMain.handle('pptx:read-animation', async (_event, file: unknown, sha: unknown) => {
+    const state=store.get()
+    if(typeof file!=='string' || typeof sha!=='string' || sha!==state.pdfSha1 || /[/\\\0]/.test(file) || !file.endsWith('.pdf') ||
+      !Object.values(state.slideBuilds??{}).some(build=>build.framesFile===file)) return null
+    const path=join(mediaDirFor(sha),file), info=await stat(path).catch(()=>null)
+    if(!info?.isFile() || info.size>24*1024*1024) return null
+    return new Uint8Array(await readFile(path))
+  })
+  ipcMain.handle('pptx:backend', () => getPptxBackend())
+  ipcMain.handle('pptx:set-backend', (_event, backend: unknown) => {
+    if (backend !== 'libreoffice' && backend !== 'powerpoint-static') throw new Error('Invalid PPTX backend')
+    if (backend === 'powerpoint-static' && process.platform !== 'darwin') throw new Error('PowerPoint static mode is Mac only')
+    setPptxBackend(backend)
+  })
   ipcMain.handle('soffice:check', async () => {
     return Boolean(await findSoffice())
   })

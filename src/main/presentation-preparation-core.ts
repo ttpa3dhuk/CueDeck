@@ -1,10 +1,14 @@
+import type { SlideBuildAnimation } from '../shared/types.js'
 import { createHash } from 'node:crypto'
 import { open } from 'node:fs/promises'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { extname, join } from 'node:path'
+import { sourceIdentity } from './presentation-source-identity.js'
+export { sourceIdentity } from './presentation-source-identity.js'
+import { dirname, extname, join } from 'node:path'
 import { countPdfPages } from './pdf-pages.js'
-import { preparePptxMedia, type PptxMediaRoots } from './pptx-media.js'
+import { preparePptxMedia, staticPptxNotes, type PptxMediaRoots } from './pptx-media.js'
+import { exportPowerpointStatic } from './powerpoint-static.js'
 import { substitutedFonts } from './pptx-fonts.js'
 import { convertSourceToPdf, type ConvertToPdfOptions } from './presentation-preparation-convert.js'
 import {
@@ -13,6 +17,7 @@ import {
   type PreparationErrorCode,
   type PreparationWorkerResult,
   type SourceIdentity,
+  type PresentationBackend,
 } from '../shared/presentation-preparation.js'
 import type { SlideMedia } from '../shared/types.js'
 
@@ -44,20 +49,10 @@ export interface StagedSource {
 }
 
 export interface StagedArtifacts extends PreparationWorkerResult {
+  sourceSha1?: string
   artifactsDir: string
   identity: SourceIdentity
   hasManifest: boolean
-}
-
-export async function sourceIdentity(filePath: string): Promise<SourceIdentity> {
-  const info = await stat(filePath, { bigint: true })
-  return {
-    dev: String(info.dev),
-    ino: String(info.ino),
-    size: String(info.size),
-    mtimeNs: String(info.mtimeNs),
-    ctimeNs: String(info.ctimeNs),
-  }
 }
 
 function hashStream(sourcePath: string, targetPath: string): Promise<{ sha1: string; bytes: number }> {
@@ -120,6 +115,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
   hasManifest: boolean
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
   pageNotes: Record<number, string>
   fonts: string[]
 }> {
@@ -135,6 +131,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
     rebuilt?: unknown
     slideMedia?: unknown
     slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
     pageNotes?: unknown
     fonts?: unknown
   }
@@ -164,10 +161,17 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
     const file = await stat(join(mediaDir, media.file)).catch(() => null)
     if (!file?.isFile()) throw new PreparationFailure('invalid_cache', `Missing media ${media.file}`, 'validate') // i18n-ok: worker/main error
   }
+  for (const build of Object.values(manifest.slideBuilds ?? {})) {
+    if (!build.framesFile) continue
+    if (typeof build.framesFile !== 'string' || /[/\\\0]/.test(build.framesFile) || build.framesFile === '.' || build.framesFile === '..') throw new PreparationFailure('invalid_cache','Unsafe animation filename','validate')
+    const bytes=await readFile(join(mediaDir,build.framesFile))
+    if(countPdfPages(bytes)!==build.frameCount) throw new PreparationFailure('invalid_cache','Animation frame count mismatch','validate')
+  }
   return {
     hasManifest: true,
     slideMedia: manifest.slideMedia as SlideMedia[],
     slideTransitions: manifest.slideTransitions ?? {},
+    slideBuilds: manifest.slideBuilds ?? {},
     pageNotes: manifest.pageNotes as Record<number, string>,
     fonts: manifest.fonts as string[],
   }
@@ -183,9 +187,13 @@ export interface PrepareArtifactsOptions {
   timeoutMs: number
   signal?: AbortSignal
   language?: 'ru' | 'en'
+  backend?: PresentationBackend
+  sourceSha1?: string
   log?: (message: string) => void
   /** Только для тестов: заменить запуск LibreOffice. */
   convert?: (options: ConvertToPdfOptions) => Promise<string>
+  /** Test seam: no AppleEvents are sent by unit tests. */
+  exportStatic?: typeof exportPowerpointStatic
 }
 
 /**
@@ -237,6 +245,36 @@ export async function prepareStagedArtifacts(options: PrepareArtifactsOptions): 
       throw new PreparationFailure('invalid_archive', 'PPTX is not an OOXML ZIP archive', 'parse')
     }
   }
+  if (options.backend === 'powerpoint-static' && extension === '.pptx') {
+    const prepared = await preparePptxMedia(stagedPath, sha1, rootsFor(artifactsDir), 'powerpoint')
+    if (signal?.aborted) throw new PreparationFailure('cancelled', 'Preparation cancelled', 'parse')
+    const { visibleSlides, allSlides } = await staticPptxNotes(prepared.convertSource)
+    const exchangeDir = join(dirname(dirname(stageDir)), 'powerpoint-exchange')
+    let pdfPath: string
+    try {
+      pdfPath = await (options.exportStatic ?? exportPowerpointStatic)(prepared.convertSource, artifactsDir, sha1, signal, exchangeDir)
+    } finally {
+      if (prepared.temporary) await rm(prepared.convertSource, { force: true }).catch(() => undefined)
+    }
+    for (const asset of prepared.nativeFrameSources ?? []) {
+      const mediaDir=join(artifactsDir,`${sha1}.media`)
+      await mkdir(mediaDir,{recursive:true})
+      try {
+        await (options.exportStatic ?? exportPowerpointStatic)(asset.sourcePath,mediaDir,asset.file.replace(/\.pdf$/,''),signal,exchangeDir)
+      } finally { await rm(asset.sourcePath,{force:true}).catch(()=>undefined) }
+    }
+    const pages = countPdfPages(await readFile(pdfPath))
+    if (pages !== visibleSlides) throw new PreparationFailure('io', `PowerPoint exported ${pages} pages for ${visibleSlides} visible (${allSlides} total) slides`, 'validate')
+    const identityAfter = await sourceIdentity(originalPath)
+    if (!sameIdentity(identityBefore, identityAfter)) throw new PreparationFailure('source_changed', 'Source changed during preparation', 'publish')
+    const validated = await validateArtifacts(artifactsDir, sha1)
+    return {
+      sha1, sourceSha1: options.sourceSha1, totalSlides: pages,
+      slideMedia: validated.slideMedia, slideTransitions: validated.slideTransitions, slideBuilds: validated.slideBuilds ?? {},
+      pageNotes: prepared.pageNotes, fonts: [],
+      artifactsDir, identity: identityAfter, hasManifest: validated.hasManifest,
+    }
+  }
   log(`pptx-media: parsing ${stagedPath}`) // i18n-ok: worker/main error
   const prepared = await preparePptxMedia(stagedPath, sha1, rootsFor(artifactsDir))
   if (signal?.aborted) throw new PreparationFailure('cancelled', 'Preparation cancelled', 'parse') // i18n-ok: worker/main error
@@ -286,6 +324,7 @@ export async function prepareStagedArtifacts(options: PrepareArtifactsOptions): 
     totalSlides,
     slideMedia: validated.slideMedia,
     slideTransitions: validated.slideTransitions ?? {},
+    slideBuilds: validated.slideBuilds ?? {},
     pageNotes: validated.pageNotes,
     fonts,
     artifactsDir,
@@ -318,6 +357,7 @@ export async function inspectCachedArtifacts(options: InspectCacheOptions): Prom
     totalSlides: countPdfPages(pdf),
     slideMedia: validated.slideMedia,
     slideTransitions: validated.slideTransitions ?? {},
+    slideBuilds: validated.slideBuilds ?? {},
     pageNotes: validated.pageNotes,
     fonts: substitutedFonts(validated.fonts, pdf),
     artifactsDir: cacheRoot,

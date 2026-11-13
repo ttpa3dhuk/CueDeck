@@ -66,3 +66,14 @@ it('holds the outgoing frame until the matching video has decoded and completed 
   expect(overlayFrameReady('new', 'new', null, 2, false)).toBe(true)
   expect(overlayFrameReady('new', null, 'new', 0, false)).toBe(true)
 })
+
+
+it('plays an authored build fade only on the adjacent forward step, preserving 500ms', () => {
+  const store = new StateStore()
+  const build = { durationMs: 500, rect: { x: .1, y: .2, w: .3, h: .1 } }
+  store.patch({fileKind:'pptx',totalSlides:12,currentSlide:8,slideTransitions:{7:0},slideBuilds:{9:build}})
+  expect(slideNavigationPatch(store.get(),9,'fade')?.takeTransition).toMatchObject({durationMs:500,buildAnimation:build})
+  expect(slideNavigationPatch({...store.get(),currentSlide:7},9,'jump')?.takeTransition).not.toHaveProperty('buildAnimation')
+  expect(slideNavigationPatch({...store.get(),currentSlide:10},9,'back')?.takeTransition).not.toHaveProperty('buildAnimation')
+  expect(slideNavigationPatch({...store.get(),slideBuilds:{9:{...build,rect:{x:-1,y:0,w:1,h:1}}}},9,'invalid')?.takeTransition).not.toHaveProperty('buildAnimation')
+})

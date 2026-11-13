@@ -1,3 +1,4 @@
+import type { SlideBuildAnimation } from '../shared/types.js'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { deflateRawSync, inflateRawSync } from 'node:zlib'
@@ -55,10 +56,12 @@ const HIDE_FILL = '<a:solidFill><a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:sr
 
 interface MediaManifest {
   version: number
+  renderer?: 'libreoffice' | 'powerpoint'
   /** Исходник пересобирался (стрип видео и/или шаги) → конвертируем копию. */
   rebuilt: boolean
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
   /** Заметки докладчика: номер страницы PDF (1-based) → текст. */
   pageNotes: Record<number, string>
   /** Шрифты, которые просит презентация (проверка подмены — pptx-fonts.ts). */
@@ -66,8 +69,10 @@ interface MediaManifest {
 }
 
 export interface PreparedPptxMedia {
+  nativeFrameSources?: Array<{ file: string; sourcePath: string }>
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
   /** Заметки докладчика из PPTX по страницам PDF (1-based). */
   pageNotes: Record<number, string>
   /** Шрифты, которые просит презентация. */
@@ -723,6 +728,7 @@ interface StepTarget {
   whole: boolean
   from: number
   to: number
+  animation?: Omit<SlideBuildAnimation, 'rect'>
 }
 
 /**
@@ -764,11 +770,28 @@ function entranceTargetsIn(groupXml: string): StepTarget[] {
     if (marks[i][1] !== 'entr') continue
     const scopeEnd = marks[i + 1]?.index ?? groupXml.length
     const scope = groupXml.slice(marks[i].index!, scopeEnd)
+    const filter = scope.match(/<p:animEffect\b[^>]*filter="([^"]+)"[^>]*>([\s\S]*?)<\/p:animEffect>/)
+    const duration = filter?.[2].match(/<p:cTn\b[^>]*dur="(\d+)"/)
+    const delay = Number(scope.match(/<p:cond\b[^>]*delay="([^"]+)"/)?.[1] ?? 0)
+    let animation: StepTarget['animation']
+    const kinds: Record<string, NonNullable<SlideBuildAnimation['kind']>> = { fade: 'fade', 'wipe(down)': 'wipe-up', 'barn(inVertical)': 'split-in-vertical' }
+    if (filter && duration && kinds[filter[1]]) animation = { kind: kinds[filter[1]], durationMs: Number(duration[1]), ...(delay ? { delayMs: delay } : {}) }
+    // Recognize only the authored linear vertical fly from below, not arbitrary formulas.
+    const coordinates = [...scope.matchAll(/<p:anim\b[\s\S]*?<\/p:anim>/g)].map(m => m[0])
+    const horizontal = coordinates.find(block => block.includes('>ppt_x<'))
+    const fixedHorizontal = horizontal ? [...horizontal.matchAll(/<p:strVal\b[^>]*val="([^"]+)"/g)].map(m => m[1]) : []
+    if (!filter && coordinates.length === 2 && fixedHorizontal?.length === 2 && fixedHorizontal.every(v => v === '#ppt_x') && scope.includes('ppt_y') && scope.includes('1+#ppt_h/2') && scope.includes('#ppt_y') && !scope.includes('<p:animMotion')) {
+      const durations = [...scope.matchAll(/<p:cTn\b[^>]*dur="(\d+)"/g)].map(m => Number(m[1])).filter(n => n > 1)
+      if (durations.length === 2 && durations[0] === durations[1] && scope.includes('calcmode="lin"')) animation = { kind: 'fly-bottom', durationMs: durations[0], ...(delay ? { delayMs: delay } : {}) }
+    }
+    if (!filter && !animation && !scope.includes('<p:anim') && scope.includes('style.visibility') && scope.includes('val="visible"')) animation = { kind: 'appear', durationMs: 1, ...(delay ? { delayMs: delay } : {}) }
+    if (animation && (!Number.isFinite(delay) || delay < 0 || delay > 10000 || animation.durationMs <= 0 || animation.durationMs > 10000)) animation = undefined
     for (const m of scope.matchAll(/<p:spTgt spid="(\d+)"\s*(\/>|>[\s\S]*?<\/p:spTgt>)/g)) {
       const rg = m[2].match(/<p:pRg st="(\d+)" end="(\d+)"/)
       const t: StepTarget = rg
         ? { spid: m[1], whole: false, from: Number(rg[1]), to: Number(rg[2]) }
         : { spid: m[1], whole: true, from: 0, to: 0 }
+      if (t.whole && animation) t.animation = animation
       out.set(`${t.spid}:${t.whole ? '*' : `${t.from}-${t.to}`}`, t)
     }
   }
@@ -902,18 +925,22 @@ function slideNotesText(slidePath: string, text: (name: string) => string | null
 
 // ── Трансформация PPTX целиком ───────────────────────────────────────────────
 
+interface NativeFrameRequest { slidePath: string; shapeId: string; targetY: number; frameCount: number; effect: string }
+
 interface TransformResult {
+  nativeFrames?: Record<string, NativeFrameRequest>
   /** null — пересборка не нужна (нет ни видео, ни клик-анимаций). */
   zip: Buffer | null
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
   videos: FoundVideo[]
   pageNotes: Record<number, string>
   fonts: string[]
   requiresFreshPdf: boolean
 }
 
-function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
+function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice' | 'powerpoint' = 'libreoffice'): TransformResult {
   const byName = new Map(entries.map((e) => [e.name, e]))
   const textCache = new Map<string, string | null>()
   const compatibleSlides = new Map<string, Buffer>()
@@ -924,7 +951,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
       if (xml && /^ppt\/slides\/[^/]+\.xml$/.test(name)) {
         const original = xml
         const rels = parseRels(text(relsPathOf(name)) ?? '')
-        xml = preferChartPreviews(xml, rid => {
+        if (renderer === 'libreoffice') xml = preferChartPreviews(xml, rid => {
           const target = rels.get(rid)
           const image = target && byName.get(normalizeSlideTarget(target))
           if (!image) return false
@@ -965,7 +992,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   })
 
   const strip = new Set(
-    entries
+    (renderer === 'powerpoint' ? [] : entries)
       .filter((e) => e.name.startsWith('ppt/media/') && STRIP_EXTS.has(extOf(e.name)))
       .map((e) => e.name),
   )
@@ -993,6 +1020,61 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
     ...(v.crop ? { crop: v.crop } : {}),
     file: mediaFileName(v.mediaEntry),
   }))
+  const slideBuilds: Record<number, SlideBuildAnimation> = {}
+  const nativeFrames: Record<string, NativeFrameRequest> = {}
+  if (renderer === 'powerpoint') for (const [index, steps] of stepsBySlide) {
+    const xml = text(pres.slidePaths[index])!
+    steps.forEach((targets, step) => {
+      if (targets.length !== 1 || !targets[0].whole || !targets[0].animation) return
+      const target = targets[0]
+      const block = [...topLevelBlocks(xml, 'p:sp'), ...topLevelBlocks(xml, 'p:pic')].find(sp => sp.match(/<p:cNvPr\b[^>]*\bid="([^"]+)"/)?.[1] === target.spid)
+      const transform = block?.match(/<a:xfrm\b([^>]*)>([\s\S]*?)<\/a:xfrm>/)
+      if (!transform || /rot=/.test(transform[1])) return
+      const off = transform[2].match(/<a:off\b[^>]*>/), ext = transform[2].match(/<a:ext\b[^>]*>/)
+      if (!off || !ext) return
+      const a = attrsOf(off[0]), b = attrsOf(ext[0])
+      const raw = { x: Number(a.x) / pres.slideW, y: Number(a.y) / pres.slideH, w: Number(b.cx) / pres.slideW, h: Number(b.cy) / pres.slideH }
+      const rect = { x: Math.max(0, raw.x), y: Math.max(0, raw.y), w: Math.min(1, raw.x + raw.w) - Math.max(0, raw.x), h: Math.min(1, raw.y + raw.h) - Math.max(0, raw.y) }
+      if (!Object.values(rect).every(Number.isFinite) || rect.x < 0 || rect.y < 0 || rect.w <= 0 || rect.h <= 0 || rect.x + rect.w > 1 || rect.y + rect.h > 1) return
+      if (target.animation!.kind === 'fly-bottom') {
+        if (!block!.startsWith('<p:pic') || /<a:(?:alpha|outerShdw|innerShdw)/.test(block!)) return
+        const rid = block!.match(/<a:blip\b[^>]*r:embed="([^"]+)"/)?.[1]
+        const rels = parseRels(text(relsPathOf(pres.slidePaths[index])) ?? '')
+        const image = rid && rels.get(rid)
+        const entry = image && byName.get(normalizeSlideTarget(image))
+        if (!entry || !readEntry(data, entry).subarray(0, 3).equals(Buffer.from([255, 216, 255]))) return
+        // A raster crop would also move foreground text. Only unobstructed
+        // opaque pictures are safe until independent foreground layers exist.
+        const visible = buildStepXml(xml, steps.slice(step + 1).flat())
+        const pictureAt = visible.indexOf(block!)
+        if (pictureAt < 0) return
+        const above = visible.slice(pictureAt + block!.length)
+        let occluded = false
+        for (const tag of SHAPE_TAGS) for (const shape of topLevelBlocks(above, tag)) {
+          const xf = shape.match(/<a:xfrm\b[^>]*>([\s\S]*?)<\/a:xfrm>/)
+          const o = xf?.[1].match(/<a:off\b[^>]*>/), e = xf?.[1].match(/<a:ext\b[^>]*>/)
+          if (!o || !e) { occluded = true; continue }
+          const origin = attrsOf(o[0]), size = attrsOf(e[0])
+          const x = Number(origin.x) / pres.slideW, y = Number(origin.y) / pres.slideH
+          const w = Number(size.cx) / pres.slideW, h = Number(size.cy) / pres.slideH
+          if (![x,y,w,h].every(Number.isFinite)) { occluded = true; continue }
+          if (x < raw.x + raw.w && x + w > raw.x && y < raw.y + raw.h && y + h > raw.y) occluded = true
+        }
+        if (occluded) {
+          const file = `build-${firstPage[index] + step + 1}.pdf`
+          nativeFrames[file] = { slidePath: pres.slidePaths[index].replace(/\.xml$/, `_cd${step+1}.xml`), shapeId: target.spid, targetY: Number(a.y), frameCount: 16, effect: 'fly-bottom' }
+          target.animation = { ...target.animation!, kind: 'native-frames', framesFile: file, frameCount: 16 }
+          rect.y = 0; rect.h = 1
+        }
+      }
+      if (block!.startsWith('<p:pic') && ['wipe-down','wipe-up','split-in-vertical'].includes(target.animation!.kind ?? '')) {
+        const file = `build-${firstPage[index] + step + 1}.pdf`
+        nativeFrames[file] = { slidePath: pres.slidePaths[index].replace(/\.xml$/, `_cd${step+1}.xml`), shapeId: target.spid, targetY: Number(a.y), frameCount: 16, effect: target.animation!.kind! }
+        target.animation = { ...target.animation!, kind: 'native-frames', framesFile: file, frameCount: 16 }
+      }
+      slideBuilds[firstPage[index] + step + 1] = { ...target.animation!, rect }
+    })
+  }
   const slideTransitions: Record<number, number> = {}
   pres.slidePaths.forEach((path, index) => {
     if (pres.hidden.has(index)) return
@@ -1016,7 +1098,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   videos.push(...gifs)
 
   const requiresFreshPdf = compatibleSlides.size > 0 || gifs.length > 0
-  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0 && compatibleSlides.size === 0) return { zip: null, slideMedia, slideTransitions, videos, pageNotes, fonts, requiresFreshPdf }
+  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0 && compatibleSlides.size === 0) return { zip: null, slideMedia, slideTransitions, slideBuilds, nativeFrames, videos, pageNotes, fonts, requiresFreshPdf }
 
   const replace = new Map(compatibleSlides)
   const add: { name: string; data: Buffer }[] = []
@@ -1095,7 +1177,56 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
       }
     }
   }
-  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, slideTransitions, videos, pageNotes, fonts, requiresFreshPdf }
+  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, slideTransitions, slideBuilds, nativeFrames, videos, pageNotes, fonts, requiresFreshPdf }
+}
+
+/** A short frame deck preserves PowerPoint z-order, including static text above a moving picture. */
+function nativeFrameDeck(data: Buffer, request: NativeFrameRequest): Buffer {
+  const entries = parseZip(data), byName = new Map(entries.map(e => [e.name,e]))
+  const read = (name: string): string => { const e=byName.get(name); if(!e) throw new Error(`Missing native frame part: ${name}`); return readEntry(data,e).toString('utf8') }
+  const xml = read(request.slidePath)
+  const picture = topLevelBlocks(xml,'p:pic').find(block=>block.match(/<p:cNvPr\b[^>]*id="([^"]+)"/)?.[1]===request.shapeId)
+  if (!picture) throw new Error('Native frame target missing')
+  const height = Number(read('ppt/presentation.xml').match(/<p:sldSz\b[^>]*cy="(\d+)"/)?.[1])
+  if (!height) throw new Error('Native frame slide height missing')
+  let relationships=read('ppt/_rels/presentation.xml.rels'), types=read('[Content_Types].xml')
+  const slides: string[] = [], add: ZipMods['add'] = []
+  for(let i=0;i<request.frameCount;i++) {
+    const y=Math.round(height+(request.targetY-height)*i/(request.frameCount-1))
+    const progress=i/(request.frameCount-1)
+    let moved = picture
+    if (request.effect === 'fly-bottom') {
+      moved=picture.replace(/(<a:xfrm\b[^>]*>[\s\S]*?<a:off\b[^>]*\by=")[^"]+("[^>]*>)/,(_m,a:string,b:string)=>a+y+b)
+    } else if (progress === 0) moved = ''
+    else if (progress < 1) {
+      const transform=picture.match(/<a:xfrm\b[^>]*>([\s\S]*?)<\/a:xfrm>/)![1]
+      const off=attrsOf(transform.match(/<a:off\b[^>]*>/)![0]), ext=attrsOf(transform.match(/<a:ext\b[^>]*>/)![0])
+      const originalCrop=attrsOf(picture.match(/<a:srcRect\b[^>]*>/)?.[0] ?? '')
+      const crop=(l:number,t:number,r:number,b:number, x:number,w:number,h:number,id:string,y=Number(off.y)):string=>{
+        const margins = { l:Number(originalCrop.l??0),t:Number(originalCrop.t??0),r:Number(originalCrop.r??0),b:Number(originalCrop.b??0) }
+        const sourceW=100000-margins.l-margins.r, sourceH=100000-margins.t-margins.b
+        const src=`<a:srcRect l="${Math.round(margins.l+sourceW*l)}" t="${Math.round(margins.t+sourceH*t)}" r="${Math.round(margins.r+sourceW*r)}" b="${Math.round(margins.b+sourceH*b)}"/>`
+        let block=picture.replace(/<a:srcRect\b[^>]*(?:\/>|>[\s\S]*?<\/a:srcRect>)/,src)
+        if(block===picture && !picture.includes('<a:srcRect')) block=block.replace('</a:blip>','</a:blip>'+src)
+        block=block.replace(/(<p:cNvPr\b[^>]*\bid=")[^"]+"/,(_m,a:string)=>a+id+'"')
+        block=block.replace(/(<a:xfrm\b[^>]*>[\s\S]*?<a:off\b[^>]*\by=")[^"]+("[^>]*>)/,(_m,a:string,b:string)=>a+Math.round(y)+b)
+        return block.replace(/(<a:xfrm\b[^>]*>[\s\S]*?<a:off\b[^>]*\bx=")[^"]+("[^>]*>)/,(_m,a:string,b:string)=>a+Math.round(x)+b)
+          .replace(/(<a:xfrm\b[^>]*>[\s\S]*?<a:ext\b[^>]*\bcx=")[^"]+("[^>]*\bcy=")[^"]+("[^>]*>)/,(_m,a:string,b:string,c:string)=>a+Math.max(1,Math.round(w))+b+Math.max(1,Math.round(h))+c)
+      }
+      if(request.effect==='wipe-down') moved=crop(0,0,0,1-progress,Number(off.x),Number(ext.cx),Number(ext.cy)*progress,request.shapeId)
+      else if(request.effect==='wipe-up') moved=crop(0,1-progress,0,0,Number(off.x),Number(ext.cx),Number(ext.cy)*progress,request.shapeId,Number(off.y)+Number(ext.cy)*(1-progress))
+      else moved=crop(0,0,1-progress/2,0,Number(off.x),Number(ext.cx)*progress/2,Number(ext.cy),request.shapeId)+crop(1-progress/2,0,0,0,Number(off.x)+Number(ext.cx)*(1-progress/2),Number(ext.cx)*progress/2,Number(ext.cy),'200000')
+    }
+    const name=`_cuedeck_frame_${i}.xml`, path=`ppt/slides/${name}`, rid=`rIdCuedeckFrame${i}`
+    if(byName.has(path)) throw new Error('Native frame name collision')
+    add.push({name:path,data:Buffer.from(xml.replace(picture,moved))})
+    add.push({name:`ppt/slides/_rels/${name}.rels`,data:Buffer.from(read(relsPathOf(request.slidePath)))})
+    slides.push(`<p:sldId id="${10000+i}" r:id="${rid}"/>`)
+    relationships=relationships.replace('</Relationships>',`<Relationship Id="${rid}" Type="${SLIDE_REL_TYPE}" Target="slides/${name}"/></Relationships>`)
+    types=types.replace('</Types>',`<Override PartName="/${path}" ContentType="${SLIDE_CONTENT_TYPE}"/></Types>`)
+  }
+  const presentation=read('ppt/presentation.xml').replace(/<p:sldIdLst>[\s\S]*?<\/p:sldIdLst>/,'<p:sldIdLst>'+slides.join('')+'</p:sldIdLst>')
+  return rebuildZip(data,entries,{strip:new Set(),replace:new Map([['ppt/presentation.xml',Buffer.from(presentation)],['ppt/_rels/presentation.xml.rels',Buffer.from(relationships)],['[Content_Types].xml',Buffer.from(types)]]),add})
 }
 
 // ── Публичный вход ───────────────────────────────────────────────────────────
@@ -1108,10 +1239,12 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
 async function readManifest(
   sha1: string,
   roots: PptxMediaRoots,
+  renderer: 'libreoffice' | 'powerpoint' = 'libreoffice',
 ): Promise<{ current: MediaManifest | null; pdfValid: boolean }> {
   try {
     const raw = await readFile(manifestPathFor(sha1, roots), 'utf8')
     const parsed = JSON.parse(raw) as MediaManifest
+    if ((parsed.renderer ?? 'libreoffice') !== renderer) return { current: null, pdfValid: false }
     if (!Array.isArray(parsed.slideMedia)) return { current: null, pdfValid: false }
     const current =
       parsed.version === MANIFEST_VERSION &&
@@ -1144,6 +1277,7 @@ export async function preparePptxMedia(
   pptxPath: string,
   sha1: string,
   rootsOverride?: PptxMediaRoots,
+  renderer: 'libreoffice' | 'powerpoint' = 'libreoffice',
 ): Promise<PreparedPptxMedia> {
   const original: PreparedPptxMedia = {
     slideMedia: [],
@@ -1157,23 +1291,25 @@ export async function preparePptxMedia(
 
   const roots = await resolveRoots(rootsOverride)
   try {
-    const { current: cached, pdfValid } = await readManifest(sha1, roots)
+    const { current: cached, pdfValid } = await readManifest(sha1, roots, renderer)
     if (cached) {
       const fromCache = {
         ...original,
         slideMedia: cached.slideMedia,
         slideTransitions: cached.slideTransitions ?? {},
+        slideBuilds: cached.slideBuilds ?? {},
         pageNotes: cached.pageNotes,
         fonts: cached.fonts,
       }
       if (!cached.rebuilt || existsSync(roots.pdfPath(sha1))) return fromCache
       // PDF из кэша пропал — пересобираем копию заново.
       const data = await readFile(pptxPath)
-      const t = transformPptx(data, parseZip(data))
+      const t = transformPptx(data, parseZip(data), renderer)
       if (!t.zip) return fromCache
       return {
         slideMedia: t.slideMedia,
         slideTransitions: t.slideTransitions ?? {},
+        slideBuilds: t.slideBuilds ?? {},
         pageNotes: t.pageNotes,
         fonts: t.fonts,
         convertSource: await writeRebuilt(sha1, t.zip, roots),
@@ -1183,7 +1319,7 @@ export async function preparePptxMedia(
 
     const data = await readFile(pptxPath)
     const entries = parseZip(data)
-    const t = transformPptx(data, entries)
+    const t = transformPptx(data, entries, renderer)
 
     // Извлечь ролики (для оверлеев), даже если пересборка не нужна.
     if (t.videos.length > 0) {
@@ -1199,15 +1335,23 @@ export async function preparePptxMedia(
     await mkdir(roots.writeDir, { recursive: true })
     const manifest: MediaManifest = {
       version: MANIFEST_VERSION,
+      renderer,
       rebuilt: t.zip !== null,
       slideMedia: t.slideMedia,
       slideTransitions: t.slideTransitions ?? {},
+      slideBuilds: t.slideBuilds ?? {},
       pageNotes: t.pageNotes,
       fonts: t.fonts,
     }
     await writeFile(join(roots.writeDir, `${sha1}.media.json`), JSON.stringify(manifest))
 
-    const parsed = { ...original, slideMedia: t.slideMedia, slideTransitions: t.slideTransitions, pageNotes: t.pageNotes, fonts: t.fonts }
+    const nativeFrameSources: Array<{file:string;sourcePath:string}> = []
+    for (const [file, request] of Object.entries(t.nativeFrames ?? {})) {
+      const sourcePath = join(roots.writeDir, `${sha1}.${file}.pptx`)
+      await writeFile(sourcePath, nativeFrameDeck(t.zip ?? data, request))
+      nativeFrameSources.push({file,sourcePath})
+    }
+    const parsed = { ...original, ...(nativeFrameSources.length ? {nativeFrameSources} : {}), slideMedia: t.slideMedia, slideTransitions: t.slideTransitions, slideBuilds: t.slideBuilds ?? {}, pageNotes: t.pageNotes, fonts: t.fonts }
     if (!t.zip) return parsed
     // Манифест прошлой версии: PDF собран от такой же пересборки — годен.
     if (pdfValid && !t.requiresFreshPdf && existsSync(roots.pdfPath(sha1))) return parsed
@@ -1216,7 +1360,29 @@ export async function preparePptxMedia(
     await rm(roots.pdfPath(sha1), { force: true }).catch(() => undefined)
     return { ...parsed, convertSource: await writeRebuilt(sha1, t.zip, roots), temporary: true }
   } catch (err) {
+    if (renderer === 'powerpoint') throw err
     console.warn('[pptx-media] разбор не удался, конвертирую оригинал:', (err as Error).message)
     return original
   }
+}
+
+/** Read authored notes in show order without rewriting the PPTX for static PDF export. */
+export async function staticPptxNotes(pptxPath: string): Promise<{ notes: Record<number, string>; visibleSlides: number; allSlides: number }> {
+  const data = await readFile(pptxPath)
+  const entries = new Map(parseZip(data).map((entry) => [entry.name, entry]))
+  const text = (name: string): string | null => {
+    const entry = entries.get(name)
+    return entry ? readEntry(data, entry).toString('utf8') : null
+  }
+  const pres = parsePresentation(text)
+  if (!pres) throw new Error('Cannot read PPTX slide order')
+  const notes: Record<number, string> = {}
+  let page = 0
+  pres.slidePaths.forEach((path, index) => {
+    const note = slideNotesText(path, text)
+    if (pres.hidden.has(index)) return
+    page++
+    if (note) notes[page] = note
+  })
+  return { notes, visibleSlides: page, allSlides: pres.slidePaths.length }
 }

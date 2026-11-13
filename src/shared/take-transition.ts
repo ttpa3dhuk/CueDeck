@@ -14,4 +14,5 @@ export interface TakeTransition {
   durationMs: number
   /** In-place slide navigation keeps media on the program route. */
   scope?: 'slide'
+  buildAnimation?: import('./types.js').SlideBuildAnimation
 }

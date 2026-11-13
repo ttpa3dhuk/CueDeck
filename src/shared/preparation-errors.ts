@@ -4,6 +4,9 @@ import { t } from './i18n.js'
 export function preparationErrorMessage(code: string): string {
   switch (code) {
     case 'libreoffice_missing': return t('LibreOffice не установлен — скачай с libreoffice.org и перезапусти CueDeck')
+    case 'powerpoint_missing': return t('PowerPoint не найден на этом Mac. Выбери LibreOffice или установи PowerPoint.')
+    case 'powerpoint_failed': return t('PowerPoint не создал PDF. Проверь файл и разрешения macOS, затем повтори.')
+    case 'powerpoint_uncertain': return t('Экспорт PowerPoint не подтверждён. Проверь и закрой копию CueDeck в PowerPoint, затем перезапусти CueDeck.')
     case 'cancelled':
     case 'superseded': return t('Подготовка отменена')
     case 'source_changed': return t('Файл изменился во время подготовки. Повтори подготовку.')

@@ -1,3 +1,4 @@
+import type { SlideBuildAnimation } from '../shared/types.js'
 import {
   type PreparationErrorCode,
   type PreparationWorkerMessage,
@@ -13,6 +14,8 @@ import {
   stageSourceCopy,
 } from './presentation-preparation-core.js'
 import { ConversionError } from './presentation-preparation-convert.js'
+import { powerpointCacheSha } from './powerpoint-static.js'
+import { PowerpointExportError } from './powerpoint-static.js'
 
 /**
  * utilityProcess-entry фоновой подготовки. Только файлы, OOXML и LibreOffice:
@@ -53,6 +56,7 @@ function errorMessage(error: unknown): string {
 }
 
 function errorCode(error: unknown, reason: 'cancelled' | 'timeout' | null): PreparationErrorCode {
+  if (error instanceof PowerpointExportError) return error.missing ? 'powerpoint_missing' : error.uncertain ? 'powerpoint_uncertain' : 'powerpoint_failed'
   if (reason) return reason
   if (error instanceof PreparationFailure) return error.code
   if (error instanceof ConversionError) return error.code
@@ -78,7 +82,10 @@ async function run(request: Extract<PreparationWorkerRequest, { type: 'prepare' 
   try {
     send({ type: 'phase', requestId: request.requestId, phase: 'copying' })
     const staged = await stageSourceCopy(request.filePath, request.stageDir, controller.signal)
-    reply({ type: 'hashed', requestId: request.requestId, sha1: staged.sha1, identity: staged.identityBefore })
+    const cacheSha = request.backend === 'powerpoint-static' && request.filePath.toLowerCase().endsWith('.pptx')
+      ? powerpointCacheSha(staged.sha1, request.backendVersion)
+      : staged.sha1
+    reply({ type: 'hashed', requestId: request.requestId, sha1: cacheSha, identity: staged.identityBefore })
 
     const decision = await Promise.race([
       waitDecision(),
@@ -95,11 +102,12 @@ async function run(request: Extract<PreparationWorkerRequest, { type: 'prepare' 
       const cached = await inspectCachedArtifacts({
         cacheRoot: decision.cacheRoot,
         pdfPath: decision.pdfPath,
-        sha1: staged.sha1,
+        sha1: cacheSha,
         originalPath: request.filePath,
         identityBefore: staged.identityBefore,
         signal: controller.signal,
       })
+      cached.sourceSha1 = staged.sha1
       if (controller.signal.aborted || active?.reason) throw new PreparationFailure(active?.reason === 'timeout' ? 'timeout' : 'cancelled', 'Preparation cancelled', 'cache') // i18n-ok: worker/main error
       reply({
         type: 'project-cache',
@@ -116,7 +124,9 @@ async function run(request: Extract<PreparationWorkerRequest, { type: 'prepare' 
     const prepared = await prepareStagedArtifacts({
       stagedPath: staged.stagedPath,
       originalPath: request.filePath,
-      sha1: staged.sha1,
+      sha1: cacheSha,
+      sourceSha1: staged.sha1,
+      backend: request.backend,
       stageDir: request.stageDir,
       identityBefore: staged.identityBefore,
       sofficePath: request.sofficePath,
@@ -135,7 +145,7 @@ async function run(request: Extract<PreparationWorkerRequest, { type: 'prepare' 
     })
   } catch (error) {
     const reason = active?.requestId === request.requestId ? active.reason : null
-    if (reason === 'cancelled') {
+    if (reason === 'cancelled' && !(error instanceof PowerpointExportError && error.uncertain)) {
       reply({ type: 'cancelled', requestId: request.requestId, forced: false })
     } else {
       const code = errorCode(error, reason)
@@ -158,17 +168,21 @@ async function run(request: Extract<PreparationWorkerRequest, { type: 'prepare' 
 
 function resultOf(value: {
   sha1: string
+  sourceSha1?: string
   totalSlides: number
   slideMedia: PreparationWorkerResult['slideMedia']
   slideTransitions?: Record<number, number>
+  slideBuilds?: Record<number, SlideBuildAnimation>
   pageNotes: Record<number, string>
   fonts: string[]
 }): PreparationWorkerResult {
   return {
     sha1: value.sha1,
+    sourceSha1: value.sourceSha1,
     totalSlides: value.totalSlides,
     slideMedia: value.slideMedia,
     slideTransitions: value.slideTransitions ?? {},
+    slideBuilds: value.slideBuilds ?? {},
     pageNotes: value.pageNotes,
     fonts: value.fonts,
   }
