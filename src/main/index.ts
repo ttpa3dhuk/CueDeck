@@ -1,3 +1,5 @@
+import { cachedPdfPathFor } from './pptx-converter.js'
+import { resolvePdfDocument } from './pdf-source.js'
 import { setOperatorApplicationMenu } from './application-menu.js'
 import { registerTestScreenIpc } from './test-screen.js'
 import { registerAudienceOutputIpc } from './audience-output.js'
@@ -121,6 +123,7 @@ protocol.registerSchemesAsPrivileged([
  */
 async function handleMediaRequest(request: Request): Promise<Response> {
   const corsHeaders: Record<string, string> = {
+    'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
     'Access-Control-Allow-Origin': process.env.ELECTRON_RENDERER_URL
       ? new URL(process.env.ELECTRON_RENDERER_URL).origin : 'null',
   }
@@ -130,7 +133,9 @@ async function handleMediaRequest(request: Request): Promise<Response> {
   const token = url.searchParams.get('v')
 
   let filePath: string | null = null
-  if (token && token !== state.pdfSha1 &&
+  if (url.hostname === 'document') {
+    filePath = resolvePdfDocument(url, { path: state.pdfPath, kind: state.fileKind, sha1: state.pdfSha1 }, state.preview, cachedPdfPathFor)
+  } else if (token && token !== state.pdfSha1 &&
     ((segments[0] === 'program' && segments.length === 1) ||
       (segments[0] === 'slide' && segments[1] === 'program' && segments.length === 3))) {
     let file: string | undefined

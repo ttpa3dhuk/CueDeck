@@ -648,7 +648,7 @@ async function loadCurrentFile(): Promise<void> {
   currentCanvas.classList.remove('hidden')
   nextCanvas.classList.remove('hidden')
   nextEmpty.classList.add('hidden')
-  await loadDocument(data.bytes)
+  await loadDocument(data.pdf ?? data.bytes)
   if (stale()) return
   docLoaded = true
   await window.api.pdf.reportTotal(totalPages())
@@ -685,7 +685,10 @@ async function renderCurrent(): Promise<void> {
         if (getState().pdfPath === path && getState().currentSlide === slide)
           nextGifs.update(state.fileKind, state.slideMedia, slide + 1, state.pdfSha1, true)
       })
-      .then(() => prerender(slide + 2, currentWidth)).catch(() => undefined)
+      .then(() => {
+        if (getState().pdfPath === path && getState().currentSlide === slide)
+          return prerender(slide + 2, currentWidth)
+      }).catch(() => undefined)
   } else {
     nextGifs.clear()
     clearCanvas(nextCanvas)
@@ -1003,7 +1006,7 @@ async function loadPreviewFile(): Promise<void> {
   previewImage.classList.add('hidden')
   previewImage.removeAttribute('src')
   previewCanvas.classList.remove('hidden')
-  await previewLoader.loadDocument(data.bytes)
+  await previewLoader.loadDocument(data.pdf ?? data.bytes)
   previewDocLoaded = true
   await window.api.preview.reportTotal(previewLoader.totalPages())
   await renderPreview()

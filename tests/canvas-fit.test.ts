@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
-vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, getDocument: () => ({ promise: Promise.resolve({
+vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, PDFDataRangeTransport: class {}, getDocument: () => ({ promise: Promise.resolve({
   numPages: 2, getPage: async (page: number) => ({ getViewport: ({ scale }: { scale: number }) => ({ width: (page === 2 ? 1200 : 1600) * scale, height: 900 * scale }),
-    render: () => ({ promise: Promise.resolve() }) }), destroy: async () => {},
+    render: () => ({ promise: Promise.resolve() }), cleanup: () => true }), destroy: async () => {},
 }) }) }))
 import { PdfLoader } from '../src/renderer/shared/pdf-loader'
 import { paddingBox } from '../src/renderer/shared/element-box'

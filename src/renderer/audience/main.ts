@@ -310,11 +310,11 @@ async function loadFile(): Promise<void> {
   slideImage.classList.add('hidden')
   slideImage.removeAttribute('src')
   canvas.classList.remove('hidden')
-  await loadDocument(data.bytes)
+  await loadDocument(data.pdf ?? data.bytes)
   if (stale()) return
   docLoaded = true
   await renderSlide()
-  done(`${state.fileKind} открыт (${Math.round(data.bytes.byteLength / 1024)} КБ), первый слайд отрисован`) // i18n-ok: журнал
+  done(`${state.fileKind} открыт (${Math.round((data.pdf?.size ?? data.bytes.byteLength) / 1024)} КБ), первый слайд отрисован`) // i18n-ok: журнал
 }
 
 async function renderSlide(): Promise<void> {

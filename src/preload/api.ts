@@ -1,3 +1,4 @@
+import type { DeckFileData } from '../shared/pdf-source.js'
 // Canonical state types live in src/shared/types.ts (shared with the main
 // process). Renderers keep importing them from this module.
 import type {
@@ -122,7 +123,7 @@ export interface PresenterApi {
   pdf: {
     openDialog(): Promise<OpenPdfResult>
     openPath(path: string): Promise<OpenPdfResult>
-    read(): Promise<{ bytes: Uint8Array; mime: string } | null>
+    read(): Promise<DeckFileData | null>
     reportTotal(total: number): Promise<void>
   }
   nav: {
@@ -146,7 +147,7 @@ export interface PresenterApi {
     toggleSourceMuted(identity: FrameStepIdentity): Promise<void>
     openDialog(): Promise<OpenPdfResult>
     openPath(path: string): Promise<OpenPdfResult>
-    read(): Promise<{ bytes: Uint8Array; mime: string } | null>
+    read(): Promise<DeckFileData | null>
     reportTotal(total: number): Promise<void>
     goto(slide: number): Promise<void>
     next(): Promise<void>
