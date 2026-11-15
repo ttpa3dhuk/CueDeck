@@ -38,7 +38,7 @@ async function poll(){
     const s=await request('/state');if(current!==version)return;
     if(!s||typeof s.enabled!=='boolean'||!s.timer||typeof s.timer.text!=='string')throw pageError(${JSON.stringify(t('Вместо данных кликера получена страница. Проверьте публикацию CLOUDPUB.'))});
     failures=0;connected=true;allowed=s.enabled&&s.canNavigate;timer.textContent=s.timer.text;timer.dataset.color=s.timer.color;
-    slides.textContent=s.access==='presentation'?${JSON.stringify(t('Ваша презентация не открыта'))}:s.total?${JSON.stringify(t('Слайд {n} из {total}'))}.replace('{n}',s.current).replace('{total}',s.total):${JSON.stringify(t('Нет материала'))};
+    slides.textContent=s.access==='presentation'?${JSON.stringify(t('Ваша презентация не открыта'))}:s.total?${JSON.stringify(t('Слайд {n} из {total}'))}.replace('{n}',s.label||s.current).replace('{total}',s.total):${JSON.stringify(t('Нет материала'))};
     remaining.textContent=s.total?${JSON.stringify(t('Осталось слайдов: {n}'))}.replace('{n}',s.remaining):'';
     status.textContent=s.access==='approval'?${JSON.stringify(t('Ожидайте разрешения оператора'))}:s.access==='presentation'?${JSON.stringify(t('Ваша презентация не открыта'))}:!s.enabled?${JSON.stringify(t('Ожидайте включения кликера'))}:s.canNavigate?${JSON.stringify(t('Подключено'))}:s.total?${JSON.stringify(t('Листание сейчас недоступно'))}:${JSON.stringify(t('Ожидаем материал в эфире'))};
   }catch(e){

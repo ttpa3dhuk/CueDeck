@@ -17,6 +17,27 @@ function setup() {
 }
 
 describe('global clicker focus', () => {
+  it('switches arrow pairs without leaving the previous pair registered', () => {
+    const t = setup(); t.setFocused(false)
+    t.manager.apply(true, true)
+    expect(t.manager.apply(true, true, 'vertical')).toEqual({ global: true, arrows: true })
+    expect([...t.registered.keys()]).toEqual(['PageDown', 'PageUp', 'Down', 'Up'])
+    t.registered.get('Down')!(); t.registered.get('Up')!()
+    expect(t.forward).toHaveBeenCalledOnce(); expect(t.back).toHaveBeenCalledOnce()
+    t.manager.apply(true, true, 'horizontal')
+    expect([...t.registered.keys()]).toEqual(['PageDown', 'PageUp', 'Right', 'Left'])
+  })
+  it('releases a partially registered vertical pair and preserves page keys', () => {
+    const t = setup(); t.setFocused(false)
+    t.shortcuts.register.mockImplementation((key, callback) => {
+      if (key === 'Up') return false
+      t.registered.set(key, callback); return true
+    })
+    expect(t.manager.apply(true, true, 'vertical')).toEqual({ global: true, arrows: false })
+    expect([...t.registered.keys()]).toEqual(['PageDown', 'PageUp'])
+    t.setFocused(true); t.manager.apply(true, true, 'vertical')
+    expect(t.registered.size).toBe(0)
+  })
   it('releases arrows for operator inputs and restores them outside CueDeck', () => {
     const t = setup()
     expect(t.manager.apply(true, true)).toEqual({ global: true, arrows: true })

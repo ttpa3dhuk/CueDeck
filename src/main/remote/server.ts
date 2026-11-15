@@ -1,3 +1,4 @@
+import { slidePosition } from '../../shared/slide-numbering'
 import { REMOTE_EVENT } from './event.js'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { writeFile } from 'node:fs/promises'
@@ -164,11 +165,13 @@ function statusJson(): Record<string, unknown> {
     program: {
       name: entryName(s.currentPlaylistId, s.pdfPath),
       kind: s.fileKind,
+      slideLabel: slides ? slidePosition(s).label : null,
+      sourceTotal: slides ? slidePosition(s).total : null,
       slide: slides ? s.currentSlide : null,
       total: slides ? s.totalSlides : null,
       /** Сколько слайдов ещё впереди (0 — последний). */
-      remaining: slides ? Math.max(0, s.totalSlides - s.currentSlide) : null,
-      text: slides ? `${s.currentSlide}/${s.totalSlides}` : '',
+      remaining: slides ? slidePosition(s).remaining : null,
+      text: slides ? `${slidePosition(s).label}/${slidePosition(s).total}` : '',
       blackout: s.blackout,
       playlistIndex: indexOf(s.currentPlaylistId),
     },
@@ -184,6 +187,8 @@ function statusJson(): Record<string, unknown> {
     preview: {
       name: entryName(s.preview.playlistId, s.preview.path),
       kind: s.preview.kind,
+      slideLabel: s.preview.totalSlides > 0 ? slidePosition(s.preview).label : null,
+      sourceTotal: s.preview.totalSlides > 0 ? slidePosition(s.preview).total : null,
       slide: s.preview.totalSlides > 0 ? s.preview.currentSlide : null,
       total: s.preview.totalSlides > 0 ? s.preview.totalSlides : null,
       playlistIndex: indexOf(s.preview.playlistId),
@@ -234,11 +239,11 @@ const TEXT_ENDPOINTS: Record<string, () => string> = {
   '/api/audience-timer/text': () => audienceTimerStatus(store.get().audienceTimer).text,
   '/api/program/text': () => {
     const s = store.get()
-    return s.totalSlides > 0 ? `${s.currentSlide}/${s.totalSlides}` : ''
+    return s.totalSlides > 0 ? `${slidePosition(s).label}/${slidePosition(s).total}` : ''
   },
   '/api/program/remaining': () => {
     const s = store.get()
-    return s.totalSlides > 0 ? String(Math.max(0, s.totalSlides - s.currentSlide)) : ''
+    return s.totalSlides > 0 ? String(slidePosition(s).remaining) : ''
   },
   '/api/video/remaining': () => {
     const s = store.get()

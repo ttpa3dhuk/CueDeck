@@ -1,3 +1,4 @@
+import { slidePosition } from '../shared/slide-numbering'
 import { readDeckFile } from './pdf-source.js'
 import { sharedPdfEnabled, sharedPdfFile } from './shared-pdf.js'
 import type { DeckFileData } from '../shared/pdf-source.js'
@@ -116,6 +117,8 @@ import {
   setAskLayoutOnStartup,
   setClickerGlobal,
   getClickerGlobalArrows,
+  getClickerArrowAxis,
+  setClickerArrowAxis,
   setClickerGlobalArrows,
   setSpeakerMsgPresets,
   setTimerPresets,
@@ -214,6 +217,7 @@ interface InspectedFile {
   sha1Mismatch: boolean
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('../shared/slide-numbering').SlideNumbering
 }
 
 /**
@@ -277,6 +281,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
   let totalSlides = 1
   let slideMedia: SlideMedia[] = []
   let slideTransitions: Record<number, number> = {}
+  let slideNumbering: import('../shared/slide-numbering').SlideNumbering | undefined
   let pptxNotes: Record<number, string> = {}
 
   if (kind === 'pdf') {
@@ -292,6 +297,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     totalSlides = prepared.totalSlides
     slideMedia = prepared.slideMedia
     slideTransitions = prepared.slideTransitions ?? {}
+    slideNumbering = prepared.slideNumbering
     pptxNotes = prepared.pageNotes
     pptxNotesBySha1.set(sha1, pptxNotes)
   } else if (kind === 'video') {
@@ -313,6 +319,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     sha1Mismatch: loaded.sha1Mismatch,
     slideMedia,
     slideTransitions,
+    slideNumbering,
   }
 }
 
@@ -516,6 +523,7 @@ async function openFile(
       notes: info.notes,
       slideMedia: info.slideMedia,
       slideTransitions: info.slideTransitions ?? {},
+      slideNumbering: info.slideNumbering,
       currentPlaylistId: playlistId,
       sourceMuted: entry?.sourceMuted === true,
       // Reset the playback clock for every file load; keep audience-mute preference.
@@ -588,6 +596,7 @@ async function loadPreview(
       sourceMuted: entry?.sourceMuted === true,
       slideMedia: info.slideMedia,
       slideTransitions: info.slideTransitions ?? {},
+      slideNumbering: info.slideNumbering,
       video: {
         playing: false,
         anchorSec: entryRange?.inSec ?? 0,
@@ -720,20 +729,20 @@ function programSeekBy(deltaSec: number): void {
 const clickerNavigation = createClickerNavigation(() => store.get().fileKind, programNext, programPrev)
 const mobileClicker = new MobileClickerService(() => {
   const state = store.get()
-  return { presentationId: state.currentPlaylistId, current: state.currentSlide, total: state.totalSlides,
-    remaining: Math.max(0, state.totalSlides - state.currentSlide),
+  return { presentationId: state.currentPlaylistId, current: state.currentSlide, label: slidePosition(state).label, total: slidePosition(state).total,
+    remaining: slidePosition(state).remaining,
     canNavigate: Boolean(state.pdfPath) && (state.fileKind === 'pdf' || state.fileKind === 'pptx'),
     timer: timerView(state.timer, state.timerMode) }
 }, direction => { log.info('clicker:mobile', direction); return clickerNavigation[direction]() }, mobileClickerStorage,
   new CloudpubTunnel(cloudpubStore, undefined, undefined, !app.isPackaged && process.env.CUEDECK_QA_MACHINE_ID ? () => clickerComputerName(process.env.CUEDECK_QA_MACHINE_ID!) : undefined))
-app.once('will-quit', event => { event.preventDefault(); void mobileClicker.dispose().finally(() => app.exit()) })
+export async function stopMobileClicker(): Promise<void> { await mobileClicker.dispose() }
 const clickerShortcuts = createClickerShortcutManager(
   globalShortcut,
   () => Boolean(getOperatorWindow()?.isFocused()),
   () => { log.info('clicker:global-next'); void clickerNavigation.next() },
   () => { log.info('clicker:global-prev'); void clickerNavigation.prev() },
 )
-export const applyClickerShortcuts = clickerShortcuts.apply
+export const applyClickerShortcuts = (global: boolean, arrows: boolean) => clickerShortcuts.apply(global, arrows, getClickerArrowAxis())
 export const suspendClickerShortcuts = clickerShortcuts.suspend
 
 function persistPlaylist(): void {
@@ -1066,6 +1075,18 @@ export function registerIpcHandlers(): void {
     return res.global
   })
 
+  ipcMain.handle('clicker:set-arrow-axis', (event, axis: unknown) => {
+    requireOperator(event)
+    if (axis !== 'horizontal' && axis !== 'vertical') throw Error('Invalid clicker arrow axis')
+    setClickerArrowAxis(axis)
+    const state = store.get()
+    const res = applyClickerShortcuts(state.clickerGlobal, state.clickerGlobalArrows)
+    const arrows = state.clickerGlobal ? res.arrows : state.clickerGlobalArrows
+    store.patch({ clickerArrowAxis: axis, clickerGlobal: res.global, clickerGlobalArrows: arrows })
+    setClickerGlobal(res.global); setClickerGlobalArrows(arrows)
+    return arrows
+  })
+
   ipcMain.handle('clicker:set-global-arrows', (_e, value: boolean) => {
     const v = Boolean(value)
     // Global mode off — just remember the intent, keys get grabbed when it turns on.
@@ -1258,6 +1279,7 @@ export function registerIpcHandlers(): void {
       playlistId: state.currentPlaylistId,
       slideMedia: state.slideMedia,
       slideTransitions: state.slideTransitions ?? {},
+      slideNumbering: state.slideNumbering,
       video:
         state.fileKind === 'video'
           ? {
@@ -1286,6 +1308,7 @@ export function registerIpcHandlers(): void {
       currentPlaylistId: p.playlistId,
       slideMedia: p.slideMedia,
       slideTransitions: p.slideTransitions ?? {},
+      slideNumbering: p.slideNumbering,
       video,
       // Цикл берём у выдаваемой записи: ролик-заставка должен уйти в эфир
       // зациклённым сразу, без второго действия оператора.
@@ -2434,6 +2457,7 @@ export function registerIpcHandlers(): void {
       pdfSha1: null,
       fileKind: null,
       totalSlides: 0,
+      slideNumbering: undefined,
       currentSlide: 1,
       notes: {},
       slideMedia: [],
@@ -2488,6 +2512,7 @@ export function registerIpcHandlers(): void {
           fileKind: null,
           sourceMuted: false,
           totalSlides: 0,
+          slideNumbering: undefined,
           currentSlide: 1,
           notes: {},
           slideMedia: [],

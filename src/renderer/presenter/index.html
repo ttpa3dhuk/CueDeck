@@ -236,7 +236,7 @@
           <button id="preview-source-mute" class="source-mute hidden" title="Звук этого источника в эфире вкл/выкл" aria-label="Звук этого источника в эфире вкл/выкл" aria-pressed="false">🔊</button>
           <div class="preview-nav">
             <button id="preview-prev" title="Превью: предыдущий слайд">◀</button>
-            <input id="preview-goto-input" class="goto-input" type="number" min="1" placeholder="№" title="Перейти к слайду превью: номер + Enter" />
+            <input id="preview-goto-input" class="goto-input" type="text" inputmode="decimal" placeholder="№" title="Перейти к слайду превью: номер + Enter" />
             <span id="preview-counter" class="preview-counter">— / —</span>
             <button id="preview-next" title="Превью: следующий слайд">▶</button>
           </div>
@@ -346,9 +346,14 @@
           <button id="project-transfer-reveal" class="hidden" title="Показать готовый проект в папке">Показать</button>
         </div>
         <div class="bottombar-right">
-          <button id="global-clicker-toggle" type="button" aria-pressed="false">Глобальный кликер: выкл</button>
+          <button id="global-clicker-toggle" class="icon-btn clicker-icon" type="button" aria-pressed="false" title="Глобальный кликер: выкл" aria-label="Глобальный кликер: выкл">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h1m4 0h1m4 0h1M6 12h1m4 0h1m4 0h1M7 16h10"/></svg>
+          </button>
           <div id="clicker-requests" class="hidden" role="region" aria-live="polite"></div>
-          <button id="mobile-clicker-pause" type="button" aria-pressed="true">Онлайн кликер: пауза</button>
+          <button id="mobile-clicker-pause" class="icon-btn clicker-icon" type="button" aria-pressed="true" title="Онлайн кликер: пауза" aria-label="Онлайн кликер: пауза">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 5h4M11 19h2"/></svg>
+            <span class="clicker-pause-mark" aria-hidden="true">Ⅱ</span>
+          </button>
           <button id="test-screen-active" class="test-screen-active hidden" title="Убрать тестовый экран и вернуть текущий материал"></button>
           <button id="settings-btn" class="icon-btn" title="Настройки: экраны, звук, клавиши, тема и язык, LibreOffice, внешнее управление, MIDI (Cmd+,)" aria-label="Настройки">⚙️</button>
           <button id="help-btn" class="icon-btn" title="Справка по клавишам (?)" aria-label="Справка">?</button>
@@ -742,11 +747,18 @@
                     <input id="clicker-global-toggle" type="checkbox" />
                     <span>🌐 Глобально</span>
                   </label>
-                  <label class="windowed-label" title="Глобальный перехват стрелок влево / вправо">
+                  <label class="windowed-label" title="Глобальный перехват выбранной пары стрелок">
                     <input id="clicker-arrows-toggle" type="checkbox" />
-                    <span>⬅➡ Стрелки</span>
+                    <span>Стрелки</span>
                   </label>
               </div>
+              <label class="windowed-label" for="clicker-arrow-axis">
+                <span>Клавиши кликера</span>
+                <select id="clicker-arrow-axis">
+                  <option value="horizontal">← / →: влево — назад, вправо — вперёд</option>
+                  <option value="vertical">↑ / ↓: вверх — назад, вниз — вперёд</option>
+                </select>
+              </label>
               <details id="online-clicker-settings"><summary>Онлайн кликер</summary><div class="online-clicker-settings-body">
               <h3>Мобильный кликер</h3>
               <label class="windowed-label"><input id="mobile-clicker-enabled" type="checkbox" /> <span>Включить кликер с телефона</span></label>

@@ -15,6 +15,13 @@
  * множественного числа ни в одном языке.
  */
 export const EN: Record<string, string> = {
+  'Клавиши кликера': 'Clicker keys',
+  'Стрелки': 'Arrow keys',
+  'Глобальный перехват выбранной пары стрелок': 'Capture the selected arrow pair globally',
+  '← / →: влево — назад, вправо — вперёд': '← / →: left = previous, right = next',
+  '↑ / ↓: вверх — назад, вниз — вперёд': '↑ / ↓: up = previous, down = next',
+  'Выбранные стрелки заняты другим приложением': 'The selected arrow keys are used by another application',
+  'Не удалось изменить клавиши кликера': 'Could not change clicker keys',
   'Запросы доступа': 'Access requests',
   'Общая ссылка: выберите права': 'General link: choose permissions',
   'Презентация для гостя': 'Guest presentation',
@@ -124,7 +131,6 @@ export const EN: Record<string, string> = {
   "Для презентаций с заданным временем.": "For presentations with an assigned duration.",
   "Листание эфира, когда окно оператора неактивно.": "Control program slides while the operator window is inactive.",
   "Глобальный перехват Page Up / Page Down": "Global Page Up / Page Down capture",
-  "Глобальный перехват стрелок влево / вправо": "Global left / right arrow capture",
   "Выберите MIDI-входы.": "Select MIDI inputs.",
   "Ожидайте включения кликера": "Waiting for the clicker to be enabled",
   "Сбросить ссылку": "Reset link",
@@ -773,9 +779,7 @@ export const EN: Record<string, string> = {
 
   // ── Настройки → Кликер ──
   '🌐 Глобально': '🌐 Global',
-  '⬅➡ Стрелки': '⬅➡ Arrows',
   'Глобальный кликер не включился: PgUp/PgDn заняты другим приложением': 'Global clicker didn’t turn on: PgUp/PgDn are taken by another app',
-  'Стрелки не захватились: ←/→ заняты другим приложением': 'Arrow keys weren’t captured: ←/→ are taken by another app',
 
   // ── Настройки → Звук ──
   'Эфир (MAIN)': 'Program (MAIN)',

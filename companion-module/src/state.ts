@@ -41,6 +41,8 @@ export interface CueDeckState {
 	program: {
 		name: string | null
 		kind: string | null
+		slideLabel?: string | null
+		sourceTotal?: number | null
 		slide: number | null
 		total: number | null
 		remaining: number | null
@@ -60,6 +62,8 @@ export interface CueDeckState {
 	preview: {
 		name: string | null
 		kind: string | null
+		slideLabel?: string | null
+		sourceTotal?: number | null
 		slide: number | null
 		total: number | null
 		playlistIndex: number | null
@@ -237,8 +241,8 @@ export function variableValues(s: CueDeckState | null): Record<string, VarValue>
 		timer_duration: s.timer.durationText,
 		timer_remaining_s: Math.trunc(s.timer.remainingMs / 1000),
 		slide: s.program.text ?? '',
-		slide_number: num(s.program.slide),
-		slide_total: num(s.program.total),
+		slide_number: s.program.slideLabel ?? num(s.program.slide),
+		slide_total: num(s.program.sourceTotal ?? s.program.total),
 		slides_left: num(s.program.remaining),
 		program: shortName(s.program.name),
 		program_index: num(s.program.playlistIndex),

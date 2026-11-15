@@ -75,6 +75,7 @@ import {
   getTimerLoop,
   getClickerGlobal,
   getClickerGlobalArrows,
+  getClickerArrowAxis,
   getSpeakerMsgPresets,
   getTimerPresets,
   getTimerAdjustments,
@@ -602,6 +603,7 @@ app.whenReady().then(async () => {
       const res = applyClickerShortcuts(getClickerGlobal(), getClickerGlobalArrows())
       return {
         clickerGlobal: res.global,
+        clickerArrowAxis: getClickerArrowAxis(),
         // Keep the stored arrows intent visible even while global mode is off.
         clickerGlobalArrows: res.global ? res.arrows : getClickerGlobalArrows(),
       }

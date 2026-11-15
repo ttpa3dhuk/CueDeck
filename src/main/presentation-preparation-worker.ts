@@ -161,6 +161,7 @@ function resultOf(value: {
   totalSlides: number
   slideMedia: PreparationWorkerResult['slideMedia']
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('../shared/slide-numbering').SlideNumbering
   pageNotes: Record<number, string>
   fonts: string[]
 }): PreparationWorkerResult {
@@ -169,6 +170,7 @@ function resultOf(value: {
     totalSlides: value.totalSlides,
     slideMedia: value.slideMedia,
     slideTransitions: value.slideTransitions ?? {},
+    slideNumbering: value.slideNumbering,
     pageNotes: value.pageNotes,
     fonts: value.fonts,
   }

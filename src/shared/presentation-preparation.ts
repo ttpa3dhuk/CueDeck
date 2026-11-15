@@ -6,13 +6,13 @@
 import type { SlideMedia } from './types.js'
 
 /** Версия OOXML-манифеста (pptx-media). Формат уже используется проектами. */
-export const PPTX_MANIFEST_VERSION = 10
+export const PPTX_MANIFEST_VERSION = 11
 
 /** Папка versioned-кэша внутри userData/pptx-cache. */
 export const PREPARED_CACHE_FOLDER = 'prepared'
 /** Файл метаданных внутри одного versioned-root. */
 export const PREPARED_METADATA_FILE = 'prepared.json'
-export const PREPARED_METADATA_VERSION = 1
+export const PREPARED_METADATA_VERSION = 2
 /** Префикс имени versioned-root: v-<generation>. */
 export const PREPARED_VERSION_PREFIX = 'v-'
 
@@ -55,6 +55,7 @@ export interface PreparedPresentation {
   totalSlides: number
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('./slide-numbering').SlideNumbering
   pageNotes: Record<number, string>
   fonts: string[]
   pdfPath: string
@@ -72,6 +73,7 @@ export interface PreparedCacheMetadata {
   fonts: string[]
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('./slide-numbering').SlideNumbering
   pageNotes: Record<number, string>
   /** Для pptx в root есть <sha>.media.json версии 7. */
   hasManifest: boolean
@@ -116,6 +118,7 @@ export interface PreparationWorkerResult {
   totalSlides: number
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('./slide-numbering').SlideNumbering
   pageNotes: Record<number, string>
   fonts: string[]
 }

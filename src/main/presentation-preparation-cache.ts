@@ -42,6 +42,7 @@ export interface PublishInput {
   totalSlides: number
   slideMedia: PreparedPresentation['slideMedia']
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('../shared/slide-numbering').SlideNumbering
   pageNotes: Record<number, string>
   fonts: string[]
   hasManifest: boolean
@@ -242,6 +243,7 @@ export class PresentationCache {
       totalSlides: meta.totalSlides,
       slideMedia: meta.slideMedia,
       slideTransitions: meta.slideTransitions ?? {},
+      slideNumbering: meta.slideNumbering,
       pageNotes: meta.pageNotes,
       fonts: meta.fonts,
       pdfPath,
@@ -336,6 +338,7 @@ export class PresentationCache {
       fonts: input.fonts,
       slideMedia: input.slideMedia,
       slideTransitions: input.slideTransitions ?? {},
+      slideNumbering: input.slideNumbering,
       pageNotes: input.pageNotes,
       hasManifest: input.hasManifest,
       createdAt: Date.now(),

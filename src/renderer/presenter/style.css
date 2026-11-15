@@ -1687,8 +1687,10 @@ body[data-role="operator"] [data-frame-player]:focus-within {
 }
 
 .bottombar {
+  position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  column-gap: 12px;
   align-items: center;
   padding: 0 16px;
   background: var(--panel);
@@ -1710,23 +1712,30 @@ body[data-role="operator"] [data-frame-player]:focus-within {
   white-space: nowrap;
 }
 .bottombar-right {
-  grid-column: 4;
+  grid-column: 3;
   justify-self: end;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   gap: 6px;
 }
 .bottombar button { white-space: nowrap; }
+.bottombar-right > button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bottombar-right > .icon-btn { flex: none; }
 .program-nav { grid-column: 2; justify-self: center; min-width: 0; display: flex; align-items: center; gap: 10px; }
 .program-nav button { width: 48px; height: 38px; padding: 0; font-size: 23px; }
 .program-nav-count { min-width: 105px; display: flex; flex-direction: column; text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .program-nav-count small { font-size: 11px; color: var(--muted); }
-.project-transfer { grid-column: 3; max-width: 260px; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; }
+.project-transfer { position: absolute; bottom: calc(100% + 8px); left: 16px; max-width: 260px; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
 .project-transfer span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-transfer progress { width: 90px; flex: 0 0 90px; height: 6px; accent-color: var(--accent); }
 .project-transfer[data-phase="error"] { color: var(--danger); }
 .project-transfer[data-phase="done"] { color: var(--timer-green); }
 /* Нижняя панель — одни значки (просьба Азата 2026-09-24); подпись — в title. */
 .bottombar .icon-btn { min-width: 34px; padding: 4px 8px; font-size: 16px; line-height: 1; text-align: center; }
+.bottombar .clicker-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 36px; padding: 5px; }
+.clicker-pause-mark { position: absolute; right: 2px; bottom: 2px; font-size: 10px; line-height: 1; background: var(--panel); border-radius: 2px; }
+#mobile-clicker-pause[aria-pressed="false"] .clicker-pause-mark { display: none; }
 
 .banner {
   position: fixed;

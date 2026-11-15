@@ -76,7 +76,17 @@ export class MobileClickerService {
       catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error as Error) }
     })
   }
-  async status(): Promise<MobileClickerStatus> { return { ...await this.call<MobileClickerStatus>('status'), cloudpub: { ...this.cloudpub } } }
+  async status(): Promise<MobileClickerStatus> {
+    const stopped: MobileClickerStatus = { enabled: false, urls: [], qr: null, error: null,
+      cloudpub: { state: 'idle', message: null } }
+    // The operator can poll while the quit guard waits for the tunnel to stop.
+    // Do not restart a worker or report a shutdown poll as an application error.
+    if (this.closed) return stopped
+    try {
+      const status = await this.call<MobileClickerStatus>('status')
+      return this.closed ? stopped : { ...status, cloudpub: { ...this.cloudpub } }
+    } catch (error) { if (this.closed) return stopped; throw error }
+  }
   qr(index: number): Promise<string | null> { return this.call('qr', index) }
   private async control<T>(method: string, ...args: unknown[]): Promise<T> {
     this.controls++; this.epoch++

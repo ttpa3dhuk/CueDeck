@@ -12,7 +12,7 @@ vi.mock('electron', () => ({
   BrowserWindow: class {}, dialog: { showMessageBox: runtime.dialog },
   globalShortcut: { unregisterAll: vi.fn() },
 }))
-vi.mock('../src/main/ipc', () => ({ flushPendingWrites: runtime.flush, saveProject: vi.fn(async () => ({ ok: true })) }))
+vi.mock('../src/main/ipc', () => ({ flushPendingWrites: runtime.flush, saveProject: vi.fn(async () => ({ ok: true })), stopMobileClicker: vi.fn(async () => {}) }))
 vi.mock('../src/main/diag', () => ({ markCleanExit: runtime.clean }))
 vi.mock('../src/main/session-lifecycle', () => ({ finishSessionCleanly: runtime.sessionClean }))
 vi.mock('../src/main/remote/companion-push', () => ({ companionGoodbye: runtime.goodbye }))

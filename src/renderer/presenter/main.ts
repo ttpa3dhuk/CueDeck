@@ -1,3 +1,4 @@
+import { slidePosition, pageForSlideLabel } from '../../shared/slide-numbering'
 import { rejectAudioOnlyVideo } from '../shared/video-content'
 import { SlideGifs } from '../shared/slide-gifs'
 import { configureProgramMirror, loadProgramVideo, releaseProgramVideo, programVideoCanvas, programVideoReady, programClockOwner } from '../shared/program-mirror'
@@ -1054,7 +1055,7 @@ function updatePreviewUI(state: AppState): void {
         ? t('видео')
         : p.kind === 'live'
           ? t('захват')
-          : `${p.currentSlide} / ${p.totalSlides || '—'}`
+          : `${slidePosition(p).label} / ${slidePosition(p).total || '—'}`
       : '— / —'
   }
   const isVideo = p.kind === 'video'
@@ -2271,11 +2272,12 @@ function applyState(state: AppState): void {
   }
   if (isOperator) {
     const list = state.listIndex >= 0 ? state.playlist.find(e => e.id === state.currentPlaylistId) : undefined
-    const total = list?.items?.length ?? state.totalSlides
+    const position = slidePosition(state)
+    const total = list?.items?.length ?? position.total
     const current = list ? state.listPos + 1 : state.currentSlide
     const canNavigate = Boolean(state.pdfPath) && (Boolean(list) || state.fileKind === 'pdf' || state.fileKind === 'pptx')
-    $('program-nav-current').textContent = canNavigate && total > 0 ? `${current} / ${total}` : '— / —'
-    $('program-nav-remaining').textContent = canNavigate && total > 0 ? t('(осталось {n})', { n: Math.max(0, total - current) }) : ''
+    $('program-nav-current').textContent = canNavigate && total > 0 ? `${list ? current : position.label} / ${total}` : '— / —'
+    $('program-nav-remaining').textContent = canNavigate && total > 0 ? t('(осталось {n})', { n: (list ? Math.max(0, total - current) : position.remaining) }) : ''
     $<HTMLButtonElement>('program-prev').disabled = !canNavigate || (!list && current <= 1)
     // Keep Next available on a last slide: it may start an embedded clip or
     // advance the playlist when the operator has enabled auto-advance.
@@ -2305,8 +2307,8 @@ function applyState(state: AppState): void {
       updateVideoHeader(state)
     } else {
       slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
-      slideCounter.textContent = t('Слайд {n} из {total}', { n: state.currentSlide, total: state.totalSlides || '—' })
-      const remaining = Math.max(0, (state.totalSlides || 0) - state.currentSlide)
+      slideCounter.textContent = t('Слайд {n} из {total}', { n: slidePosition(state).label, total: slidePosition(state).total || '—' })
+      const remaining = slidePosition(state).remaining
       slideRemaining.textContent = state.totalSlides > 0 ? t('(осталось {n})', { n: remaining }) : ''
     }
   } else {
@@ -2349,6 +2351,7 @@ function applyState(state: AppState): void {
     reflectToggle('clicker-global-toggle', state.clickerGlobal)
     renderGlobalClicker(state.clickerGlobal)
     reflectToggle('clicker-arrows-toggle', state.clickerGlobalArrows)
+    $<HTMLSelectElement>('clicker-arrow-axis').value = state.clickerArrowAxis
     document.querySelectorAll<HTMLButtonElement>('button.adjust').forEach((btn, i) => {
       const delta = state.timerAdjustments[i]
       btn.dataset.delta = String(delta)
@@ -3208,9 +3211,11 @@ function setupKeyboard(): void {
     // переназначенной карте локальных горячих клавиш.
     if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey &&
         getState().clickerGlobal && getState().clickerGlobalArrows) {
-      if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
+      const next = getState().clickerArrowAxis === 'vertical' ? 'ArrowDown' : 'ArrowRight'
+      const prev = getState().clickerArrowAxis === 'vertical' ? 'ArrowUp' : 'ArrowLeft'
+      if (e.code === next || e.code === prev) {
         e.preventDefault()
-        if (e.code === 'ArrowRight') window.api.clicker.next()
+        if (e.code === next) window.api.clicker.next()
         else window.api.clicker.prev()
         return
       }
@@ -3344,14 +3349,13 @@ function toggleTimer(): void {
   else window.api.timer.start()
 }
 
-// Переход к слайду по номеру (1.4): Enter — перейти, Esc — сброс. Main клампит
-// номер к [1, totalSlides], так что мусор безопасен.
+// Resolve the displayed source slide/step to an internal PDF page.
 function wireGotoInput(input: HTMLInputElement, goto: (slide: number) => void): void {
   input.addEventListener('keydown', (e) => {
     e.stopPropagation()
     if (e.key === 'Enter') {
-      const n = Math.floor(Number(input.value))
-      if (Number.isFinite(n) && n >= 1) goto(n)
+      const n = pageForSlideLabel(input.value, getState().preview)
+      if (n !== null) goto(n)
       input.value = ''
       input.blur()
     } else if (e.key === 'Escape') {
@@ -3586,11 +3590,25 @@ function setupOperatorControls(): void {
     const wanted = clickerArrowsToggle.checked
     const actual = await window.api.clicker.setGlobalArrows(wanted)
     if (wanted && !actual && getState().clickerGlobal) {
-      showBanner(t('Стрелки не захватились: ←/→ заняты другим приложением'), 8000)
+      showBanner(t('Выбранные стрелки заняты другим приложением'), 8000)
     }
   })
 
   // Timer scale (speaker overlay size)
+  const clickerArrowAxis = $<HTMLSelectElement>('clicker-arrow-axis')
+  clickerArrowAxis.addEventListener('change', async () => {
+    const axis = clickerArrowAxis.value === 'vertical' ? 'vertical' : 'horizontal'
+    const wanted = getState().clickerGlobal && getState().clickerGlobalArrows
+    clickerArrowAxis.disabled = true
+    try {
+      const actual = await window.api.clicker.setArrowAxis(axis)
+      if (wanted && !actual) showBanner(t('Выбранные стрелки заняты другим приложением'), 8000)
+    } catch {
+      clickerArrowAxis.value = getState().clickerArrowAxis
+      showBanner(t('Не удалось изменить клавиши кликера'))
+    } finally { clickerArrowAxis.disabled = false }
+  })
+
   $<HTMLInputElement>('timer-scale-input').addEventListener('input', (event) => {
     void window.api.timer.setScale(Number((event.target as HTMLInputElement).value) / 100)
   })
@@ -4901,7 +4919,9 @@ function showSettingsSection(name: SettingsSection): void {
 
 function renderMobileClickerIndicator(enabled: boolean): void {
   const pause = $('mobile-clicker-pause')
-  pause.textContent = enabled ? t('Онлайн кликер: включён') : t('Онлайн кликер: пауза')
+  const label = enabled ? t('Онлайн кликер: включён') : t('Онлайн кликер: пауза')
+  pause.title = label
+  pause.setAttribute('aria-label', label)
   pause.setAttribute('aria-pressed', String(!enabled))
   $('program-prev').classList.toggle('mobile-clicker-active', enabled)
   $('program-next').classList.toggle('mobile-clicker-active', enabled)
@@ -4909,7 +4929,10 @@ function renderMobileClickerIndicator(enabled: boolean): void {
 
 function renderGlobalClicker(enabled: boolean): void {
   const button = $('global-clicker-toggle')
-  button.textContent = !enabled && button.classList.contains('global-clicker-error') ? t('Глобальный кликер: ошибка') : enabled ? t('Глобальный кликер: вкл') : t('Глобальный кликер: выкл')
+  const failed = !enabled && button.classList.contains('global-clicker-error')
+  const label = failed ? t('Глобальный кликер: ошибка') : enabled ? t('Глобальный кликер: вкл') : t('Глобальный кликер: выкл')
+  button.title = failed ? t('Не удалось включить глобальный кликер. Повторите попытку') : label
+  button.setAttribute('aria-label', label)
   button.setAttribute('aria-pressed', String(enabled))
 }
 function signalGlobalClickerError(): void {

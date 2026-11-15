@@ -150,6 +150,7 @@ export interface PresenterApi {
     setGlobal(value: boolean): Promise<boolean>
     /** Also grab ←/→ globally (Spotlight-style clickers). Resolves to the applied value. */
     setGlobalArrows(value: boolean): Promise<boolean>
+    setArrowAxis(value: 'horizontal' | 'vertical'): Promise<boolean>
   }
   /**
    * Off-air staging deck (operator only). Loading a file or selecting a playlist

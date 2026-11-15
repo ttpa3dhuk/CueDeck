@@ -87,6 +87,7 @@ interface PersistedShape {
   askLayoutOnStartup: boolean
   clickerGlobal: boolean
   clickerGlobalArrows: boolean
+  clickerArrowAxis: 'horizontal' | 'vertical'
   speakerMsgPresets: string[]
   timerAdjustments: number[]
   timerPresets: number[]
@@ -162,6 +163,7 @@ const STORE_DEFAULTS: PersistedShape = {
   askLayoutOnStartup: true,
   clickerGlobal: false,
   clickerGlobalArrows: false,
+  clickerArrowAxis: 'horizontal',
   speakerMsgPresets: [...DEFAULT_SPEAKER_MSG_PRESETS],
   timerAdjustments: [...DEFAULT_TIMER_ADJUSTMENTS],
     timerPresets: [...DEFAULT_TIMER_PRESETS],
@@ -552,6 +554,11 @@ export function getClickerGlobal(): boolean {
 export function setClickerGlobal(value: boolean): void {
   store().set('clickerGlobal', value)
 }
+
+export function getClickerArrowAxis(): 'horizontal' | 'vertical' {
+  return store().get('clickerArrowAxis') === 'vertical' ? 'vertical' : 'horizontal'
+}
+export function setClickerArrowAxis(value: 'horizontal' | 'vertical'): void { store().set('clickerArrowAxis', value) }
 
 export function getClickerGlobalArrows(): boolean {
   return Boolean(store().get('clickerGlobalArrows'))

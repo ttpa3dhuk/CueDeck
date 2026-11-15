@@ -9,4 +9,4 @@ export interface MobileClickerStatus {
   grants?: Array<Omit<ClickerGrant, 'key'>>; clients?: ClickerClient[]
 }
 export interface ClickerInvitation { url: string; qr: string }
-export interface MobileClickerSnapshot { presentationId?: string | null; current: number; total: number; remaining: number; canNavigate: boolean; timer: { text: string; color: string } }
+export interface MobileClickerSnapshot { presentationId?: string | null; current: number; label?: string; total: number; remaining: number; canNavigate: boolean; timer: { text: string; color: string } }
