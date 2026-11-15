@@ -41,9 +41,9 @@
 
 Модуль CueDeck добавляет кнопки в Presets. Их можно перетаскивать на свою раскладку.
 
-1. [Скачайте модуль CueDeck 0.4.1](https://github.com/ttpa3dhuk/CueDeck/releases/download/v0.13.0/cuedeck-cuedeck-0.4.1.tgz). Распаковывать файл не нужно.
+1. [Скачайте модуль CueDeck 0.4.2](https://github.com/ttpa3dhuk/CueDeck/releases/download/v0.15.0/cuedeck-cuedeck-0.4.2.tgz). Распаковывать файл не нужно.
 2. В Companion откройте Modules → Import module package и выберите скачанный `.tgz`.
-3. В Connections нажмите Add Connection и добавьте CueDeck. Выберите Module Version 0.4.1.
+3. В Connections нажмите Add Connection и добавьте CueDeck. Выберите Module Version 0.4.2.
 4. Укажите адрес CueDeck `127.0.0.1` и HTTP-порт `9420`. В CueDeck должно быть включено внешнее управление.
 5. Откройте Presets → CueDeck и перетащите нужные кнопки на страницу.
 
