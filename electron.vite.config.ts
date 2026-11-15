@@ -15,7 +15,7 @@ export default defineConfig({
   preload: {
     build: {
       rollupOptions: {
-        input: resolve(__dirname, 'src/preload/index.ts'),
+        input: { index: resolve(__dirname, 'src/preload/index.ts'), 'pdf-owner': resolve(__dirname, 'src/preload/pdf-owner.ts') },
         output: {
           format: 'cjs',
           entryFileNames: '[name].cjs',
@@ -29,6 +29,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           presenter: resolve(__dirname, 'src/renderer/presenter/index.html'),
+          'pdf-owner': resolve(__dirname, 'src/renderer/pdf-owner/index.html'),
           audience: resolve(__dirname, 'src/renderer/audience/index.html'),
           'gpu-view': resolve(__dirname, 'src/renderer/gpu-view/index.html'),
           stream: resolve(__dirname, 'src/renderer/stream/index.html'),

@@ -1,3 +1,6 @@
+import { readDeckFile } from './pdf-source.js'
+import { sharedPdfEnabled, sharedPdfFile } from './shared-pdf.js'
+import type { DeckFileData } from '../shared/pdf-source.js'
 import { hasLastSession, listSessionBackups } from './session-files.js'
 import { timerFont } from '../shared/timer-font.js'
 import { timerAdjustments } from '../shared/timer-controls.js'
@@ -123,7 +126,7 @@ import {
   setUiLang,
 } from './display-mapping.js'
 import { indexFolder, pickBestCandidate } from './project-files.js'
-import { countPdfPages } from './pdf-pages.js'
+import { inspectPdfFile } from './pdf-pages.js'
 import { cachedPdfPathFor, findSoffice, LibreOfficeMissingError, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
 import { beginProjectTransfer, endProjectTransfer, isProjectTransferRunning, transferProject } from './project-transfer.js'
 import { runPptxWork } from './pptx-work.js'
@@ -277,10 +280,9 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
   let pptxNotes: Record<number, string> = {}
 
   if (kind === 'pdf') {
-    // Single read: compute SHA1 and count pages from the same buffer.
-    const buf = await readFile(filePath)
-    sha1 = sha1FromBuffer(buf)
-    totalSlides = countPdfPages(buf)
+    const inspected = await inspectPdfFile(filePath)
+    sha1 = inspected.sha1
+    totalSlides = inspected.totalSlides
   } else if (kind === 'pptx') {
     const prepared = await preparationUi.prepare(filePath, {
       ...opts, priority: 'foreground',
@@ -963,19 +965,16 @@ export function registerIpcHandlers(): void {
     return openFile(filePath)
   })
 
-  ipcMain.handle('pdf:read', async (): Promise<{ bytes: Uint8Array; mime: string } | null> => {
+  ipcMain.handle('pdf:read', async (): Promise<DeckFileData | null> => {
     const { pdfPath, fileKind, pdfSha1 } = store.get()
     if (!pdfPath || fileKind === 'live') return null
     try {
       // For PPTX, read the cached converted PDF instead of the source file
       const readPath =
         fileKind === 'pptx' && pdfSha1 ? cachedPdfPathFor(pdfSha1) : pdfPath
-      const buf = await readFile(readPath)
       const mime = fileKind === 'pptx' ? 'application/pdf' : mimeOf(pdfPath)
-      return {
-        bytes: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength),
-        mime,
-      }
+      if (sharedPdfEnabled && mime === 'application/pdf' && pdfSha1) return sharedPdfFile(readPath, pdfSha1)
+      return readDeckFile(readPath, mime, `cuedeck-media://document/program?v=${encodeURIComponent(pdfSha1 ?? '')}`)
     } catch {
       return null
     }
@@ -1101,14 +1100,14 @@ export function registerIpcHandlers(): void {
     return loadPreview(filePath)
   })
 
-  ipcMain.handle('preview:read', async (): Promise<{ bytes: Uint8Array; mime: string } | null> => {
+  ipcMain.handle('preview:read', async (): Promise<DeckFileData | null> => {
     const { path, kind, sha1 } = store.get().preview
     if (!path || kind === 'live') return null
     try {
       const readPath = kind === 'pptx' && sha1 ? cachedPdfPathFor(sha1) : path
-      const buf = await readFile(readPath)
       const mime = kind === 'pptx' ? 'application/pdf' : mimeOf(path)
-      return { bytes: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength), mime }
+      if (sharedPdfEnabled && mime === 'application/pdf' && sha1) return sharedPdfFile(readPath, sha1)
+      return readDeckFile(readPath, mime, `cuedeck-media://document/preview?v=${encodeURIComponent(sha1 ?? '')}`)
     } catch {
       return null
     }
@@ -1737,7 +1736,8 @@ export function registerIpcHandlers(): void {
 
   // Мониторы выходов под эфиром (живые снимки окон суфлёра/зала)
   ipcMain.handle('monitor:audience-size', (event) => {
-    if (event.sender !== getOperatorWindow()?.webContents) return { width: 1920, height: 1080 }
+    const operator = getOperatorWindow()
+    if (!operator || operator.isDestroyed() || event.sender !== operator.webContents) return { width: 1920, height: 1080 }
     const win = getActiveWindows().get('audience') ?? ghostWindow('audience')
     if (win && !win.isDestroyed()) {
       const [width, height] = win.getContentSize()

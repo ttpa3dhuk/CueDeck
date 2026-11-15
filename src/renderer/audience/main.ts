@@ -7,7 +7,7 @@ import { TakeFade } from '../shared/take-fade'
 import { SlidePaintTracker, overlayFrameReady } from '../shared/slide-paint'
 import { initBus, getState, subscribe } from '../shared/bus'
 import { AudienceTimerView } from '../shared/audience-timer-view'
-import { loadDocument, renderPageTo, prerender } from '../shared/pdf-loader'
+import { loadDocument, clearDocument, renderPageTo, prerender } from '../shared/pdf-frame-client'
 import {
   applySinkId,
   crossfadeToImage,
@@ -249,6 +249,7 @@ function updateMediaOverlay(state: AppState): void {
 }
 
 async function loadFile(): Promise<void> {
+  clearDocument()
   // Внутри списка с наплывом уходящий кадр ещё нужен нижнему слою.
   disposeSlideImage(listFadeMs(getState()) + 500)
   docLoaded = false
@@ -310,11 +311,11 @@ async function loadFile(): Promise<void> {
   slideImage.classList.add('hidden')
   slideImage.removeAttribute('src')
   canvas.classList.remove('hidden')
-  await loadDocument(data.bytes)
+  await loadDocument(data.pdf ?? data.bytes)
   if (stale()) return
   docLoaded = true
   await renderSlide()
-  done(`${state.fileKind} открыт (${Math.round(data.bytes.byteLength / 1024)} КБ), первый слайд отрисован`) // i18n-ok: журнал
+  done(`${state.fileKind} открыт (${Math.round((data.pdf?.size ?? data.bytes.byteLength) / 1024)} КБ), первый слайд отрисован`) // i18n-ok: журнал
 }
 
 async function renderSlide(): Promise<void> {
@@ -483,6 +484,10 @@ async function bootstrap(): Promise<void> {
     if (s.fileKind === 'pptx') updateMediaOverlay(s)
   }, 500)
 
+  window.addEventListener('cuedeck-pdf-recovered', () => {
+    const kind = getState().fileKind
+    if (kind === 'pdf' || kind === 'pptx') void loadFile().catch(error => window.api.diag.log('error', 'PDF recovery failed', String(error)))
+  })
   window.addEventListener('resize', () => {
     const kind = getState().fileKind
     if (kind === 'image' || kind === 'video' || kind === null) return

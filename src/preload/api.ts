@@ -1,3 +1,4 @@
+import type { DeckFileData } from '../shared/pdf-source.js'
 // Canonical state types live in src/shared/types.ts (shared with the main
 // process). Renderers keep importing them from this module.
 import type {
@@ -97,6 +98,7 @@ export type {
 export type Unsubscribe = () => void
 
 export interface PresenterApi {
+  pdfFrames: import('../shared/pdf-frames').PdfFramesApi
   programOverlay: {
     set(config: import('../shared/program-overlay').ProgramOverlayConfig): Promise<void>
     chooseImage(): Promise<string | null>
@@ -133,7 +135,7 @@ export interface PresenterApi {
   pdf: {
     openDialog(): Promise<OpenPdfResult>
     openPath(path: string): Promise<OpenPdfResult>
-    read(): Promise<{ bytes: Uint8Array; mime: string } | null>
+    read(): Promise<DeckFileData | null>
     reportTotal(total: number): Promise<void>
   }
   nav: {
@@ -157,7 +159,7 @@ export interface PresenterApi {
     toggleSourceMuted(identity: FrameStepIdentity): Promise<void>
     openDialog(): Promise<OpenPdfResult>
     openPath(path: string): Promise<OpenPdfResult>
-    read(): Promise<{ bytes: Uint8Array; mime: string } | null>
+    read(): Promise<DeckFileData | null>
     reportTotal(total: number): Promise<void>
     goto(slide: number): Promise<void>
     next(): Promise<void>
@@ -334,6 +336,8 @@ export interface PresenterApi {
     >
   }
   syphonPrompter: PresenterApi['syphon']
+  spoutGraphicsHelp(): Promise<{ exePath: string; options: Array<{ preference: 1 | 2; name: string | null; powershell: string }> }>
+  openSpoutGraphicsSettings(): Promise<void>
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */
     pathFor(file: File): string

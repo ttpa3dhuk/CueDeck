@@ -4,6 +4,12 @@ import type { StreamSettings } from '../shared/types'
 
 // Роль окна — метка строк журнала, которые шлёт этот рендерер.
 const ROLE = new URLSearchParams(location.search).get('role') ?? 'unknown'
+ipcRenderer.on('pdf-frames:port', (event, metadata) => {
+  window.postMessage({ type: 'cuedeck-pdf-port', metadata }, '*', event.ports)
+})
+ipcRenderer.on('pdf-frames:reset', (_event, metadata) => {
+  window.postMessage({ type: 'cuedeck-pdf-reset', metadata }, '*')
+})
 
 ipcRenderer.on('program-mirror:port', (event, metadata) => {
   window.postMessage({ type: 'cuedeck-program-port', metadata }, '*', event.ports)
@@ -40,6 +46,11 @@ if (gpuApi) gpuApi.setSharedTextureReceiver(async ({ importedSharedTexture }, me
 })
 
 const api: PresenterApi = {
+  pdfFrames: {
+    connect: (requestId, clientId) => ipcRenderer.invoke('pdf-frames:connect', requestId, clientId),
+    describe: (id, page) => ipcRenderer.invoke('pdf-frames:describe', id, page),
+    stats: () => ipcRenderer.invoke('pdf-frames:stats'),
+  },
   gpuMirror: { ready: result => ipcRenderer.send('gpu-view:ready', result) },
   programMirror: {
     available: () => ipcRenderer.invoke('program-mirror:available'),
@@ -240,6 +251,8 @@ const api: PresenterApi = {
     status: () => ipcRenderer.invoke('syphon:status'),
     configure: (settings) => ipcRenderer.invoke('syphon:configure', settings),
   },
+  spoutGraphicsHelp: () => ipcRenderer.invoke('spout:graphics-help'),
+  openSpoutGraphicsSettings: () => ipcRenderer.invoke('spout:open-graphics-settings'),
   syphonPrompter: {
     status: () => ipcRenderer.invoke('syphon-prompter:status'),
     configure: (settings) => ipcRenderer.invoke('syphon-prompter:configure', settings),

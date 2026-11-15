@@ -7,6 +7,7 @@ import { finishSessionCleanly } from './session-lifecycle.js'
 import { t } from '../shared/i18n.js'
 import { isProjectTransferRunning } from './project-transfer.js'
 import { stopPresentationPreparations } from './presentation-preparation.js'
+import { stopSharedPdfFrames } from './shared-pdf.js'
 
 /**
  * Подтверждение при закрытии.
@@ -97,6 +98,7 @@ export async function requestQuit(opts: { relaunch?: boolean } = {}): Promise<vo
   await flushPendingWrites()
   finishSessionCleanly()
   markCleanExit()
+  stopSharedPdfFrames()
   if (relaunch) app.relaunch()
   app.exit(0)
 }

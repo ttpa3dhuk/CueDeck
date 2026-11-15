@@ -12,7 +12,7 @@ import { FADE_MAX_MS, sanitizeTakeFadeMs } from '../../shared/take-transition'
 import { nextPlaylistFolderName, type PlaylistInsertPosition } from '../../shared/playlist-folders'
 import { initBus, getState, subscribe } from '../shared/bus'
 import { PreparationProgress } from '../shared/preparation-progress'
-import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
+import { loadDocument, clearDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-frame-client'
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
 import {
   applySinkId,
@@ -572,6 +572,7 @@ function applyPreviewLive(state: AppState): void {
 }
 
 async function loadCurrentFile(): Promise<void> {
+  clearDocument()
   const generation = ++programLoadGeneration
   const state = getState()
   const stale = (): boolean => generation !== programLoadGeneration || getState().pdfPath !== state.pdfPath
@@ -648,7 +649,7 @@ async function loadCurrentFile(): Promise<void> {
   currentCanvas.classList.remove('hidden')
   nextCanvas.classList.remove('hidden')
   nextEmpty.classList.add('hidden')
-  await loadDocument(data.bytes)
+  await loadDocument(data.pdf ?? data.bytes)
   if (stale()) return
   docLoaded = true
   await window.api.pdf.reportTotal(totalPages())
@@ -685,7 +686,10 @@ async function renderCurrent(): Promise<void> {
         if (getState().pdfPath === path && getState().currentSlide === slide)
           nextGifs.update(state.fileKind, state.slideMedia, slide + 1, state.pdfSha1, true)
       })
-      .then(() => prerender(slide + 2, currentWidth)).catch(() => undefined)
+      .then(() => {
+        if (getState().pdfPath === path && getState().currentSlide === slide)
+          return prerender(slide + 2, currentWidth)
+      }).catch(() => undefined)
   } else {
     nextGifs.clear()
     clearCanvas(nextCanvas)
@@ -943,6 +947,7 @@ function unloadPreviewVideo(): void {
 }
 
 async function loadPreviewFile(): Promise<void> {
+  previewLoader?.clearDocument()
   if (!previewLoader || !previewVideo || !previewCanvas || !previewImage || !previewPlaceholder) return
   const p = getState().preview
   disposePreviewImage()
@@ -1003,7 +1008,7 @@ async function loadPreviewFile(): Promise<void> {
   previewImage.classList.add('hidden')
   previewImage.removeAttribute('src')
   previewCanvas.classList.remove('hidden')
-  await previewLoader.loadDocument(data.bytes)
+  await previewLoader.loadDocument(data.pdf ?? data.bytes)
   previewDocLoaded = true
   await window.api.preview.reportTotal(previewLoader.totalPages())
   await renderPreview()
@@ -6234,12 +6239,64 @@ function renderSyphonStatus(syphon: SyphonStatus, prompter = false): void {
   }
 }
 
+async function showSpoutGraphicsHelp(): Promise<void> {
+  if (window.api.platform !== 'win32') return
+  const info = await window.api.spoutGraphicsHelp()
+  const modal = $('spout-graphics-modal')
+  const path = $<HTMLInputElement>('spout-exe-path')
+  path.value = info.exePath
+  path.onclick = () => path.select()
+  const gpuChoice = $<HTMLSelectElement>('spout-gpu-choice')
+  gpuChoice.replaceChildren(...info.options.map(option => {
+    const mode = option.preference === 1 ? t('Энергосбережение') : t('Высокая производительность')
+    return new Option(option.name ? `${option.name} — ${mode}` : mode, String(option.preference))
+  }))
+  gpuChoice.value = '2'
+  const updateCommand = (): void => {
+    $('spout-graphics-command').textContent = info.options.find(option => String(option.preference) === gpuChoice.value)!.powershell
+    $('spout-command-copy').textContent = '⧉'
+  }
+  gpuChoice.onchange = updateCommand
+  updateCommand()
+  const close = (): void => {
+    modal.classList.add('hidden')
+    $('spout-graphics-help').focus()
+  }
+  for (const id of ['spout-exe-copy', 'spout-command-copy']) {
+    const button = $(id)
+    button.onclick = () => {
+      const text = id === 'spout-exe-copy' ? path.value : $('spout-graphics-command').textContent ?? ''
+      void navigator.clipboard.writeText(text).then(() => {
+        button.textContent = '✓'
+        window.setTimeout(() => { button.textContent = '⧉' }, 1500)
+      }).catch(() => showBanner(t('Не удалось скопировать текст.'), 5000))
+    }
+  }
+  $('spout-open-graphics').onclick = () => {
+    void window.api.openSpoutGraphicsSettings().catch(() => showBanner(t('Не удалось открыть настройки графики Windows.'), 5000))
+  }
+  $('spout-graphics-close').onclick = close
+  modal.onclick = (event) => { if (event.target === modal) close() }
+  modal.onkeydown = (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close() }
+  }
+  modal.classList.remove('hidden')
+  $('spout-graphics-close').focus()
+}
+
 function wireSyphonSection(syphon: SyphonStatus, prompter = false): void {
   const prefix = prompter ? 'syphon-prompter' : 'syphon'
   const key = prompter ? 'syphonPrompter' : 'syphon'
   const api = window.api[key]
   const render = (status: SyphonStatus): void => renderSyphonStatus(status, prompter)
   render(syphon)
+  if (!prompter) {
+    const help = $('spout-graphics-help')
+    help.classList.toggle('hidden', window.api.platform !== 'win32')
+    help.onclick = () => {
+      void showSpoutGraphicsHelp().catch(() => showBanner(t('Не удалось открыть настройки графики Windows.'), 5000))
+    }
+  }
   const enabled = $<HTMLInputElement>(`${prefix}-enabled`)
   const name = $<HTMLInputElement>(`${prefix}-name`)
   enabled.onchange = () => {
@@ -6784,6 +6841,11 @@ async function bootstrap(): Promise<void> {
   deckSizeObserver.observe(currentCanvas.parentElement!)
   deckSizeObserver.observe(nextCanvas.parentElement!)
 
+  window.addEventListener('cuedeck-pdf-recovered', () => {
+    const state = getState()
+    if (state.fileKind === 'pdf' || state.fileKind === 'pptx') void loadCurrentFile().catch(error => window.api.diag.log('error', 'PDF recovery failed', String(error)))
+    if (isOperator && (state.preview.kind === 'pdf' || state.preview.kind === 'pptx')) void loadPreviewFile().catch(() => undefined)
+  })
   window.addEventListener('resize', () => {
     const kind = getState().fileKind
     if (kind !== 'image' && kind !== 'video' && kind !== null) {
