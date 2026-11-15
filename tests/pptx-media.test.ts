@@ -354,6 +354,21 @@ describe('preparePptxMedia: заметки докладчика (2.23)', () => {
     expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: 350, 5: 0, 6: 0 })
   })
 
+  it('retains source slide and animation labels, including hidden source numbers, in cache', async () => {
+    const deck = await buildDeck(DIR, NOTES_DECK)
+    const expected = { total: 5, pages: ['1', '3', '3.1', '3.2', '4', '5'] }
+    expect((await preparePptxMedia(deck, 'source-numbering')).slideNumbering).toEqual(expected)
+    expect((await preparePptxMedia(deck, 'source-numbering')).slideNumbering).toEqual(expected)
+    const manifestPath = join(dirname(mediaDirFor('source-numbering')), 'source-numbering.media.json')
+    const old = JSON.parse(await readFile(manifestPath, 'utf8'))
+    old.version = 10
+    delete old.slideNumbering
+    await writeFile(manifestPath, JSON.stringify(old))
+    await writeFile(cachedPdfPathFor('source-numbering'), 'existing converted PDF')
+    expect((await preparePptxMedia(deck, 'source-numbering')).slideNumbering).toEqual(expected)
+    expect(await readFile(cachedPdfPathFor('source-numbering'), 'utf8')).toBe('existing converted PDF')
+  })
+
   it('заметки по страницам PDF: абзацы, переносы, сущности; шаги; скрытый слайд пропущен', async () => {
     const deck = await buildDeck(DIR, NOTES_DECK)
     const prepared = await preparePptxMedia(deck, 'sha-notes')

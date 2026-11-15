@@ -1,3 +1,4 @@
+import type { DeckFileData } from '../shared/pdf-source.js'
 // Canonical state types live in src/shared/types.ts (shared with the main
 // process). Renderers keep importing them from this module.
 import type {
@@ -97,12 +98,24 @@ export type {
 export type Unsubscribe = () => void
 
 export interface PresenterApi {
+  pdfFrames: import('../shared/pdf-frames').PdfFramesApi
   programOverlay: {
     set(config: import('../shared/program-overlay').ProgramOverlayConfig): Promise<void>
     chooseImage(): Promise<string | null>
     read(): Promise<{ bytes: Uint8Array; mime: string } | null>
   }
   mobileClicker: {
+    connectCloudpub(): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    chooseCloudpub(): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    configure(online: boolean, url: string): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    createGrant(name: string, ids: string[] | null): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    revokeGrant(id: string): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    updateGrant(id: string, ids: string[] | null): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    blockClient(id: string, blocked: boolean): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    approveClient(id: string, ids: string[] | null): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    setGuestAccess(open: boolean, ids: string[] | null): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    disconnectClient(id: string): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    invitation(id: string): Promise<import('../shared/mobile-clicker').ClickerInvitation>
     resetLink(): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
     status(): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
     qr(index: number): Promise<string | null>
@@ -122,7 +135,7 @@ export interface PresenterApi {
   pdf: {
     openDialog(): Promise<OpenPdfResult>
     openPath(path: string): Promise<OpenPdfResult>
-    read(): Promise<{ bytes: Uint8Array; mime: string } | null>
+    read(): Promise<DeckFileData | null>
     reportTotal(total: number): Promise<void>
   }
   nav: {
@@ -137,6 +150,7 @@ export interface PresenterApi {
     setGlobal(value: boolean): Promise<boolean>
     /** Also grab ←/→ globally (Spotlight-style clickers). Resolves to the applied value. */
     setGlobalArrows(value: boolean): Promise<boolean>
+    setArrowAxis(value: 'horizontal' | 'vertical'): Promise<boolean>
   }
   /**
    * Off-air staging deck (operator only). Loading a file or selecting a playlist
@@ -146,7 +160,7 @@ export interface PresenterApi {
     toggleSourceMuted(identity: FrameStepIdentity): Promise<void>
     openDialog(): Promise<OpenPdfResult>
     openPath(path: string): Promise<OpenPdfResult>
-    read(): Promise<{ bytes: Uint8Array; mime: string } | null>
+    read(): Promise<DeckFileData | null>
     reportTotal(total: number): Promise<void>
     goto(slide: number): Promise<void>
     next(): Promise<void>
@@ -323,6 +337,8 @@ export interface PresenterApi {
     >
   }
   syphonPrompter: PresenterApi['syphon']
+  spoutGraphicsHelp(): Promise<{ exePath: string; options: Array<{ preference: 1 | 2; name: string | null; powershell: string }> }>
+  openSpoutGraphicsSettings(): Promise<void>
   files: {
     /** Filesystem path of a dropped/picked File (webUtils.getPathForFile). */
     pathFor(file: File): string

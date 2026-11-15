@@ -66,7 +66,7 @@ export const GROUP_KEYS: Record<ProfileGroup, readonly (keyof VenueProfileSettin
   timer: ['timerMode', 'timerTickEnabled', 'timerGongEnabled', 'timerLoop'],
   presets: ['timerPresets', 'speakerMsgPresets'],
   take: ['videoTakeMode', 'slideTakeMode', 'autoAdvance'],
-  clicker: ['clickerGlobal', 'clickerGlobalArrows'],
+  clicker: ['clickerGlobal', 'clickerGlobalArrows', 'clickerArrowAxis'],
   remote: ['remote'],
   midi: ['midiInputs'],
 }
@@ -176,6 +176,7 @@ export function sanitizeSettings(raw: unknown): VenueProfileSettings {
     autoAdvance: bool(s.autoAdvance, false),
     clickerGlobal: bool(s.clickerGlobal, false),
     clickerGlobalArrows: bool(s.clickerGlobalArrows, false),
+    clickerArrowAxis: s.clickerArrowAxis === 'vertical' ? 'vertical' : 'horizontal',
     remote: remote(s.remote),
     midiInputs: Array.isArray(s.midiInputs)
       ? [...new Set(s.midiInputs.filter((x): x is string => typeof x === 'string' && x.length > 0))].slice(0, 32)

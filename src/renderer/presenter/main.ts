@@ -1,3 +1,4 @@
+import { slidePosition, pageForSlideLabel } from '../../shared/slide-numbering'
 import { rejectAudioOnlyVideo } from '../shared/video-content'
 import { SlideGifs } from '../shared/slide-gifs'
 import { configureProgramMirror, loadProgramVideo, releaseProgramVideo, programVideoCanvas, programVideoReady, programClockOwner } from '../shared/program-mirror'
@@ -12,7 +13,7 @@ import { FADE_MAX_MS, sanitizeTakeFadeMs } from '../../shared/take-transition'
 import { nextPlaylistFolderName, type PlaylistInsertPosition } from '../../shared/playlist-folders'
 import { initBus, getState, subscribe } from '../shared/bus'
 import { PreparationProgress } from '../shared/preparation-progress'
-import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
+import { loadDocument, clearDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-frame-client'
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
 import {
   applySinkId,
@@ -572,6 +573,7 @@ function applyPreviewLive(state: AppState): void {
 }
 
 async function loadCurrentFile(): Promise<void> {
+  clearDocument()
   const generation = ++programLoadGeneration
   const state = getState()
   const stale = (): boolean => generation !== programLoadGeneration || getState().pdfPath !== state.pdfPath
@@ -648,7 +650,7 @@ async function loadCurrentFile(): Promise<void> {
   currentCanvas.classList.remove('hidden')
   nextCanvas.classList.remove('hidden')
   nextEmpty.classList.add('hidden')
-  await loadDocument(data.bytes)
+  await loadDocument(data.pdf ?? data.bytes)
   if (stale()) return
   docLoaded = true
   await window.api.pdf.reportTotal(totalPages())
@@ -685,7 +687,10 @@ async function renderCurrent(): Promise<void> {
         if (getState().pdfPath === path && getState().currentSlide === slide)
           nextGifs.update(state.fileKind, state.slideMedia, slide + 1, state.pdfSha1, true)
       })
-      .then(() => prerender(slide + 2, currentWidth)).catch(() => undefined)
+      .then(() => {
+        if (getState().pdfPath === path && getState().currentSlide === slide)
+          return prerender(slide + 2, currentWidth)
+      }).catch(() => undefined)
   } else {
     nextGifs.clear()
     clearCanvas(nextCanvas)
@@ -943,6 +948,7 @@ function unloadPreviewVideo(): void {
 }
 
 async function loadPreviewFile(): Promise<void> {
+  previewLoader?.clearDocument()
   if (!previewLoader || !previewVideo || !previewCanvas || !previewImage || !previewPlaceholder) return
   const p = getState().preview
   disposePreviewImage()
@@ -1003,7 +1009,7 @@ async function loadPreviewFile(): Promise<void> {
   previewImage.classList.add('hidden')
   previewImage.removeAttribute('src')
   previewCanvas.classList.remove('hidden')
-  await previewLoader.loadDocument(data.bytes)
+  await previewLoader.loadDocument(data.pdf ?? data.bytes)
   previewDocLoaded = true
   await window.api.preview.reportTotal(previewLoader.totalPages())
   await renderPreview()
@@ -1049,7 +1055,7 @@ function updatePreviewUI(state: AppState): void {
         ? t('видео')
         : p.kind === 'live'
           ? t('захват')
-          : `${p.currentSlide} / ${p.totalSlides || '—'}`
+          : `${slidePosition(p).label} / ${slidePosition(p).total || '—'}`
       : '— / —'
   }
   const isVideo = p.kind === 'video'
@@ -2266,11 +2272,12 @@ function applyState(state: AppState): void {
   }
   if (isOperator) {
     const list = state.listIndex >= 0 ? state.playlist.find(e => e.id === state.currentPlaylistId) : undefined
-    const total = list?.items?.length ?? state.totalSlides
+    const position = slidePosition(state)
+    const total = list?.items?.length ?? position.total
     const current = list ? state.listPos + 1 : state.currentSlide
     const canNavigate = Boolean(state.pdfPath) && (Boolean(list) || state.fileKind === 'pdf' || state.fileKind === 'pptx')
-    $('program-nav-current').textContent = canNavigate && total > 0 ? `${current} / ${total}` : '— / —'
-    $('program-nav-remaining').textContent = canNavigate && total > 0 ? t('(осталось {n})', { n: Math.max(0, total - current) }) : ''
+    $('program-nav-current').textContent = canNavigate && total > 0 ? `${list ? current : position.label} / ${total}` : '— / —'
+    $('program-nav-remaining').textContent = canNavigate && total > 0 ? t('(осталось {n})', { n: (list ? Math.max(0, total - current) : position.remaining) }) : ''
     $<HTMLButtonElement>('program-prev').disabled = !canNavigate || (!list && current <= 1)
     // Keep Next available on a last slide: it may start an embedded clip or
     // advance the playlist when the operator has enabled auto-advance.
@@ -2300,8 +2307,8 @@ function applyState(state: AppState): void {
       updateVideoHeader(state)
     } else {
       slideRemaining.classList.remove('warn', 'ending', 'big'); slideCounter.classList.remove('video')
-      slideCounter.textContent = t('Слайд {n} из {total}', { n: state.currentSlide, total: state.totalSlides || '—' })
-      const remaining = Math.max(0, (state.totalSlides || 0) - state.currentSlide)
+      slideCounter.textContent = t('Слайд {n} из {total}', { n: slidePosition(state).label, total: slidePosition(state).total || '—' })
+      const remaining = slidePosition(state).remaining
       slideRemaining.textContent = state.totalSlides > 0 ? t('(осталось {n})', { n: remaining }) : ''
     }
   } else {
@@ -2342,7 +2349,9 @@ function applyState(state: AppState): void {
     reflectToggle('timer-gong-toggle', state.audienceTimer.gongEnabled)
     reflectToggle('timer-loop-toggle', state.audienceTimer.loop)
     reflectToggle('clicker-global-toggle', state.clickerGlobal)
+    renderGlobalClicker(state.clickerGlobal)
     reflectToggle('clicker-arrows-toggle', state.clickerGlobalArrows)
+    $<HTMLSelectElement>('clicker-arrow-axis').value = state.clickerArrowAxis
     document.querySelectorAll<HTMLButtonElement>('button.adjust').forEach((btn, i) => {
       const delta = state.timerAdjustments[i]
       btn.dataset.delta = String(delta)
@@ -2566,6 +2575,7 @@ let prevFilePath: string | null = null
 let prevSlide = 0
 
 async function handleStateChange(state: AppState, patch: Partial<AppState> | null): Promise<void> {
+  if (isOperator && patch?.playlist) renderClickerPresentations()
   if (isOperator && patch?.recoveryStartup === false) showBanner(t('Последняя сессия восстановлена'), 5000)
   if (isOperator && patch?.autosaveError) showBanner(t('Автосохранение не удалось: {error}', { error: patch.autosaveError }), 12000)
   if (patch && Object.hasOwn(patch, 'takeTransition')) {
@@ -3201,9 +3211,11 @@ function setupKeyboard(): void {
     // переназначенной карте локальных горячих клавиш.
     if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey &&
         getState().clickerGlobal && getState().clickerGlobalArrows) {
-      if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
+      const next = getState().clickerArrowAxis === 'vertical' ? 'ArrowDown' : 'ArrowRight'
+      const prev = getState().clickerArrowAxis === 'vertical' ? 'ArrowUp' : 'ArrowLeft'
+      if (e.code === next || e.code === prev) {
         e.preventDefault()
-        if (e.code === 'ArrowRight') window.api.clicker.next()
+        if (e.code === next) window.api.clicker.next()
         else window.api.clicker.prev()
         return
       }
@@ -3337,14 +3349,13 @@ function toggleTimer(): void {
   else window.api.timer.start()
 }
 
-// Переход к слайду по номеру (1.4): Enter — перейти, Esc — сброс. Main клампит
-// номер к [1, totalSlides], так что мусор безопасен.
+// Resolve the displayed source slide/step to an internal PDF page.
 function wireGotoInput(input: HTMLInputElement, goto: (slide: number) => void): void {
   input.addEventListener('keydown', (e) => {
     e.stopPropagation()
     if (e.key === 'Enter') {
-      const n = Math.floor(Number(input.value))
-      if (Number.isFinite(n) && n >= 1) goto(n)
+      const n = pageForSlideLabel(input.value, getState().preview)
+      if (n !== null) goto(n)
       input.value = ''
       input.blur()
     } else if (e.key === 'Escape') {
@@ -3356,9 +3367,50 @@ function wireGotoInput(input: HTMLInputElement, goto: (slide: number) => void): 
 
 function setupOperatorControls(): void {
   if (role !== 'operator') return
-  $('mobile-clicker-reset').addEventListener('click', () => { void window.api.mobileClicker.resetLink().then(renderMobileClicker).catch(e => showBanner(String(e))) })
+  const mobileAction = (action: () => Promise<unknown>) => { void action().catch(e => showBanner(clickerErrorMessage(e))) }
+  const connectCloudpub = (choose = false): void => mobileAction(async () => {
+    $('mobile-clicker-cloud-status').textContent = t('Подключение CLOUDPUB…')
+    const result = await (choose ? window.api.mobileClicker.chooseCloudpub() : window.api.mobileClicker.connectCloudpub())
+    renderMobileClicker(result)
+  })
+  $('mobile-clicker-cloud-auto').addEventListener('click', () => connectCloudpub())
+  $('mobile-clicker-cloud-choose').addEventListener('click', () => connectCloudpub(true))
+  $('mobile-clicker-online').addEventListener('change', () => {
+    if ($<HTMLInputElement>('mobile-clicker-online').checked) connectCloudpub()
+    else mobileAction(async () => renderMobileClicker(await window.api.mobileClicker.configure(false, $<HTMLInputElement>('mobile-clicker-public').value.trim())))
+  })
+  $('mobile-clicker-pause').addEventListener('click', () => mobileAction(async () => {
+    const status = await window.api.mobileClicker.status()
+    renderMobileClicker(await window.api.mobileClicker.setEnabled(!status.enabled))
+  }))
+  $('mobile-clicker-cloud-save').addEventListener('click', () => mobileAction(async () => {
+    renderMobileClicker(await window.api.mobileClicker.configure($<HTMLInputElement>('mobile-clicker-online').checked, $<HTMLInputElement>('mobile-clicker-public').value.trim()))
+  }))
+  $('mobile-clicker-all').addEventListener('change', () => {
+    renderClickerPresentations()
+  })
+  $('mobile-clicker-guest-apply').addEventListener('click', () => mobileAction(async () => {
+    const open = $<HTMLInputElement>('mobile-clicker-guest-open').checked
+    const ids = open ? selectedClickerPresentations() : null
+    if (ids !== undefined) renderMobileClicker(await window.api.mobileClicker.setGuestAccess(open, ids))
+  }))
+  $('mobile-clicker-refresh').addEventListener('click', () => mobileAction(async () => renderMobileClicker(await window.api.mobileClicker.status())))
+  $('mobile-clicker-create').addEventListener('click', () => mobileAction(async () => {
+    const ids = selectedClickerPresentations()
+    if (ids === undefined) return
+    const status = await window.api.mobileClicker.createGrant($<HTMLInputElement>('mobile-clicker-name').value, ids)
+    renderMobileClicker(status)
+    const grant = status.grants?.at(-1)
+    if (grant) await showClickerInvitation(grant.id)
+  }))
+  $('mobile-clicker-reset').addEventListener('click', () => { void window.api.mobileClicker.resetLink().then(s => { $('mobile-clicker-invite').classList.add('hidden'); renderMobileClicker(s) }).catch(e => showBanner(String(e))) })
   const refreshClickerIndicator = (): void => {
-    void window.api.mobileClicker.status().then(status => renderMobileClickerIndicator(status.enabled)).catch(() => renderMobileClickerIndicator(false))
+    if (document.hidden) return
+    void window.api.mobileClicker.status().then(status => {
+      renderMobileClickerIndicator(status.enabled)
+      renderClickerConnections(status)
+      renderCloudpubConnection(status)
+    }).catch(() => renderMobileClickerIndicator(false))
   }
   refreshClickerIndicator()
   window.setInterval(refreshClickerIndicator, 1000)
@@ -3520,23 +3572,43 @@ function setupOperatorControls(): void {
   // Глобальный кликер: main отвечает, что реально включилось (регистрация
   // PgUp/PgDn может не пройти) — стейт-патч вернёт галку в фактическое положение.
   const clickerGlobalToggle = $<HTMLInputElement>('clicker-global-toggle')
-  clickerGlobalToggle.addEventListener('change', async () => {
-    const wanted = clickerGlobalToggle.checked
-    const actual = await window.api.clicker.setGlobal(wanted)
-    if (wanted && !actual) {
-      showBanner(t('Глобальный кликер не включился: PgUp/PgDn заняты другим приложением'), 8000)
-    }
-  })
+  const globalButton = $<HTMLButtonElement>('global-clicker-toggle')
+  const setGlobalClicker = async (wanted: boolean): Promise<void> => {
+    clickerGlobalToggle.disabled = true; globalButton.disabled = true
+    try {
+      const actual = await window.api.clicker.setGlobal(wanted)
+      clickerGlobalToggle.checked = actual; renderGlobalClicker(actual)
+      if (wanted && !actual) { signalGlobalClickerError(); showBanner(t('Глобальный кликер не включился: PgUp/PgDn заняты другим приложением'), 8000) }
+      else { globalButton.classList.remove('global-clicker-error'); globalButton.removeAttribute('title'); renderGlobalClicker(actual) }
+    } catch (error) { signalGlobalClickerError(); renderGlobalClicker(getState().clickerGlobal); showBanner(String(error)) }
+    finally { clickerGlobalToggle.disabled = false; globalButton.disabled = false }
+  }
+  clickerGlobalToggle.addEventListener('change', () => { void setGlobalClicker(clickerGlobalToggle.checked) })
+  globalButton.addEventListener('click', () => { void setGlobalClicker(!getState().clickerGlobal) })
   const clickerArrowsToggle = $<HTMLInputElement>('clicker-arrows-toggle')
   clickerArrowsToggle.addEventListener('change', async () => {
     const wanted = clickerArrowsToggle.checked
     const actual = await window.api.clicker.setGlobalArrows(wanted)
     if (wanted && !actual && getState().clickerGlobal) {
-      showBanner(t('Стрелки не захватились: ←/→ заняты другим приложением'), 8000)
+      showBanner(t('Выбранные стрелки заняты другим приложением'), 8000)
     }
   })
 
   // Timer scale (speaker overlay size)
+  const clickerArrowAxis = $<HTMLSelectElement>('clicker-arrow-axis')
+  clickerArrowAxis.addEventListener('change', async () => {
+    const axis = clickerArrowAxis.value === 'vertical' ? 'vertical' : 'horizontal'
+    const wanted = getState().clickerGlobal && getState().clickerGlobalArrows
+    clickerArrowAxis.disabled = true
+    try {
+      const actual = await window.api.clicker.setArrowAxis(axis)
+      if (wanted && !actual) showBanner(t('Выбранные стрелки заняты другим приложением'), 8000)
+    } catch {
+      clickerArrowAxis.value = getState().clickerArrowAxis
+      showBanner(t('Не удалось изменить клавиши кликера'))
+    } finally { clickerArrowAxis.disabled = false }
+  })
+
   $<HTMLInputElement>('timer-scale-input').addEventListener('input', (event) => {
     void window.api.timer.setScale(Number((event.target as HTMLInputElement).value) / 100)
   })
@@ -4846,14 +4918,134 @@ function showSettingsSection(name: SettingsSection): void {
 }
 
 function renderMobileClickerIndicator(enabled: boolean): void {
+  const pause = $('mobile-clicker-pause')
+  const label = enabled ? t('Онлайн кликер: включён') : t('Онлайн кликер: пауза')
+  pause.title = label
+  pause.setAttribute('aria-label', label)
+  pause.setAttribute('aria-pressed', String(!enabled))
   $('program-prev').classList.toggle('mobile-clicker-active', enabled)
   $('program-next').classList.toggle('mobile-clicker-active', enabled)
 }
 
+function renderGlobalClicker(enabled: boolean): void {
+  const button = $('global-clicker-toggle')
+  const failed = !enabled && button.classList.contains('global-clicker-error')
+  const label = failed ? t('Глобальный кликер: ошибка') : enabled ? t('Глобальный кликер: вкл') : t('Глобальный кликер: выкл')
+  button.title = failed ? t('Не удалось включить глобальный кликер. Повторите попытку') : label
+  button.setAttribute('aria-label', label)
+  button.setAttribute('aria-pressed', String(enabled))
+}
+function signalGlobalClickerError(): void {
+  const button = $('global-clicker-toggle')
+  button.classList.add('global-clicker-error')
+  button.title = t('Не удалось включить глобальный кликер. Повторите попытку')
+  renderGlobalClicker(getState().clickerGlobal)
+}
+
+async function showClickerInvitation(id: string): Promise<void> {
+  const invite = await window.api.mobileClicker.invitation(id)
+  $<HTMLImageElement>('mobile-clicker-invite-qr').src = invite.qr
+  $<HTMLInputElement>('mobile-clicker-invite-url').value = invite.url
+  $('mobile-clicker-invite').classList.remove('hidden')
+}
+let clickerRequestsSignature = ''
+let clickerRequestBusy = false
+function renderClickerRequests(status: import('../../shared/mobile-clicker').MobileClickerStatus): void {
+  if (clickerRequestBusy) return
+  const requests = (status.clients ?? []).filter(c => c.pending && c.blocked && Date.now() - c.lastSeen < 15000)
+  const playlist = getState().playlist.filter(e => e.kind === 'pdf' || e.kind === 'pptx')
+  const signature = JSON.stringify([requests.map(c => [c.id, c.name, c.grantId, c.direct]), status.grants, playlist.map(e => [e.id, e.displayName, e.fileName])])
+  if (signature === clickerRequestsSignature) return
+  clickerRequestsSignature = signature
+  const host = $('clicker-requests'); host.classList.toggle('hidden', requests.length === 0)
+  const title = document.createElement('strong'); title.textContent = t('Запросы доступа') + ': ' + requests.length
+  host.replaceChildren(title)
+  for (const client of requests) {
+    const row = document.createElement('div'); row.className = 'clicker-request'; row.dataset.clientId = client.id
+    const name = document.createElement('strong'); name.textContent = client.name + ' ? ' + client.id.split(':').at(-1)?.slice(0, 8)
+    const scope = document.createElement('span')
+    const grant = status.grants?.find(g => g.id === client.grantId)
+    const ids = grant?.presentations
+    scope.textContent = client.direct ? t('Общая ссылка: выберите права') : ids === null ? t('Все презентации') : (ids ?? []).map(id => { const entry = playlist.find(e => e.id === id); return entry?.displayName || entry?.fileName || t('Материал удалён') }).join(', ')
+    row.append(name, scope)
+    const select = document.createElement('select'); select.setAttribute('aria-label', t('Презентация для гостя'))
+    if (client.direct) {
+      for (const [value, text] of [['', t('Выберите презентацию')], ['*', t('Все презентации')], ...playlist.map(e => [e.id, e.displayName || e.fileName])]) {
+        const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option)
+      }
+      row.append(select)
+    }
+    const approve = document.createElement('button'); approve.textContent = t('Одобрить'); approve.className = 'clicker-request-approve'; approve.disabled = client.direct || !grant
+    if (client.direct) select.onchange = () => { approve.disabled = !select.value }
+    const reject = document.createElement('button'); reject.textContent = t('Отклонить'); reject.className = 'clicker-request-reject'
+    const act = async (accept: boolean): Promise<void> => {
+      clickerRequestBusy = true
+      host.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button, select').forEach(el => { el.disabled = true })
+      try {
+        const result = accept ? client.direct ? await window.api.mobileClicker.approveClient(client.id, select.value === '*' ? null : [select.value]) : await window.api.mobileClicker.blockClient(client.id, false) : await window.api.mobileClicker.blockClient(client.id, true)
+        clickerRequestBusy = false; clickerRequestsSignature = ''; renderClickerConnections(result)
+      } catch (e) {
+        clickerRequestBusy = false; clickerRequestsSignature = ''; showBanner(clickerErrorMessage(e))
+        void window.api.mobileClicker.status().then(renderClickerConnections).catch(() => { host.replaceChildren(); host.classList.add('hidden') })
+      }
+    }
+    approve.onclick = () => { void act(true) }; reject.onclick = () => { void act(false) }
+    row.append(approve, reject); host.append(row)
+  }
+}
+function renderClickerConnections(status: import('../../shared/mobile-clicker').MobileClickerStatus): void {
+  renderClickerRequests(status)
+  $('mobile-clicker-clients').replaceChildren(...(status.clients ?? []).map(client => {
+    const row = document.createElement('div'); const text = document.createElement('span')
+    text.textContent = client.name + ' · ' + client.id.split(':').at(-1)?.slice(0, 8) + ' · ' + (Date.now() - client.lastSeen < 15000 ? t('В сети') : t('Нет связи')) + (client.blocked ? ' · ' + t('Нет разрешения') : '')
+    const button = document.createElement('button'); button.textContent = client.blocked ? client.direct ? t('Разрешить выбранные презентации') : t('Разрешить') : t('Заблокировать')
+    button.onclick = () => {
+      if (client.direct && client.blocked) {
+        const ids = selectedClickerPresentations(); if (ids === undefined) return
+        void window.api.mobileClicker.approveClient(client.id, ids).then(renderClickerConnections).catch(e => showBanner(clickerErrorMessage(e)))
+      } else void window.api.mobileClicker.blockClient(client.id, !client.blocked).then(renderClickerConnections).catch(e => showBanner(clickerErrorMessage(e)))
+    }
+    row.append(text, button)
+    if (client.direct) {
+      const scope = document.createElement('span')
+      scope.textContent = client.presentations === null ? t('Все презентации') : client.presentations?.length ? client.presentations.map(id => { const entry = getState().playlist.find(e => e.id === id); return entry?.displayName || entry?.fileName || t('Материал удалён') }).join(', ') : t('Ожидает выбора прав оператором')
+      const update = document.createElement('button'); update.textContent = t('Применить выбранные права')
+      update.onclick = () => { const ids = selectedClickerPresentations(); if (ids !== undefined) void window.api.mobileClicker.approveClient(client.id, ids).then(renderClickerConnections).catch(e => showBanner(clickerErrorMessage(e))) }
+      const reject = document.createElement('button'); reject.textContent = t('Отключить')
+      reject.onclick = () => { void window.api.mobileClicker.disconnectClient(client.id).then(renderClickerConnections).catch(e => showBanner(clickerErrorMessage(e))) }
+      row.append(scope, update, reject)
+    }
+    return row
+  }))
+}
 function renderMobileClicker(status: import('../../shared/mobile-clicker').MobileClickerStatus): void {
   renderMobileClickerIndicator(status.enabled)
+  renderCloudpubConnection(status)
+  $<HTMLInputElement>('mobile-clicker-online').checked = status.online ?? false
+  $<HTMLInputElement>('mobile-clicker-guest-open').checked = status.guestOpen === true
+  $('mobile-clicker-guest-status').textContent = status.guestOpen ? t('Гости подключаются без одобрения с выбранными правами. Пауза кликера запрещает команды всем.') : t('Каждое гостевое подключение требует одобрения оператора')
+  $<HTMLInputElement>('mobile-clicker-public').value = status.publicUrl ?? ''
+  $<HTMLInputElement>('mobile-clicker-general').value = status.online ? status.publicUrl ?? '' : ''
+  $('mobile-clicker-general-wrap').classList.toggle('hidden', !status.online || !status.publicUrl)
+  $('mobile-clicker-target').textContent = status.target ? t('Адрес для публикации в CLOUDPUB: ') + status.target : t('Сначала включите кликер')
+  renderClickerPresentations()
+  $('mobile-clicker-grants').replaceChildren(...(status.grants ?? []).map(grant => {
+    const row = document.createElement('div'); const label = document.createElement('span')
+    const names = grant.presentations?.map(id => { const entry = getState().playlist.find(e => e.id === id); return entry ? entry.displayName || entry.fileName : t('Материал удалён') })
+    label.textContent = grant.name + ' · ' + (names ? names.join(', ') : t('Все презентации'))
+    const qr = document.createElement('button'); qr.textContent = t('QR-код'); qr.onclick = () => { void showClickerInvitation(grant.id).catch(e => showBanner(String(e))) }
+    const update = document.createElement('button'); update.textContent = t('Применить выбранные права')
+    update.onclick = () => {
+      const ids = selectedClickerPresentations()
+      if (ids === undefined) return
+      void window.api.mobileClicker.updateGrant(grant.id, ids).then(renderMobileClicker).catch(e => showBanner(clickerErrorMessage(e)))
+    }
+    const revoke = document.createElement('button'); revoke.textContent = t('Отозвать'); revoke.onclick = () => { void window.api.mobileClicker.revokeGrant(grant.id).then(s => { $('mobile-clicker-invite').classList.add('hidden'); renderMobileClicker(s) }).catch(e => showBanner(String(e))) }
+    row.append(label, qr, update, revoke); return row
+  }))
+  renderClickerConnections(status)
   $<HTMLInputElement>('mobile-clicker-enabled').checked = status.enabled
-  $('mobile-clicker-details').classList.toggle('hidden', !status.urls.length)
+  $('mobile-clicker-details').classList.toggle('hidden', !status.urls.length || Boolean(status.online))
   $('mobile-clicker-error').textContent = status.error ? t(status.error) : ''
   const host = $<HTMLSelectElement>('mobile-clicker-host')
   host.replaceChildren(...status.urls.map((url, index) => {
@@ -4863,6 +5055,36 @@ function renderMobileClicker(status: import('../../shared/mobile-clicker').Mobil
   $<HTMLInputElement>('mobile-clicker-url').value = status.urls[0] ?? ''
   const image = $<HTMLImageElement>('mobile-clicker-qr')
   if (status.qr) image.src = status.qr; else image.removeAttribute('src')
+}
+
+function clickerErrorMessage(error: unknown): string {
+  return String(error).replace(/^(?:Error:\s*)+/, '').replace(/^Error invoking remote method '[^']+':\s*/, '').replace(/^(?:Error:\s*)+/, '')
+}
+
+function selectedClickerPresentations(): string[] | null | undefined {
+  if ($<HTMLInputElement>('mobile-clicker-all').checked) return null
+  const ids = Array.from(document.querySelectorAll<HTMLInputElement>('#mobile-clicker-presentations input:checked')).map(input => input.value)
+  if (!ids.length) { showBanner(t('Выберите хотя бы одну презентацию')); return undefined }
+  return ids
+}
+
+function renderClickerPresentations(): void {
+  const selected = new Set(Array.from(document.querySelectorAll<HTMLInputElement>('#mobile-clicker-presentations input:checked')).map(input => input.value))
+  const entries = getState().playlist.filter(entry => entry.kind === 'pdf' || entry.kind === 'pptx')
+  $('mobile-clicker-presentations').replaceChildren(...entries.map(entry => {
+    const label = document.createElement('label'); const input = document.createElement('input'); input.type = 'checkbox'; input.value = entry.id; input.checked = selected.has(entry.id)
+    label.append(input, document.createTextNode(entry.displayName || entry.fileName)); return label
+  }))
+  if (!entries.length) $('mobile-clicker-presentations').textContent = t('Добавьте презентацию PDF или PPTX в плейлист')
+  $('mobile-clicker-presentations').classList.toggle('hidden', $<HTMLInputElement>('mobile-clicker-all').checked)
+}
+
+function renderCloudpubConnection(status: import('../../shared/mobile-clicker').MobileClickerStatus): void {
+  const connecting = status.cloudpub?.state === 'connecting'
+  $<HTMLButtonElement>('mobile-clicker-cloud-auto').disabled = connecting
+  $<HTMLButtonElement>('mobile-clicker-cloud-choose').disabled = connecting
+  $<HTMLButtonElement>('mobile-clicker-cloud-save').disabled = connecting
+  $('mobile-clicker-cloud-status').textContent = connecting ? t('Подключение CLOUDPUB…') : status.cloudpub?.message ?? ''
 }
 
 // ── Профили площадки (раздел «Настройки → Профили площадки») ────────────────
@@ -6040,12 +6262,64 @@ function renderSyphonStatus(syphon: SyphonStatus, prompter = false): void {
   }
 }
 
+async function showSpoutGraphicsHelp(): Promise<void> {
+  if (window.api.platform !== 'win32') return
+  const info = await window.api.spoutGraphicsHelp()
+  const modal = $('spout-graphics-modal')
+  const path = $<HTMLInputElement>('spout-exe-path')
+  path.value = info.exePath
+  path.onclick = () => path.select()
+  const gpuChoice = $<HTMLSelectElement>('spout-gpu-choice')
+  gpuChoice.replaceChildren(...info.options.map(option => {
+    const mode = option.preference === 1 ? t('Энергосбережение') : t('Высокая производительность')
+    return new Option(option.name ? `${option.name} — ${mode}` : mode, String(option.preference))
+  }))
+  gpuChoice.value = '2'
+  const updateCommand = (): void => {
+    $('spout-graphics-command').textContent = info.options.find(option => String(option.preference) === gpuChoice.value)!.powershell
+    $('spout-command-copy').textContent = '⧉'
+  }
+  gpuChoice.onchange = updateCommand
+  updateCommand()
+  const close = (): void => {
+    modal.classList.add('hidden')
+    $('spout-graphics-help').focus()
+  }
+  for (const id of ['spout-exe-copy', 'spout-command-copy']) {
+    const button = $(id)
+    button.onclick = () => {
+      const text = id === 'spout-exe-copy' ? path.value : $('spout-graphics-command').textContent ?? ''
+      void navigator.clipboard.writeText(text).then(() => {
+        button.textContent = '✓'
+        window.setTimeout(() => { button.textContent = '⧉' }, 1500)
+      }).catch(() => showBanner(t('Не удалось скопировать текст.'), 5000))
+    }
+  }
+  $('spout-open-graphics').onclick = () => {
+    void window.api.openSpoutGraphicsSettings().catch(() => showBanner(t('Не удалось открыть настройки графики Windows.'), 5000))
+  }
+  $('spout-graphics-close').onclick = close
+  modal.onclick = (event) => { if (event.target === modal) close() }
+  modal.onkeydown = (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close() }
+  }
+  modal.classList.remove('hidden')
+  $('spout-graphics-close').focus()
+}
+
 function wireSyphonSection(syphon: SyphonStatus, prompter = false): void {
   const prefix = prompter ? 'syphon-prompter' : 'syphon'
   const key = prompter ? 'syphonPrompter' : 'syphon'
   const api = window.api[key]
   const render = (status: SyphonStatus): void => renderSyphonStatus(status, prompter)
   render(syphon)
+  if (!prompter) {
+    const help = $('spout-graphics-help')
+    help.classList.toggle('hidden', window.api.platform !== 'win32')
+    help.onclick = () => {
+      void showSpoutGraphicsHelp().catch(() => showBanner(t('Не удалось открыть настройки графики Windows.'), 5000))
+    }
+  }
   const enabled = $<HTMLInputElement>(`${prefix}-enabled`)
   const name = $<HTMLInputElement>(`${prefix}-name`)
   enabled.onchange = () => {
@@ -6590,6 +6864,11 @@ async function bootstrap(): Promise<void> {
   deckSizeObserver.observe(currentCanvas.parentElement!)
   deckSizeObserver.observe(nextCanvas.parentElement!)
 
+  window.addEventListener('cuedeck-pdf-recovered', () => {
+    const state = getState()
+    if (state.fileKind === 'pdf' || state.fileKind === 'pptx') void loadCurrentFile().catch(error => window.api.diag.log('error', 'PDF recovery failed', String(error)))
+    if (isOperator && (state.preview.kind === 'pdf' || state.preview.kind === 'pptx')) void loadPreviewFile().catch(() => undefined)
+  })
   window.addEventListener('resize', () => {
     const kind = getState().fileKind
     if (kind !== 'image' && kind !== 'video' && kind !== null) {

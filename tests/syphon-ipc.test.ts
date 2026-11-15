@@ -1,11 +1,18 @@
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const rt = vi.hoisted(() => ({
+  getGPUInfo: vi.fn(async () => ({ gpuDevice: [
+    { deviceString: 'Integrated GPU', gpuPreference: 2 },
+    { deviceString: 'Discrete GPU', gpuPreference: 3 },
+  ] })),
+  openExternal: vi.fn(async () => undefined),
   handlers: new Map<string, Function>(),
   wc: { mainFrame: {} },
 }))
 
 vi.mock('electron', () => ({
+  app: { getGPUInfo: rt.getGPUInfo },
+  shell: { openExternal: rt.openExternal },
   ipcMain: { handle: (key: string, fn: Function) => rt.handlers.set(key, fn) },
 }))
 vi.mock('../src/main/windows', () => ({
@@ -69,4 +76,53 @@ it('accepts private main-process remote identity and rejects a forged copy', asy
   const { REMOTE_EVENT } = await import('../src/main/remote/event')
   await expect(call('syphon:configure', { ...REMOTE_EVENT }, { enabled: true })).rejects.toThrow('Operator')
   await expect(call('syphon:configure', REMOTE_EVENT, { enabled: true })).resolves.toMatchObject({ ok: true })
+})
+
+
+afterEach(() => vi.unstubAllGlobals())
+
+it('blocks Windows help and settings on macOS and for remote callers', async () => {
+  rt.openExternal.mockClear()
+  vi.stubGlobal('process', { ...process, platform: 'darwin' })
+  await expect(call('spout:graphics-help', operator)).rejects.toThrow('Local Windows')
+  await expect(call('spout:open-graphics-settings', operator)).rejects.toThrow('Local Windows')
+  vi.stubGlobal('process', { ...process, platform: 'win32' })
+  const { REMOTE_EVENT } = await import('../src/main/remote/event')
+  for (const event of [{ sender: {} }, REMOTE_EVENT]) {
+    await expect(call('spout:graphics-help', event)).rejects.toThrow()
+    await expect(call('spout:open-graphics-settings', event)).rejects.toThrow()
+  }
+  expect(rt.openExternal).not.toHaveBeenCalled()
+})
+
+it('matches GPU names and commands to Windows modes and safely quotes the EXE path', async () => {
+  vi.stubGlobal('process', { ...process, platform: 'win32', execPath: "C:\\O'Brien\\CueDeck.exe" })
+  rt.openExternal.mockClear()
+  const info = await call('spout:graphics-help', operator)
+  expect(info.exePath).toBe(process.execPath)
+  expect(info.options.map((o: any) => [o.preference, o.name])).toEqual([[1, 'Integrated GPU'], [2, 'Discrete GPU']])
+  for (const option of info.options) {
+    expect(option.powershell).toContain("-Name 'C:\\O''Brien\\CueDeck.exe'")
+    expect(option.powershell).toContain(`-Value ('GpuPreference=${option.preference};' + $cueDeckGpuValue)`)
+    expect(option.powershell).toContain('Get-ItemPropertyValue')
+    expect(option.powershell).toContain("-notmatch '^GpuPreference='")
+    expect(option.powershell).toContain('HKCU:')
+  }
+  expect(rt.openExternal).not.toHaveBeenCalled()
+})
+
+it('keeps Windows mode selection available if GPU identification fails', async () => {
+  vi.stubGlobal('process', { ...process, platform: 'win32' })
+  rt.getGPUInfo.mockRejectedValueOnce(new Error('GPU info unavailable'))
+  const info = await call('spout:graphics-help', operator)
+  expect(info.options.map((o: any) => [o.preference, o.name])).toEqual([[1, null], [2, null]])
+})
+
+it('opens only the fixed settings URI and reports launch failure to the renderer', async () => {
+  vi.stubGlobal('process', { ...process, platform: 'win32' })
+  rt.openExternal.mockClear()
+  await call('spout:open-graphics-settings', operator, 'https://ignored.invalid')
+  expect(rt.openExternal).toHaveBeenCalledExactlyOnceWith('ms-settings:display-advancedgraphics')
+  rt.openExternal.mockRejectedValueOnce(new Error('No handler'))
+  await expect(call('spout:open-graphics-settings', operator)).rejects.toThrow('No handler')
 })

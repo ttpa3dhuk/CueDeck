@@ -120,6 +120,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
   hasManifest: boolean
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('../shared/slide-numbering').SlideNumbering
   pageNotes: Record<number, string>
   fonts: string[]
 }> {
@@ -135,6 +136,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
     rebuilt?: unknown
     slideMedia?: unknown
     slideTransitions?: Record<number, number>
+    slideNumbering?: import('../shared/slide-numbering').SlideNumbering
     pageNotes?: unknown
     fonts?: unknown
   }
@@ -168,6 +170,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
     hasManifest: true,
     slideMedia: manifest.slideMedia as SlideMedia[],
     slideTransitions: manifest.slideTransitions ?? {},
+    slideNumbering: manifest.slideNumbering,
     pageNotes: manifest.pageNotes as Record<number, string>,
     fonts: manifest.fonts as string[],
   }
@@ -286,6 +289,7 @@ export async function prepareStagedArtifacts(options: PrepareArtifactsOptions): 
     totalSlides,
     slideMedia: validated.slideMedia,
     slideTransitions: validated.slideTransitions ?? {},
+    slideNumbering: validated.slideNumbering,
     pageNotes: validated.pageNotes,
     fonts,
     artifactsDir,
@@ -318,6 +322,7 @@ export async function inspectCachedArtifacts(options: InspectCacheOptions): Prom
     totalSlides: countPdfPages(pdf),
     slideMedia: validated.slideMedia,
     slideTransitions: validated.slideTransitions ?? {},
+    slideNumbering: validated.slideNumbering,
     pageNotes: validated.pageNotes,
     fonts: substitutedFonts(validated.fonts, pdf),
     artifactsDir: cacheRoot,

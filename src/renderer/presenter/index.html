@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob: cuedeck-media:; media-src 'self' blob: mediastream: cuedeck-media:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' cuedeck-media://document; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; img-src 'self' data: blob: cuedeck-media:; media-src 'self' blob: mediastream: cuedeck-media:;" />
     <title>CueDeck</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -236,7 +236,7 @@
           <button id="preview-source-mute" class="source-mute hidden" title="Звук этого источника в эфире вкл/выкл" aria-label="Звук этого источника в эфире вкл/выкл" aria-pressed="false">🔊</button>
           <div class="preview-nav">
             <button id="preview-prev" title="Превью: предыдущий слайд">◀</button>
-            <input id="preview-goto-input" class="goto-input" type="number" min="1" placeholder="№" title="Перейти к слайду превью: номер + Enter" />
+            <input id="preview-goto-input" class="goto-input" type="text" inputmode="decimal" placeholder="№" title="Перейти к слайду превью: номер + Enter" />
             <span id="preview-counter" class="preview-counter">— / —</span>
             <button id="preview-next" title="Превью: следующий слайд">▶</button>
           </div>
@@ -346,6 +346,14 @@
           <button id="project-transfer-reveal" class="hidden" title="Показать готовый проект в папке">Показать</button>
         </div>
         <div class="bottombar-right">
+          <button id="global-clicker-toggle" class="icon-btn clicker-icon" type="button" aria-pressed="false" title="Глобальный кликер: выкл" aria-label="Глобальный кликер: выкл">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h1m4 0h1m4 0h1M6 12h1m4 0h1m4 0h1M7 16h10"/></svg>
+          </button>
+          <div id="clicker-requests" class="hidden" role="region" aria-live="polite"></div>
+          <button id="mobile-clicker-pause" class="icon-btn clicker-icon" type="button" aria-pressed="true" title="Онлайн кликер: пауза" aria-label="Онлайн кликер: пауза">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 5h4M11 19h2"/></svg>
+            <span class="clicker-pause-mark" aria-hidden="true">Ⅱ</span>
+          </button>
           <button id="test-screen-active" class="test-screen-active hidden" title="Убрать тестовый экран и вернуть текущий материал"></button>
           <button id="settings-btn" class="icon-btn" title="Настройки: экраны, звук, клавиши, тема и язык, LibreOffice, внешнее управление, MIDI (Cmd+,)" aria-label="Настройки">⚙️</button>
           <button id="help-btn" class="icon-btn" title="Справка по клавишам (?)" aria-label="Справка">?</button>
@@ -732,9 +740,29 @@
               </div>
             </section>
             <section class="settings-section hidden" data-section="clicker">
+              <h3>Кликеры и клавиатура</h3>
+              <p class="audio-hint">Листание эфира, когда окно оператора неактивно.</p>
+              <div class="live-field">
+                <label class="windowed-label" title="Глобальный перехват Page Up / Page Down">
+                    <input id="clicker-global-toggle" type="checkbox" />
+                    <span>🌐 Глобально</span>
+                  </label>
+                  <label class="windowed-label" title="Глобальный перехват выбранной пары стрелок">
+                    <input id="clicker-arrows-toggle" type="checkbox" />
+                    <span>Стрелки</span>
+                  </label>
+              </div>
+              <label class="windowed-label" for="clicker-arrow-axis">
+                <span>Клавиши кликера</span>
+                <select id="clicker-arrow-axis">
+                  <option value="horizontal">← / →: влево — назад, вправо — вперёд</option>
+                  <option value="vertical">↑ / ↓: вверх — назад, вниз — вперёд</option>
+                </select>
+              </label>
+              <details id="online-clicker-settings"><summary>Онлайн кликер</summary><div class="online-clicker-settings-body">
               <h3>Мобильный кликер</h3>
               <label class="windowed-label"><input id="mobile-clicker-enabled" type="checkbox" /> <span>Включить кликер с телефона</span></label>
-              <p class="audio-hint">Телефон и компьютер должны быть в одной сети. Отсканируй QR-код камерой телефона: откроются кнопки листания, номер слайда и таймер спикера. Выключение временно блокирует кнопки, ссылка сохраняется и после перезапуска CueDeck. Сброс ссылки отключает ранее подключённые телефоны.</p>
+              <p class="audio-hint">В локальном режиме подключите телефон к сети ноутбука. Онлайн режим через CLOUDPUB позволяет подключаться через интернет. Отсканируйте QR-код доступа камерой телефона. Пауза блокирует кнопки, сохраняя страницу и ссылку.</p>
               <div id="mobile-clicker-details" class="hidden">
                 <div class="mobile-clicker-qr-wrap"><img id="mobile-clicker-qr" alt="QR-код мобильного кликера" width="200" height="200" /><span class="mobile-clicker-qr-brand" aria-hidden="true">QD</span></div>
                 <div class="mobile-clicker-actions">
@@ -743,19 +771,35 @@
                 </div>
                 <input id="mobile-clicker-url" type="text" readonly aria-label="Ссылка мобильного кликера" />
               </div>
-              <p id="mobile-clicker-error" class="audio-hint" role="status"></p>
-              <h3>Кликеры и клавиатура</h3>
-              <p class="audio-hint">Листание эфира, когда окно оператора неактивно.</p>
-              <div class="live-field">
-                <label class="windowed-label" title="Глобальный перехват Page Up / Page Down">
-                    <input id="clicker-global-toggle" type="checkbox" />
-                    <span>🌐 Глобально</span>
-                  </label>
-                  <label class="windowed-label" title="Глобальный перехват стрелок влево / вправо">
-                    <input id="clicker-arrows-toggle" type="checkbox" />
-                    <span>⬅➡ Стрелки</span>
-                  </label>
+              <div class="mobile-access">
+                <label><input id="mobile-clicker-online" type="checkbox" /> Онлайн режим (CLOUDPUB)</label>
+                <button id="mobile-clicker-cloud-auto" type="button">Подключить CLOUDPUB автоматически</button>
+                <button id="mobile-clicker-cloud-choose" type="button">Указать программу CLOUDPUB…</button>
+                <p id="mobile-clicker-cloud-status" class="audio-hint" role="status"></p>
+                <label id="mobile-clicker-general-wrap" class="hidden">Общая ссылка<input id="mobile-clicker-general" type="url" readonly /></label>
+                <p class="audio-hint">При открытом гостевом доступе посетители подключаются автоматически. Иначе каждое подключение нужно разрешить в списке пользователей.</p>
+                <p class="audio-hint">CueDeck сам запускает локальный сервер кликера, создаёт его публикацию в установленном CLOUDPUB и проверяет внешний адрес. Откройте CLOUDPUB и войдите в аккаунт.</p>
+                <details><summary>Ручная настройка CLOUDPUB</summary><div class="cloudpub-manual-fields">
+                <label>HTTPS-адрес CLOUDPUB <input id="mobile-clicker-public" type="url" placeholder="https://example.cloudpub.ru" /></label>
+                <p id="mobile-clicker-target" class="audio-hint"></p>
+                <p class="audio-hint">Для ручной настройки опубликуйте указанный HTTP-адрес в CLOUDPUB и вставьте полученный HTTPS-адрес. Общая локальная ссылка в онлайн режиме отключена.</p>
+                <button id="mobile-clicker-cloud-save" type="button">Применить онлайн режим</button>
+                </div></details>
+                <label>Имя пользователя / ссылки (необязательно) <input id="mobile-clicker-name" maxlength="80" placeholder="Спикер" /></label>
+                <label><input id="mobile-clicker-all" type="checkbox" checked /> Все презентации (включая добавленные позже)</label>
+                <div id="mobile-clicker-presentations"></div>
+                <label><input id="mobile-clicker-guest-open" type="checkbox" /> Гостевой доступ без подтверждения</label>
+                <button id="mobile-clicker-guest-apply" type="button">Применить выбранные права для гостей</button>
+                <p id="mobile-clicker-guest-status" class="audio-hint" role="status"></p>
+                <button id="mobile-clicker-create" type="button">Создать ссылку и QR-код</button>
+                <p class="audio-hint">Персональные QR-коды требуют разрешения оператора. QR-код — секрет доступа: передавайте его лично. Для изменения прав выберите презентации выше и нажмите «Применить выбранные права» у нужной ссылки.</p>
+                <div id="mobile-clicker-grants"></div>
+                <div id="mobile-clicker-clients"></div>
+                <button id="mobile-clicker-refresh" type="button">Обновить подключения</button>
+                <div id="mobile-clicker-invite" class="hidden"><img id="mobile-clicker-invite-qr" width="240" height="240" alt="QR-код доступа" /><input id="mobile-clicker-invite-url" readonly aria-label="Ссылка доступа" /></div>
               </div>
+              <p id="mobile-clicker-error" class="audio-hint" role="status"></p>
+              </div></details>
             </section>
             <section class="settings-section hidden" data-section="audio">
               <div class="live-field">
@@ -950,6 +994,7 @@
                   <span id="local-gpu-platform" class="output-badge">macOS</span>
                 </div>
                 <p class="audio-hint">Локальный видеовыход для Resolume и OBS. Только картинка, без звука.</p>
+                <button id="spout-graphics-help" class="hidden" type="button">Настройка видеокарты для Spout…</button>
                 <div id="syphon-audience-settings" class="syphon-card">
                 <div class="syphon-row">
                   <label class="windowed-label">
@@ -1071,6 +1116,36 @@
           <span class="modal-actions-spacer"></span>
           <button id="stream-close">Закрыть</button>
         </div>
+      </div>
+    </div>
+
+    <div id="spout-graphics-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="spout-graphics-title">
+      <div class="modal-content lo-modal-content">
+        <h2 id="spout-graphics-title">Видеокарта для Spout</h2>
+        <p class="lo-modal-subtitle">CueDeck и Resolume / OBS должны использовать одну видеокарту.</p>
+        <label for="spout-gpu-choice" class="lo-option-label">Режим GPU Windows</label>
+        <select id="spout-gpu-choice"></select>
+        <div class="lo-install-option">
+          <div class="lo-option-label">Вариант 1 — через настройки Windows</div>
+          <p class="audio-hint compact">Добавьте классическое приложение по пути ниже. В его параметрах выберите тот же режим, что указан выше. Для Resolume / OBS выберите ту же видеокарту.</p>
+          <label for="spout-exe-path" class="lo-option-label">Путь к CueDeck</label>
+          <div class="lo-code-block">
+            <input id="spout-exe-path" type="text" readonly spellcheck="false" />
+            <button id="spout-exe-copy" class="lo-copy-btn" title="Скопировать" aria-label="Скопировать">⧉</button>
+          </div>
+          <button id="spout-open-graphics" class="primary lo-download-btn">Открыть настройки графики Windows</button>
+          <p class="lo-modal-note">Если настройки не открылись: Параметры Windows → Система → Дисплей → Графика.</p>
+        </div>
+        <div class="lo-install-option">
+          <div class="lo-option-label">Вариант 2 — через PowerShell</div>
+          <p class="audio-hint compact">Команда обновляется при выборе режима. Вставьте её в PowerShell и нажмите Enter. Она изменит режим GPU только этой копии CueDeck для текущего пользователя. Права администратора не нужны.</p>
+          <div class="lo-code-block">
+            <code id="spout-graphics-command"></code>
+            <button id="spout-command-copy" class="lo-copy-btn" title="Скопировать" aria-label="Скопировать">⧉</button>
+          </div>
+        </div>
+        <p class="lo-modal-note">После изменения полностью закройте и снова откройте CueDeck и Resolume / OBS.</p>
+        <div class="modal-actions"><button id="spout-graphics-close">Закрыть</button></div>
       </div>
     </div>
 

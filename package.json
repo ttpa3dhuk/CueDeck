@@ -1,6 +1,6 @@
 {
   "name": "cue-deck",
-  "version": "0.14.1",
+  "version": "0.14.2-pdf-hotfix-test.5",
   "description": "Presentation operator tool for live events — speaker playlist, per-speaker timers, confidence monitor, blackout",
   "author": "Azat Khusaenov",
   "main": "out/main/index.js",
@@ -14,6 +14,8 @@
     "companion:build": "vite-node companion/build.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:mobile-clicker": "vitest run tests/mobile-clicker.test.ts tests/mobile-clicker-access.test.ts tests/mobile-clicker-join.test.ts tests/mobile-clicker-page.test.ts tests/cloudpub.test.ts tests/cloudpub-api.test.ts tests/machine-identity.test.ts tests/clicker-navigation.test.ts tests/clicker-shortcuts.test.ts",
+    "test:mobile-clicker:runtime": "npm run build && node scripts/mobile-clicker-electron-qa.cjs && node scripts/mobile-clicker-ui-qa.cjs",
     "test:release-qa": "python3 -m unittest discover -s scripts/release-qa -p 'test_*.py'",
     "prepare:ffprobe": "node scripts/prepare-ffprobe.cjs --target=all",
     "verify:ffprobe": "node scripts/prepare-ffprobe.cjs --verify-only --target=all",

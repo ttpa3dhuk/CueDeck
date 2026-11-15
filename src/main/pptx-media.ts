@@ -41,7 +41,7 @@ const STRIP_EXTS = new Set([...PLAYABLE_EXTS, 'avi', 'wmv', 'mpg', 'mpeg', 'mkv'
 
 const MANIFEST_VERSION = PPTX_MANIFEST_VERSION
 /** Older PDFs remain reusable only when no changed chart/field/GIF pixels are found. */
-const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5, 6, 7, 8, 9])
+const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10])
 
 const SLIDE_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'
@@ -59,6 +59,7 @@ interface MediaManifest {
   rebuilt: boolean
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('../shared/slide-numbering').SlideNumbering
   /** Заметки докладчика: номер страницы PDF (1-based) → текст. */
   pageNotes: Record<number, string>
   /** Шрифты, которые просит презентация (проверка подмены — pptx-fonts.ts). */
@@ -68,6 +69,7 @@ interface MediaManifest {
 export interface PreparedPptxMedia {
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('../shared/slide-numbering').SlideNumbering
   /** Заметки докладчика из PPTX по страницам PDF (1-based). */
   pageNotes: Record<number, string>
   /** Шрифты, которые просит презентация. */
@@ -907,6 +909,7 @@ interface TransformResult {
   zip: Buffer | null
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('../shared/slide-numbering').SlideNumbering
   videos: FoundVideo[]
   pageNotes: Record<number, string>
   fonts: string[]
@@ -973,6 +976,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   // Номера страниц после разворачивания: слайд idx начинается со страницы
   // firstPage[idx]. Скрытый слайд страниц не занимает (LibreOffice его не выводит).
   let page = 0
+  const slideNumbering: import('../shared/slide-numbering').SlideNumbering = { total: pres.slidePaths.length, pages: [] }
   const firstPage: number[] = []
   const pageNotes: Record<number, string> = {}
   pres.slidePaths.forEach((slidePath, idx) => {
@@ -982,6 +986,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
     // Заметка слайда — на все его шаги: докладчик говорит одно и то же, пока идёт билд.
     const note = slideNotesText(slidePath, text)
     if (note) for (let k = 0; k < pages; k++) pageNotes[page + 1 + k] = note
+    for (let k = 0; k < pages; k++) slideNumbering.pages.push(k ? `${idx + 1}.${k}` : String(idx + 1))
     page += pages
   })
 
@@ -1016,7 +1021,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
   videos.push(...gifs)
 
   const requiresFreshPdf = compatibleSlides.size > 0 || gifs.length > 0
-  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0 && compatibleSlides.size === 0) return { zip: null, slideMedia, slideTransitions, videos, pageNotes, fonts, requiresFreshPdf }
+  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0 && compatibleSlides.size === 0) return { zip: null, slideMedia, slideTransitions, slideNumbering, videos, pageNotes, fonts, requiresFreshPdf }
 
   const replace = new Map(compatibleSlides)
   const add: { name: string; data: Buffer }[] = []
@@ -1095,7 +1100,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[]): TransformResult {
       }
     }
   }
-  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, slideTransitions, videos, pageNotes, fonts, requiresFreshPdf }
+  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, slideTransitions, slideNumbering, videos, pageNotes, fonts, requiresFreshPdf }
 }
 
 // ── Публичный вход ───────────────────────────────────────────────────────────
@@ -1163,6 +1168,7 @@ export async function preparePptxMedia(
         ...original,
         slideMedia: cached.slideMedia,
         slideTransitions: cached.slideTransitions ?? {},
+        slideNumbering: cached.slideNumbering,
         pageNotes: cached.pageNotes,
         fonts: cached.fonts,
       }
@@ -1174,6 +1180,7 @@ export async function preparePptxMedia(
       return {
         slideMedia: t.slideMedia,
         slideTransitions: t.slideTransitions ?? {},
+        slideNumbering: t.slideNumbering,
         pageNotes: t.pageNotes,
         fonts: t.fonts,
         convertSource: await writeRebuilt(sha1, t.zip, roots),
@@ -1202,12 +1209,13 @@ export async function preparePptxMedia(
       rebuilt: t.zip !== null,
       slideMedia: t.slideMedia,
       slideTransitions: t.slideTransitions ?? {},
+      slideNumbering: t.slideNumbering,
       pageNotes: t.pageNotes,
       fonts: t.fonts,
     }
     await writeFile(join(roots.writeDir, `${sha1}.media.json`), JSON.stringify(manifest))
 
-    const parsed = { ...original, slideMedia: t.slideMedia, slideTransitions: t.slideTransitions, pageNotes: t.pageNotes, fonts: t.fonts }
+    const parsed = { ...original, slideMedia: t.slideMedia, slideTransitions: t.slideTransitions, slideNumbering: t.slideNumbering, pageNotes: t.pageNotes, fonts: t.fonts }
     if (!t.zip) return parsed
     // Манифест прошлой версии: PDF собран от такой же пересборки — годен.
     if (pdfValid && !t.requiresFreshPdf && existsSync(roots.pdfPath(sha1))) return parsed

@@ -121,6 +121,7 @@ export function initialState(): AppState {
     timerPresets: [...DEFAULT_TIMER_PRESETS],
     clickerGlobal: false,
     clickerGlobalArrows: false,
+    clickerArrowAxis: 'horizontal',
     outputMonitorsEnabled: true,
     uiTheme: 'light',
     remote: {

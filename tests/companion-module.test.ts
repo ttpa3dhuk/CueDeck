@@ -178,6 +178,9 @@ describe('модуль Companion: /api/state → переменные', () => {
   }
 
   it('значения', () => {
+    const numbered = variableValues({ ...s, program: { ...s.program, slide: 5, total: 5, slideLabel: '3.2', sourceTotal: 3 } })
+    expect(numbered.slide_number).toBe('3.2')
+    expect(numbered.slide_total).toBe(3)
     const v = variableValues(s)
     expect(v).toMatchObject({
       connected: true,

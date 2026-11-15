@@ -36,3 +36,46 @@ describe('countPdfPages', () => {
     expect(countPdfPages(Buffer.alloc(0))).toBe(0)
   })
 })
+
+import { PdfPageCounter, inspectPdfFile } from '../src/main/pdf-pages'
+import { createHash } from 'node:crypto'
+import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+it('does not turn the PDF buffer into a JavaScript string', () => {
+  const bytes = pdf('/Type /Page /Type/Pages /Type\n/Page')
+  bytes.toString = () => { throw new Error('whole-file string') }
+  expect(countPdfPages(bytes)).toBe(2)
+})
+
+it('matches the former advisory pattern at every possible chunk boundary', () => {
+  const bytes = Buffer.from('/Type/Pages /Type /Type\n/Page /Type\t\r\n\xa0/Page/Type/Page /Typ/Type /Page /Type /Pages /Type /Page', 'latin1')
+  const expected = bytes.toString('latin1').match(/\/Type\s*\/Page(?!s)/g)!.length
+  for (let split = 0; split <= bytes.length; ++split) {
+    const counter = new PdfPageCounter()
+    counter.add(bytes.subarray(0, split)); counter.add(bytes.subarray(split))
+    expect(counter.total(), `split ${split}`).toBe(expected)
+  }
+  const counter = new PdfPageCounter()
+  for (const byte of bytes) counter.add(Buffer.from([byte]))
+  expect(counter.total()).toBe(expected)
+})
+
+it('retains only scanner state across arbitrarily long whitespace', () => {
+  const counter = new PdfPageCounter()
+  counter.add(Buffer.from('/Type'))
+  for (let n = 0; n < 100; n++) counter.add(Buffer.alloc(8192, 32))
+  counter.add(Buffer.from('/Page'))
+  expect(counter.total()).toBe(1)
+})
+
+it('streams identity and page count from the same file contents', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'cuedeck-pdf-count-'))
+  try {
+    const bytes = pdf('/Type /Page /Type /Pages /Type/Page')
+    const path = join(dir, 'source.pdf'); await writeFile(path, bytes)
+    expect(await inspectPdfFile(path)).toEqual({ totalSlides: 2, sha1: createHash('sha1').update(bytes).digest('hex') })
+    await expect(inspectPdfFile(join(dir, 'missing.pdf'))).rejects.toThrow()
+  } finally { await rm(dir, { recursive: true, force: true }) }
+})

@@ -1,3 +1,7 @@
+import { slidePosition } from '../shared/slide-numbering'
+import { readDeckFile } from './pdf-source.js'
+import { sharedPdfEnabled, sharedPdfFile } from './shared-pdf.js'
+import type { DeckFileData } from '../shared/pdf-source.js'
 import { hasLastSession, listSessionBackups } from './session-files.js'
 import { timerFont } from '../shared/timer-font.js'
 import { timerAdjustments } from '../shared/timer-controls.js'
@@ -12,7 +16,9 @@ import { togglePreviewSourceMute } from '../shared/source-audio.js'
 import { createClickerNavigation } from './clicker-navigation.js'
 import { mobileClickerStorage } from './mobile-clicker-storage.js'
 import { defaultSpeakerTimerStyle } from '../shared/speaker-timer-style.js'
-import { MobileClicker } from './mobile-clicker.js'
+import { MobileClickerService } from './mobile-clicker-service.js'
+import { CloudpubTunnel, clickerComputerName } from './cloudpub.js'
+import { cloudpubStore } from './cloudpub-storage.js'
 import { programOverlay } from '../shared/program-overlay.js'
 import { timerView } from '../renderer/shared/timer.js'
 import { audienceTimerConfig, createAudienceTimer } from '../shared/audience-timer.js'
@@ -111,6 +117,8 @@ import {
   setAskLayoutOnStartup,
   setClickerGlobal,
   getClickerGlobalArrows,
+  getClickerArrowAxis,
+  setClickerArrowAxis,
   setClickerGlobalArrows,
   setSpeakerMsgPresets,
   setTimerPresets,
@@ -121,7 +129,7 @@ import {
   setUiLang,
 } from './display-mapping.js'
 import { indexFolder, pickBestCandidate } from './project-files.js'
-import { countPdfPages } from './pdf-pages.js'
+import { inspectPdfFile } from './pdf-pages.js'
 import { cachedPdfPathFor, findSoffice, LibreOfficeMissingError, recheckSoffice, setManualSoffice, sofficeSearchPaths } from './pptx-converter.js'
 import { beginProjectTransfer, endProjectTransfer, isProjectTransferRunning, transferProject } from './project-transfer.js'
 import { runPptxWork } from './pptx-work.js'
@@ -209,6 +217,7 @@ interface InspectedFile {
   sha1Mismatch: boolean
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('../shared/slide-numbering').SlideNumbering
 }
 
 /**
@@ -272,13 +281,13 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
   let totalSlides = 1
   let slideMedia: SlideMedia[] = []
   let slideTransitions: Record<number, number> = {}
+  let slideNumbering: import('../shared/slide-numbering').SlideNumbering | undefined
   let pptxNotes: Record<number, string> = {}
 
   if (kind === 'pdf') {
-    // Single read: compute SHA1 and count pages from the same buffer.
-    const buf = await readFile(filePath)
-    sha1 = sha1FromBuffer(buf)
-    totalSlides = countPdfPages(buf)
+    const inspected = await inspectPdfFile(filePath)
+    sha1 = inspected.sha1
+    totalSlides = inspected.totalSlides
   } else if (kind === 'pptx') {
     const prepared = await preparationUi.prepare(filePath, {
       ...opts, priority: 'foreground',
@@ -288,6 +297,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     totalSlides = prepared.totalSlides
     slideMedia = prepared.slideMedia
     slideTransitions = prepared.slideTransitions ?? {}
+    slideNumbering = prepared.slideNumbering
     pptxNotes = prepared.pageNotes
     pptxNotesBySha1.set(sha1, pptxNotes)
   } else if (kind === 'video') {
@@ -309,6 +319,7 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     sha1Mismatch: loaded.sha1Mismatch,
     slideMedia,
     slideTransitions,
+    slideNumbering,
   }
 }
 
@@ -512,6 +523,7 @@ async function openFile(
       notes: info.notes,
       slideMedia: info.slideMedia,
       slideTransitions: info.slideTransitions ?? {},
+      slideNumbering: info.slideNumbering,
       currentPlaylistId: playlistId,
       sourceMuted: entry?.sourceMuted === true,
       // Reset the playback clock for every file load; keep audience-mute preference.
@@ -584,6 +596,7 @@ async function loadPreview(
       sourceMuted: entry?.sourceMuted === true,
       slideMedia: info.slideMedia,
       slideTransitions: info.slideTransitions ?? {},
+      slideNumbering: info.slideNumbering,
       video: {
         playing: false,
         anchorSec: entryRange?.inSec ?? 0,
@@ -714,21 +727,22 @@ function programSeekBy(deltaSec: number): void {
  * a key; a failed pair is fully released so we never end up half-on.
  */
 const clickerNavigation = createClickerNavigation(() => store.get().fileKind, programNext, programPrev)
-const mobileClicker = new MobileClicker(() => {
+const mobileClicker = new MobileClickerService(() => {
   const state = store.get()
-  return { current: state.currentSlide, total: state.totalSlides,
-    remaining: Math.max(0, state.totalSlides - state.currentSlide),
+  return { presentationId: state.currentPlaylistId, current: state.currentSlide, label: slidePosition(state).label, total: slidePosition(state).total,
+    remaining: slidePosition(state).remaining,
     canNavigate: Boolean(state.pdfPath) && (state.fileKind === 'pdf' || state.fileKind === 'pptx'),
     timer: timerView(state.timer, state.timerMode) }
-}, direction => { log.info('clicker:mobile', direction); return clickerNavigation[direction]() }, undefined, undefined, mobileClickerStorage)
-app.once('will-quit', () => { void mobileClicker.dispose() })
+}, direction => { log.info('clicker:mobile', direction); return clickerNavigation[direction]() }, mobileClickerStorage,
+  new CloudpubTunnel(cloudpubStore, undefined, undefined, !app.isPackaged && process.env.CUEDECK_QA_MACHINE_ID ? () => clickerComputerName(process.env.CUEDECK_QA_MACHINE_ID!) : undefined))
+export async function stopMobileClicker(): Promise<void> { await mobileClicker.dispose() }
 const clickerShortcuts = createClickerShortcutManager(
   globalShortcut,
   () => Boolean(getOperatorWindow()?.isFocused()),
   () => { log.info('clicker:global-next'); void clickerNavigation.next() },
   () => { log.info('clicker:global-prev'); void clickerNavigation.prev() },
 )
-export const applyClickerShortcuts = clickerShortcuts.apply
+export const applyClickerShortcuts = (global: boolean, arrows: boolean) => clickerShortcuts.apply(global, arrows, getClickerArrowAxis())
 export const suspendClickerShortcuts = clickerShortcuts.suspend
 
 function persistPlaylist(): void {
@@ -960,19 +974,16 @@ export function registerIpcHandlers(): void {
     return openFile(filePath)
   })
 
-  ipcMain.handle('pdf:read', async (): Promise<{ bytes: Uint8Array; mime: string } | null> => {
+  ipcMain.handle('pdf:read', async (): Promise<DeckFileData | null> => {
     const { pdfPath, fileKind, pdfSha1 } = store.get()
     if (!pdfPath || fileKind === 'live') return null
     try {
       // For PPTX, read the cached converted PDF instead of the source file
       const readPath =
         fileKind === 'pptx' && pdfSha1 ? cachedPdfPathFor(pdfSha1) : pdfPath
-      const buf = await readFile(readPath)
       const mime = fileKind === 'pptx' ? 'application/pdf' : mimeOf(pdfPath)
-      return {
-        bytes: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength),
-        mime,
-      }
+      if (sharedPdfEnabled && mime === 'application/pdf' && pdfSha1) return sharedPdfFile(readPath, pdfSha1)
+      return readDeckFile(readPath, mime, `cuedeck-media://document/program?v=${encodeURIComponent(pdfSha1 ?? '')}`)
     } catch {
       return null
     }
@@ -997,6 +1008,37 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('nav:prev', () => programPrev())
   ipcMain.handle('clicker:next', () => clickerNavigation.next())
   ipcMain.handle('clicker:prev', () => clickerNavigation.prev())
+  ipcMain.handle('mobile-clicker:configure', (event, online: boolean, url: string) => { requireOperator(event); if (typeof url !== 'string' || url.length > 2048) throw Error('Invalid URL'); return mobileClicker.configure(online === true, url) })
+  ipcMain.handle('mobile-clicker:cloudpub-connect', event => { requireOperator(event); return mobileClicker.connectCloudpub() })
+  ipcMain.handle('mobile-clicker:cloudpub-choose', async event => {
+    requireOperator(event)
+    const result = await dialog.showOpenDialog(getOperatorWindow()!, { title: t('Выберите программу CLOUDPUB'), properties: ['openFile'], filters: [{ name: 'CLOUDPUB', extensions: process.platform === 'win32' ? ['exe'] : ['*'] }] })
+    return result.canceled ? mobileClicker.status() : mobileClicker.connectCloudpub(result.filePaths[0])
+  })
+  ipcMain.handle('mobile-clicker:grant', (event, name: string, ids: string[] | null) => {
+    requireOperator(event)
+    if (ids !== null && (!Array.isArray(ids) || ids.some(id => !store.get().playlist.some(entry => entry.id === id && (entry.kind === 'pdf' || entry.kind === 'pptx'))))) throw Error(t('Выберите презентации из плейлиста'))
+    return mobileClicker.createGrant(name, ids)
+  })
+  ipcMain.handle('mobile-clicker:revoke', (event, id: string) => { requireOperator(event); return mobileClicker.revokeGrant(id) })
+  ipcMain.handle('mobile-clicker:update-grant', (event, id: string, ids: string[] | null) => {
+    requireOperator(event)
+    if (ids !== null && (!Array.isArray(ids) || ids.some(id => !store.get().playlist.some(entry => entry.id === id && (entry.kind === 'pdf' || entry.kind === 'pptx'))))) throw Error(t('Выберите презентации из плейлиста'))
+    return mobileClicker.updateGrant(id, ids)
+  })
+  ipcMain.handle('mobile-clicker:block', (event, id: string, blocked: boolean) => { requireOperator(event); return mobileClicker.blockClient(id, blocked === true) })
+  ipcMain.handle('mobile-clicker:approve-client', (event, id: string, ids: string[] | null) => {
+    requireOperator(event)
+    if (ids !== null && (!Array.isArray(ids) || ids.some(id => !store.get().playlist.some(entry => entry.id === id && (entry.kind === 'pdf' || entry.kind === 'pptx'))))) throw Error(t('Выберите презентации из плейлиста'))
+    return mobileClicker.approveClient(id, ids)
+  })
+  ipcMain.handle('mobile-clicker:guest-access', (event, open: boolean, ids: string[] | null) => {
+    requireOperator(event)
+    if (ids !== null && (!Array.isArray(ids) || ids.some(id => !store.get().playlist.some(entry => entry.id === id && (entry.kind === 'pdf' || entry.kind === 'pptx'))))) throw Error(t('Выберите презентации из плейлиста'))
+    return mobileClicker.setGuestAccess(open === true, ids)
+  })
+  ipcMain.handle('mobile-clicker:disconnect-client', (event, id: string) => { requireOperator(event); return mobileClicker.disconnectClient(id) })
+  ipcMain.handle('mobile-clicker:invitation', (event, id: string) => { requireOperator(event); return mobileClicker.invitation(id) })
   ipcMain.handle('mobile-clicker:reset', event => { requireOperator(event); return mobileClicker.resetLink() })
   ipcMain.handle('mobile-clicker:status', event => { requireOperator(event); return mobileClicker.status() })
   ipcMain.handle('mobile-clicker:qr', (event, index: number) => { requireOperator(event); return mobileClicker.qr(index) })
@@ -1033,6 +1075,18 @@ export function registerIpcHandlers(): void {
     return res.global
   })
 
+  ipcMain.handle('clicker:set-arrow-axis', (event, axis: unknown) => {
+    requireOperator(event)
+    if (axis !== 'horizontal' && axis !== 'vertical') throw Error('Invalid clicker arrow axis')
+    setClickerArrowAxis(axis)
+    const state = store.get()
+    const res = applyClickerShortcuts(state.clickerGlobal, state.clickerGlobalArrows)
+    const arrows = state.clickerGlobal ? res.arrows : state.clickerGlobalArrows
+    store.patch({ clickerArrowAxis: axis, clickerGlobal: res.global, clickerGlobalArrows: arrows })
+    setClickerGlobal(res.global); setClickerGlobalArrows(arrows)
+    return arrows
+  })
+
   ipcMain.handle('clicker:set-global-arrows', (_e, value: boolean) => {
     const v = Boolean(value)
     // Global mode off — just remember the intent, keys get grabbed when it turns on.
@@ -1067,14 +1121,14 @@ export function registerIpcHandlers(): void {
     return loadPreview(filePath)
   })
 
-  ipcMain.handle('preview:read', async (): Promise<{ bytes: Uint8Array; mime: string } | null> => {
+  ipcMain.handle('preview:read', async (): Promise<DeckFileData | null> => {
     const { path, kind, sha1 } = store.get().preview
     if (!path || kind === 'live') return null
     try {
       const readPath = kind === 'pptx' && sha1 ? cachedPdfPathFor(sha1) : path
-      const buf = await readFile(readPath)
       const mime = kind === 'pptx' ? 'application/pdf' : mimeOf(path)
-      return { bytes: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength), mime }
+      if (sharedPdfEnabled && mime === 'application/pdf' && sha1) return sharedPdfFile(readPath, sha1)
+      return readDeckFile(readPath, mime, `cuedeck-media://document/preview?v=${encodeURIComponent(sha1 ?? '')}`)
     } catch {
       return null
     }
@@ -1225,6 +1279,7 @@ export function registerIpcHandlers(): void {
       playlistId: state.currentPlaylistId,
       slideMedia: state.slideMedia,
       slideTransitions: state.slideTransitions ?? {},
+      slideNumbering: state.slideNumbering,
       video:
         state.fileKind === 'video'
           ? {
@@ -1253,6 +1308,7 @@ export function registerIpcHandlers(): void {
       currentPlaylistId: p.playlistId,
       slideMedia: p.slideMedia,
       slideTransitions: p.slideTransitions ?? {},
+      slideNumbering: p.slideNumbering,
       video,
       // Цикл берём у выдаваемой записи: ролик-заставка должен уйти в эфир
       // зациклённым сразу, без второго действия оператора.
@@ -1703,7 +1759,8 @@ export function registerIpcHandlers(): void {
 
   // Мониторы выходов под эфиром (живые снимки окон суфлёра/зала)
   ipcMain.handle('monitor:audience-size', (event) => {
-    if (event.sender !== getOperatorWindow()?.webContents) return { width: 1920, height: 1080 }
+    const operator = getOperatorWindow()
+    if (!operator || operator.isDestroyed() || event.sender !== operator.webContents) return { width: 1920, height: 1080 }
     const win = getActiveWindows().get('audience') ?? ghostWindow('audience')
     if (win && !win.isDestroyed()) {
       const [width, height] = win.getContentSize()
@@ -2400,6 +2457,7 @@ export function registerIpcHandlers(): void {
       pdfSha1: null,
       fileKind: null,
       totalSlides: 0,
+      slideNumbering: undefined,
       currentSlide: 1,
       notes: {},
       slideMedia: [],
@@ -2454,6 +2512,7 @@ export function registerIpcHandlers(): void {
           fileKind: null,
           sourceMuted: false,
           totalSlides: 0,
+          slideNumbering: undefined,
           currentSlide: 1,
           notes: {},
           slideMedia: [],

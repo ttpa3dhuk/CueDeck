@@ -4,6 +4,12 @@ import type { StreamSettings } from '../shared/types'
 
 // Роль окна — метка строк журнала, которые шлёт этот рендерер.
 const ROLE = new URLSearchParams(location.search).get('role') ?? 'unknown'
+ipcRenderer.on('pdf-frames:port', (event, metadata) => {
+  window.postMessage({ type: 'cuedeck-pdf-port', metadata }, '*', event.ports)
+})
+ipcRenderer.on('pdf-frames:reset', (_event, metadata) => {
+  window.postMessage({ type: 'cuedeck-pdf-reset', metadata }, '*')
+})
 
 ipcRenderer.on('program-mirror:port', (event, metadata) => {
   window.postMessage({ type: 'cuedeck-program-port', metadata }, '*', event.ports)
@@ -40,6 +46,11 @@ if (gpuApi) gpuApi.setSharedTextureReceiver(async ({ importedSharedTexture }, me
 })
 
 const api: PresenterApi = {
+  pdfFrames: {
+    connect: (requestId, clientId) => ipcRenderer.invoke('pdf-frames:connect', requestId, clientId),
+    describe: (id, page) => ipcRenderer.invoke('pdf-frames:describe', id, page),
+    stats: () => ipcRenderer.invoke('pdf-frames:stats'),
+  },
   gpuMirror: { ready: result => ipcRenderer.send('gpu-view:ready', result) },
   programMirror: {
     available: () => ipcRenderer.invoke('program-mirror:available'),
@@ -74,9 +85,21 @@ const api: PresenterApi = {
     next: () => ipcRenderer.invoke('clicker:next'),
     prev: () => ipcRenderer.invoke('clicker:prev'),
     setGlobal: (value) => ipcRenderer.invoke('clicker:set-global', Boolean(value)),
+    setArrowAxis: (value) => ipcRenderer.invoke('clicker:set-arrow-axis', value),
     setGlobalArrows: (value) => ipcRenderer.invoke('clicker:set-global-arrows', Boolean(value)),
   },
   mobileClicker: {
+    connectCloudpub: () => ipcRenderer.invoke('mobile-clicker:cloudpub-connect'),
+    chooseCloudpub: () => ipcRenderer.invoke('mobile-clicker:cloudpub-choose'),
+    configure: (online, url) => ipcRenderer.invoke('mobile-clicker:configure', online, url),
+    createGrant: (name, ids) => ipcRenderer.invoke('mobile-clicker:grant', name, ids),
+    revokeGrant: (id) => ipcRenderer.invoke('mobile-clicker:revoke', id),
+    updateGrant: (id, ids) => ipcRenderer.invoke('mobile-clicker:update-grant', id, ids),
+    blockClient: (id, blocked) => ipcRenderer.invoke('mobile-clicker:block', id, blocked),
+    approveClient: (id, ids) => ipcRenderer.invoke('mobile-clicker:approve-client', id, ids),
+    setGuestAccess: (open, ids) => ipcRenderer.invoke('mobile-clicker:guest-access', open, ids),
+    disconnectClient: (id) => ipcRenderer.invoke('mobile-clicker:disconnect-client', id),
+    invitation: (id) => ipcRenderer.invoke('mobile-clicker:invitation', id),
     resetLink: () => ipcRenderer.invoke('mobile-clicker:reset'),
     status: () => ipcRenderer.invoke('mobile-clicker:status'),
     qr: (index) => ipcRenderer.invoke('mobile-clicker:qr', index),
@@ -229,6 +252,8 @@ const api: PresenterApi = {
     status: () => ipcRenderer.invoke('syphon:status'),
     configure: (settings) => ipcRenderer.invoke('syphon:configure', settings),
   },
+  spoutGraphicsHelp: () => ipcRenderer.invoke('spout:graphics-help'),
+  openSpoutGraphicsSettings: () => ipcRenderer.invoke('spout:open-graphics-settings'),
   syphonPrompter: {
     status: () => ipcRenderer.invoke('syphon-prompter:status'),
     configure: (settings) => ipcRenderer.invoke('syphon-prompter:configure', settings),

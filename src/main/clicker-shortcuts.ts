@@ -3,7 +3,7 @@ type ShortcutRegistrar = {
   unregister(key: string): void
 }
 
-const KEYS = ['PageDown', 'PageUp', 'Right', 'Left'] as const
+const KEYS = ['PageDown', 'PageUp', 'Right', 'Left', 'Down', 'Up'] as const
 
 /** Системный перехват нужен вне окна оператора; внутри клавиши обрабатывает renderer. */
 export function createClickerShortcutManager(
@@ -13,13 +13,13 @@ export function createClickerShortcutManager(
   back: () => void,
 ): {
   suspend: () => void
-  apply: (global: boolean, arrows: boolean) => { global: boolean; arrows: boolean }
+  apply: (global: boolean, arrows: boolean, axis?: 'horizontal' | 'vertical') => { global: boolean; arrows: boolean }
 } {
   const suspend = (): void => {
     for (const key of KEYS) shortcuts.unregister(key)
   }
 
-  const apply = (global: boolean, arrows: boolean): { global: boolean; arrows: boolean } => {
+  const apply = (global: boolean, arrows: boolean, axis: 'horizontal' | 'vertical' = 'horizontal'): { global: boolean; arrows: boolean } => {
     suspend()
     if (!global) return { global: false, arrows: false }
 
@@ -32,10 +32,12 @@ export function createClickerShortcutManager(
 
     let okArrows = false
     if (arrows) {
-      okArrows = shortcuts.register('Right', forward) && shortcuts.register('Left', back)
+      const next = axis === 'vertical' ? 'Down' : 'Right'
+      const prev = axis === 'vertical' ? 'Up' : 'Left'
+      okArrows = shortcuts.register(next, forward) && shortcuts.register(prev, back)
       if (!okArrows) {
-        shortcuts.unregister('Right')
-        shortcuts.unregister('Left')
+        shortcuts.unregister(next)
+        shortcuts.unregister(prev)
       }
     }
     // Успех регистрации проверили, но в окне оператора клавиши нужны полям ввода.

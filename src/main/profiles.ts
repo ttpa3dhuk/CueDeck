@@ -73,6 +73,7 @@ function captureSettings(labels: { main: string | null; preview: string | null }
     autoAdvance: s.autoAdvance,
     clickerGlobal: s.clickerGlobal,
     clickerGlobalArrows: s.clickerGlobalArrows,
+    clickerArrowAxis: s.clickerArrowAxis,
     // Security is local to this machine; venue profiles must not enable/disable it.
     remote: (({ networkAuth: _auth, ...remote }) => remote)(getRemoteSettings()),
     midiInputs: getMidiInputs(),
@@ -119,6 +120,7 @@ async function applySettings(p: VenueProfileSettings, groups: readonly ProfileGr
   if (has('clicker')) {
     // Стрелки — намерение, запоминается и при выключенном глобальном режиме;
     // сам режим следом захватывает клавиши с учётом стрелок.
+    await call('clicker:set-arrow-axis', p.clickerArrowAxis)
     await call('clicker:set-global-arrows', p.clickerGlobalArrows)
     await call('clicker:set-global', p.clickerGlobal)
   }

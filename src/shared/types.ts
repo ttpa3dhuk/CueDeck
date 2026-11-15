@@ -298,6 +298,7 @@ export interface DeckState {
   /** Видео, вшитые в слайды (только PPTX; пусто для остальных форматов). */
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('./slide-numbering').SlideNumbering
 }
 
 export interface ProjectTransferStatus {
@@ -333,6 +334,7 @@ export interface AppState {
   /** Видео, вшитые в слайды программного PPTX (см. SlideMedia). */
   slideMedia: SlideMedia[]
   slideTransitions?: Record<number, number>
+  slideNumbering?: import('./slide-numbering').SlideNumbering
   materialSettings: import('./material-settings.js').MaterialSettings
   timer: TimerState
   /** Independent countdown over the audience feed; speaker timer is unaffected. */
@@ -456,6 +458,7 @@ export interface AppState {
    * every other app while active, so it's a separate opt-in.
    */
   clickerGlobalArrows: boolean
+  clickerArrowAxis: 'horizontal' | 'vertical'
   /**
    * Мониторы выходов под эфиром: живые снимки окон суфлёра и зала (~2 fps),
    * чтобы оператор видел, что реально ушло на внешние экраны — таймер,
@@ -914,6 +917,7 @@ export interface VenueProfileSettings {
   autoAdvance: boolean
   clickerGlobal: boolean
   clickerGlobalArrows: boolean
+  clickerArrowAxis: 'horizontal' | 'vertical'
   remote: RemoteSettings
   midiInputs: string[]
 }

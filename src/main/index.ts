@@ -1,3 +1,6 @@
+import { cachedPdfPathFor } from './pptx-converter.js'
+import { resolvePdfDocument } from './pdf-source.js'
+import { registerSharedPdfFrames, resolveSharedPdf } from './shared-pdf.js'
 import { setOperatorApplicationMenu } from './application-menu.js'
 import { registerTestScreenIpc } from './test-screen.js'
 import { registerAudienceOutputIpc } from './audience-output.js'
@@ -72,6 +75,7 @@ import {
   getTimerLoop,
   getClickerGlobal,
   getClickerGlobalArrows,
+  getClickerArrowAxis,
   getSpeakerMsgPresets,
   getTimerPresets,
   getTimerAdjustments,
@@ -121,6 +125,7 @@ protocol.registerSchemesAsPrivileged([
  */
 async function handleMediaRequest(request: Request): Promise<Response> {
   const corsHeaders: Record<string, string> = {
+    'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
     'Access-Control-Allow-Origin': process.env.ELECTRON_RENDERER_URL
       ? new URL(process.env.ELECTRON_RENDERER_URL).origin : 'null',
   }
@@ -130,7 +135,11 @@ async function handleMediaRequest(request: Request): Promise<Response> {
   const token = url.searchParams.get('v')
 
   let filePath: string | null = null
-  if (token && token !== state.pdfSha1 &&
+  if (url.hostname === 'pdf-source') {
+    filePath = await resolveSharedPdf(url)
+  } else if (url.hostname === 'document') {
+    filePath = resolvePdfDocument(url, { path: state.pdfPath, kind: state.fileKind, sha1: state.pdfSha1 }, state.preview, cachedPdfPathFor)
+  } else if (token && token !== state.pdfSha1 &&
     ((segments[0] === 'program' && segments.length === 1) ||
       (segments[0] === 'slide' && segments[1] === 'program' && segments.length === 3))) {
     let file: string | undefined
@@ -458,6 +467,8 @@ app.whenReady().then(async () => {
   if (await offerMacInstall()) return
 
   protocol.handle(MEDIA_SCHEME, handleMediaRequest)
+  // Internal frame-owner IPC is not exposed as a remote HTTP/OSC command.
+  registerSharedPdfFrames()
 
   // Allow microphone/output-device access so enumerateDevices() returns real
   // device labels and <video>.setSinkId() works (routing video sound to a
@@ -592,6 +603,7 @@ app.whenReady().then(async () => {
       const res = applyClickerShortcuts(getClickerGlobal(), getClickerGlobalArrows())
       return {
         clickerGlobal: res.global,
+        clickerArrowAxis: getClickerArrowAxis(),
         // Keep the stored arrows intent visible even while global mode is off.
         clickerGlobalArrows: res.global ? res.arrows : getClickerGlobalArrows(),
       }

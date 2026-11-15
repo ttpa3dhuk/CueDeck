@@ -5,7 +5,7 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'src/main/index.ts'), 'input-worker': resolve(__dirname, 'src/main/omt/input-worker.ts'),
+        input: { 'mobile-clicker-worker': resolve(__dirname, 'src/main/mobile-clicker-worker.ts'), index: resolve(__dirname, 'src/main/index.ts'), 'input-worker': resolve(__dirname, 'src/main/omt/input-worker.ts'),
           'presentation-preparation-worker': resolve(__dirname, 'src/main/presentation-preparation-worker.ts') },
         // Нативный модуль (FFI к libomt) — не бандлится, грузится из node_modules.
         external: ['koffi'],
@@ -15,7 +15,7 @@ export default defineConfig({
   preload: {
     build: {
       rollupOptions: {
-        input: resolve(__dirname, 'src/preload/index.ts'),
+        input: { index: resolve(__dirname, 'src/preload/index.ts'), 'pdf-owner': resolve(__dirname, 'src/preload/pdf-owner.ts') },
         output: {
           format: 'cjs',
           entryFileNames: '[name].cjs',
@@ -29,6 +29,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           presenter: resolve(__dirname, 'src/renderer/presenter/index.html'),
+          'pdf-owner': resolve(__dirname, 'src/renderer/pdf-owner/index.html'),
           audience: resolve(__dirname, 'src/renderer/audience/index.html'),
           'gpu-view': resolve(__dirname, 'src/renderer/gpu-view/index.html'),
           stream: resolve(__dirname, 'src/renderer/stream/index.html'),

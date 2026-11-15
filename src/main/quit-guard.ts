@@ -1,12 +1,13 @@
 import { app, BrowserWindow, dialog, globalShortcut } from 'electron'
 import { companionGoodbye } from './remote/companion-push.js'
 import { shutdownStream } from './stream/streamer.js'
-import { flushPendingWrites, saveProject } from './ipc.js'
+import { flushPendingWrites, saveProject, stopMobileClicker } from './ipc.js'
 import { markCleanExit } from './diag.js'
 import { finishSessionCleanly } from './session-lifecycle.js'
 import { t } from '../shared/i18n.js'
 import { isProjectTransferRunning } from './project-transfer.js'
 import { stopPresentationPreparations } from './presentation-preparation.js'
+import { stopSharedPdfFrames } from './shared-pdf.js'
 
 /**
  * Подтверждение при закрытии.
@@ -95,8 +96,10 @@ export async function requestQuit(opts: { relaunch?: boolean } = {}): Promise<vo
   await companionGoodbye()
   await stopPresentationPreparations()
   await flushPendingWrites()
+  await stopMobileClicker()
   finishSessionCleanly()
   markCleanExit()
+  stopSharedPdfFrames()
   if (relaunch) app.relaunch()
   app.exit(0)
 }

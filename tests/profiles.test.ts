@@ -14,6 +14,13 @@ import {
 } from '../src/main/profile-core'
 import { DEFAULT_REMOTE_SETTINGS, type VenueProfile } from '../src/shared/types'
 
+it('preserves the clicker arrow pair and defaults old profiles to horizontal', () => {
+  expect(sanitizeSettings({}).clickerArrowAxis).toBe('horizontal')
+  expect(sanitizeSettings({ clickerArrowAxis: 'invalid' }).clickerArrowAxis).toBe('horizontal')
+  expect(sanitizeSettings({ clickerArrowAxis: 'vertical' }).clickerArrowAxis).toBe('vertical')
+  expect(GROUP_KEYS.clicker).toContain('clickerArrowAxis')
+})
+
 const full = sanitizeSettings({
   layout: 'presenter-audience',
   audienceWindowed: true,
