@@ -346,6 +346,9 @@
           <button id="project-transfer-reveal" class="hidden" title="Показать готовый проект в папке">Показать</button>
         </div>
         <div class="bottombar-right">
+          <button id="global-clicker-toggle" type="button" aria-pressed="false">Глобальный кликер: выкл</button>
+          <div id="clicker-requests" class="hidden" role="region" aria-live="polite"></div>
+          <button id="mobile-clicker-pause" type="button" aria-pressed="true">Онлайн кликер: пауза</button>
           <button id="test-screen-active" class="test-screen-active hidden" title="Убрать тестовый экран и вернуть текущий материал"></button>
           <button id="settings-btn" class="icon-btn" title="Настройки: экраны, звук, клавиши, тема и язык, LibreOffice, внешнее управление, MIDI (Cmd+,)" aria-label="Настройки">⚙️</button>
           <button id="help-btn" class="icon-btn" title="Справка по клавишам (?)" aria-label="Справка">?</button>
@@ -732,18 +735,6 @@
               </div>
             </section>
             <section class="settings-section hidden" data-section="clicker">
-              <h3>Мобильный кликер</h3>
-              <label class="windowed-label"><input id="mobile-clicker-enabled" type="checkbox" /> <span>Включить кликер с телефона</span></label>
-              <p class="audio-hint">Телефон и компьютер должны быть в одной сети. Отсканируй QR-код камерой телефона: откроются кнопки листания, номер слайда и таймер спикера. Выключение временно блокирует кнопки, ссылка сохраняется и после перезапуска CueDeck. Сброс ссылки отключает ранее подключённые телефоны.</p>
-              <div id="mobile-clicker-details" class="hidden">
-                <div class="mobile-clicker-qr-wrap"><img id="mobile-clicker-qr" alt="QR-код мобильного кликера" width="200" height="200" /><span class="mobile-clicker-qr-brand" aria-hidden="true">QD</span></div>
-                <div class="mobile-clicker-actions">
-                  <select id="mobile-clicker-host" aria-label="Адрес мобильного кликера"></select>
-                  <button id="mobile-clicker-reset" type="button">Сбросить ссылку</button>
-                </div>
-                <input id="mobile-clicker-url" type="text" readonly aria-label="Ссылка мобильного кликера" />
-              </div>
-              <p id="mobile-clicker-error" class="audio-hint" role="status"></p>
               <h3>Кликеры и клавиатура</h3>
               <p class="audio-hint">Листание эфира, когда окно оператора неактивно.</p>
               <div class="live-field">
@@ -756,6 +747,47 @@
                     <span>⬅➡ Стрелки</span>
                   </label>
               </div>
+              <details id="online-clicker-settings"><summary>Онлайн кликер</summary><div class="online-clicker-settings-body">
+              <h3>Мобильный кликер</h3>
+              <label class="windowed-label"><input id="mobile-clicker-enabled" type="checkbox" /> <span>Включить кликер с телефона</span></label>
+              <p class="audio-hint">В локальном режиме подключите телефон к сети ноутбука. Онлайн режим через CLOUDPUB позволяет подключаться через интернет. Отсканируйте QR-код доступа камерой телефона. Пауза блокирует кнопки, сохраняя страницу и ссылку.</p>
+              <div id="mobile-clicker-details" class="hidden">
+                <div class="mobile-clicker-qr-wrap"><img id="mobile-clicker-qr" alt="QR-код мобильного кликера" width="200" height="200" /><span class="mobile-clicker-qr-brand" aria-hidden="true">QD</span></div>
+                <div class="mobile-clicker-actions">
+                  <select id="mobile-clicker-host" aria-label="Адрес мобильного кликера"></select>
+                  <button id="mobile-clicker-reset" type="button">Сбросить ссылку</button>
+                </div>
+                <input id="mobile-clicker-url" type="text" readonly aria-label="Ссылка мобильного кликера" />
+              </div>
+              <div class="mobile-access">
+                <label><input id="mobile-clicker-online" type="checkbox" /> Онлайн режим (CLOUDPUB)</label>
+                <button id="mobile-clicker-cloud-auto" type="button">Подключить CLOUDPUB автоматически</button>
+                <button id="mobile-clicker-cloud-choose" type="button">Указать программу CLOUDPUB…</button>
+                <p id="mobile-clicker-cloud-status" class="audio-hint" role="status"></p>
+                <label id="mobile-clicker-general-wrap" class="hidden">Общая ссылка<input id="mobile-clicker-general" type="url" readonly /></label>
+                <p class="audio-hint">При открытом гостевом доступе посетители подключаются автоматически. Иначе каждое подключение нужно разрешить в списке пользователей.</p>
+                <p class="audio-hint">CueDeck сам запускает локальный сервер кликера, создаёт его публикацию в установленном CLOUDPUB и проверяет внешний адрес. Откройте CLOUDPUB и войдите в аккаунт.</p>
+                <details><summary>Ручная настройка CLOUDPUB</summary><div class="cloudpub-manual-fields">
+                <label>HTTPS-адрес CLOUDPUB <input id="mobile-clicker-public" type="url" placeholder="https://example.cloudpub.ru" /></label>
+                <p id="mobile-clicker-target" class="audio-hint"></p>
+                <p class="audio-hint">Для ручной настройки опубликуйте указанный HTTP-адрес в CLOUDPUB и вставьте полученный HTTPS-адрес. Общая локальная ссылка в онлайн режиме отключена.</p>
+                <button id="mobile-clicker-cloud-save" type="button">Применить онлайн режим</button>
+                </div></details>
+                <label>Имя пользователя / ссылки (необязательно) <input id="mobile-clicker-name" maxlength="80" placeholder="Спикер" /></label>
+                <label><input id="mobile-clicker-all" type="checkbox" checked /> Все презентации (включая добавленные позже)</label>
+                <div id="mobile-clicker-presentations"></div>
+                <label><input id="mobile-clicker-guest-open" type="checkbox" /> Гостевой доступ без подтверждения</label>
+                <button id="mobile-clicker-guest-apply" type="button">Применить выбранные права для гостей</button>
+                <p id="mobile-clicker-guest-status" class="audio-hint" role="status"></p>
+                <button id="mobile-clicker-create" type="button">Создать ссылку и QR-код</button>
+                <p class="audio-hint">Персональные QR-коды требуют разрешения оператора. QR-код — секрет доступа: передавайте его лично. Для изменения прав выберите презентации выше и нажмите «Применить выбранные права» у нужной ссылки.</p>
+                <div id="mobile-clicker-grants"></div>
+                <div id="mobile-clicker-clients"></div>
+                <button id="mobile-clicker-refresh" type="button">Обновить подключения</button>
+                <div id="mobile-clicker-invite" class="hidden"><img id="mobile-clicker-invite-qr" width="240" height="240" alt="QR-код доступа" /><input id="mobile-clicker-invite-url" readonly aria-label="Ссылка доступа" /></div>
+              </div>
+              <p id="mobile-clicker-error" class="audio-hint" role="status"></p>
+              </div></details>
             </section>
             <section class="settings-section hidden" data-section="audio">
               <div class="live-field">

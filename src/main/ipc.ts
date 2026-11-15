@@ -12,7 +12,9 @@ import { togglePreviewSourceMute } from '../shared/source-audio.js'
 import { createClickerNavigation } from './clicker-navigation.js'
 import { mobileClickerStorage } from './mobile-clicker-storage.js'
 import { defaultSpeakerTimerStyle } from '../shared/speaker-timer-style.js'
-import { MobileClicker } from './mobile-clicker.js'
+import { MobileClickerService } from './mobile-clicker-service.js'
+import { CloudpubTunnel, clickerComputerName } from './cloudpub.js'
+import { cloudpubStore } from './cloudpub-storage.js'
 import { programOverlay } from '../shared/program-overlay.js'
 import { timerView } from '../renderer/shared/timer.js'
 import { audienceTimerConfig, createAudienceTimer } from '../shared/audience-timer.js'
@@ -714,14 +716,15 @@ function programSeekBy(deltaSec: number): void {
  * a key; a failed pair is fully released so we never end up half-on.
  */
 const clickerNavigation = createClickerNavigation(() => store.get().fileKind, programNext, programPrev)
-const mobileClicker = new MobileClicker(() => {
+const mobileClicker = new MobileClickerService(() => {
   const state = store.get()
-  return { current: state.currentSlide, total: state.totalSlides,
+  return { presentationId: state.currentPlaylistId, current: state.currentSlide, total: state.totalSlides,
     remaining: Math.max(0, state.totalSlides - state.currentSlide),
     canNavigate: Boolean(state.pdfPath) && (state.fileKind === 'pdf' || state.fileKind === 'pptx'),
     timer: timerView(state.timer, state.timerMode) }
-}, direction => { log.info('clicker:mobile', direction); return clickerNavigation[direction]() }, undefined, undefined, mobileClickerStorage)
-app.once('will-quit', () => { void mobileClicker.dispose() })
+}, direction => { log.info('clicker:mobile', direction); return clickerNavigation[direction]() }, mobileClickerStorage,
+  new CloudpubTunnel(cloudpubStore, undefined, undefined, !app.isPackaged && process.env.CUEDECK_QA_MACHINE_ID ? () => clickerComputerName(process.env.CUEDECK_QA_MACHINE_ID!) : undefined))
+app.once('will-quit', event => { event.preventDefault(); void mobileClicker.dispose().finally(() => app.exit()) })
 const clickerShortcuts = createClickerShortcutManager(
   globalShortcut,
   () => Boolean(getOperatorWindow()?.isFocused()),
@@ -997,6 +1000,37 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('nav:prev', () => programPrev())
   ipcMain.handle('clicker:next', () => clickerNavigation.next())
   ipcMain.handle('clicker:prev', () => clickerNavigation.prev())
+  ipcMain.handle('mobile-clicker:configure', (event, online: boolean, url: string) => { requireOperator(event); if (typeof url !== 'string' || url.length > 2048) throw Error('Invalid URL'); return mobileClicker.configure(online === true, url) })
+  ipcMain.handle('mobile-clicker:cloudpub-connect', event => { requireOperator(event); return mobileClicker.connectCloudpub() })
+  ipcMain.handle('mobile-clicker:cloudpub-choose', async event => {
+    requireOperator(event)
+    const result = await dialog.showOpenDialog(getOperatorWindow()!, { title: t('Выберите программу CLOUDPUB'), properties: ['openFile'], filters: [{ name: 'CLOUDPUB', extensions: process.platform === 'win32' ? ['exe'] : ['*'] }] })
+    return result.canceled ? mobileClicker.status() : mobileClicker.connectCloudpub(result.filePaths[0])
+  })
+  ipcMain.handle('mobile-clicker:grant', (event, name: string, ids: string[] | null) => {
+    requireOperator(event)
+    if (ids !== null && (!Array.isArray(ids) || ids.some(id => !store.get().playlist.some(entry => entry.id === id && (entry.kind === 'pdf' || entry.kind === 'pptx'))))) throw Error(t('Выберите презентации из плейлиста'))
+    return mobileClicker.createGrant(name, ids)
+  })
+  ipcMain.handle('mobile-clicker:revoke', (event, id: string) => { requireOperator(event); return mobileClicker.revokeGrant(id) })
+  ipcMain.handle('mobile-clicker:update-grant', (event, id: string, ids: string[] | null) => {
+    requireOperator(event)
+    if (ids !== null && (!Array.isArray(ids) || ids.some(id => !store.get().playlist.some(entry => entry.id === id && (entry.kind === 'pdf' || entry.kind === 'pptx'))))) throw Error(t('Выберите презентации из плейлиста'))
+    return mobileClicker.updateGrant(id, ids)
+  })
+  ipcMain.handle('mobile-clicker:block', (event, id: string, blocked: boolean) => { requireOperator(event); return mobileClicker.blockClient(id, blocked === true) })
+  ipcMain.handle('mobile-clicker:approve-client', (event, id: string, ids: string[] | null) => {
+    requireOperator(event)
+    if (ids !== null && (!Array.isArray(ids) || ids.some(id => !store.get().playlist.some(entry => entry.id === id && (entry.kind === 'pdf' || entry.kind === 'pptx'))))) throw Error(t('Выберите презентации из плейлиста'))
+    return mobileClicker.approveClient(id, ids)
+  })
+  ipcMain.handle('mobile-clicker:guest-access', (event, open: boolean, ids: string[] | null) => {
+    requireOperator(event)
+    if (ids !== null && (!Array.isArray(ids) || ids.some(id => !store.get().playlist.some(entry => entry.id === id && (entry.kind === 'pdf' || entry.kind === 'pptx'))))) throw Error(t('Выберите презентации из плейлиста'))
+    return mobileClicker.setGuestAccess(open === true, ids)
+  })
+  ipcMain.handle('mobile-clicker:disconnect-client', (event, id: string) => { requireOperator(event); return mobileClicker.disconnectClient(id) })
+  ipcMain.handle('mobile-clicker:invitation', (event, id: string) => { requireOperator(event); return mobileClicker.invitation(id) })
   ipcMain.handle('mobile-clicker:reset', event => { requireOperator(event); return mobileClicker.resetLink() })
   ipcMain.handle('mobile-clicker:status', event => { requireOperator(event); return mobileClicker.status() })
   ipcMain.handle('mobile-clicker:qr', (event, index: number) => { requireOperator(event); return mobileClicker.qr(index) })

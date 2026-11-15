@@ -11,6 +11,7 @@ TEST-CHECKLIST.md
 RUN.command
 generated/presentation/
 generated/youtube/
+/generated/
 
 # User content — never commit presentations or notes
 resources/private-regression/

@@ -103,6 +103,17 @@ export interface PresenterApi {
     read(): Promise<{ bytes: Uint8Array; mime: string } | null>
   }
   mobileClicker: {
+    connectCloudpub(): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    chooseCloudpub(): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    configure(online: boolean, url: string): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    createGrant(name: string, ids: string[] | null): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    revokeGrant(id: string): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    updateGrant(id: string, ids: string[] | null): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    blockClient(id: string, blocked: boolean): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    approveClient(id: string, ids: string[] | null): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    setGuestAccess(open: boolean, ids: string[] | null): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    disconnectClient(id: string): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
+    invitation(id: string): Promise<import('../shared/mobile-clicker').ClickerInvitation>
     resetLink(): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
     status(): Promise<import('../shared/mobile-clicker').MobileClickerStatus>
     qr(index: number): Promise<string | null>
