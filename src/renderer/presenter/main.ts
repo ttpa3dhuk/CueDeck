@@ -12,7 +12,7 @@ import { FADE_MAX_MS, sanitizeTakeFadeMs } from '../../shared/take-transition'
 import { nextPlaylistFolderName, type PlaylistInsertPosition } from '../../shared/playlist-folders'
 import { initBus, getState, subscribe } from '../shared/bus'
 import { PreparationProgress } from '../shared/preparation-progress'
-import { loadDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-loader'
+import { loadDocument, clearDocument, renderPageTo, prerender, totalPages, PdfLoader } from '../shared/pdf-frame-client'
 import { remainingMs, startTick, timerView, type TimerView } from '../shared/timer'
 import {
   applySinkId,
@@ -572,6 +572,7 @@ function applyPreviewLive(state: AppState): void {
 }
 
 async function loadCurrentFile(): Promise<void> {
+  clearDocument()
   const generation = ++programLoadGeneration
   const state = getState()
   const stale = (): boolean => generation !== programLoadGeneration || getState().pdfPath !== state.pdfPath
@@ -946,6 +947,7 @@ function unloadPreviewVideo(): void {
 }
 
 async function loadPreviewFile(): Promise<void> {
+  previewLoader?.clearDocument()
   if (!previewLoader || !previewVideo || !previewCanvas || !previewImage || !previewPlaceholder) return
   const p = getState().preview
   disposePreviewImage()
@@ -6645,6 +6647,11 @@ async function bootstrap(): Promise<void> {
   deckSizeObserver.observe(currentCanvas.parentElement!)
   deckSizeObserver.observe(nextCanvas.parentElement!)
 
+  window.addEventListener('cuedeck-pdf-recovered', () => {
+    const state = getState()
+    if (state.fileKind === 'pdf' || state.fileKind === 'pptx') void loadCurrentFile().catch(error => window.api.diag.log('error', 'PDF recovery failed', String(error)))
+    if (isOperator && (state.preview.kind === 'pdf' || state.preview.kind === 'pptx')) void loadPreviewFile().catch(() => undefined)
+  })
   window.addEventListener('resize', () => {
     const kind = getState().fileKind
     if (kind !== 'image' && kind !== 'video' && kind !== null) {

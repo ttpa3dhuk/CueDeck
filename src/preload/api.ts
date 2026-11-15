@@ -98,6 +98,7 @@ export type {
 export type Unsubscribe = () => void
 
 export interface PresenterApi {
+  pdfFrames: import('../shared/pdf-frames').PdfFramesApi
   programOverlay: {
     set(config: import('../shared/program-overlay').ProgramOverlayConfig): Promise<void>
     chooseImage(): Promise<string | null>

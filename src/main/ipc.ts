@@ -1,4 +1,5 @@
 import { readDeckFile } from './pdf-source.js'
+import { sharedPdfEnabled, sharedPdfFile } from './shared-pdf.js'
 import type { DeckFileData } from '../shared/pdf-source.js'
 import { hasLastSession, listSessionBackups } from './session-files.js'
 import { timerFont } from '../shared/timer-font.js'
@@ -969,6 +970,7 @@ export function registerIpcHandlers(): void {
       const readPath =
         fileKind === 'pptx' && pdfSha1 ? cachedPdfPathFor(pdfSha1) : pdfPath
       const mime = fileKind === 'pptx' ? 'application/pdf' : mimeOf(pdfPath)
+      if (sharedPdfEnabled && mime === 'application/pdf' && pdfSha1) return sharedPdfFile(readPath, pdfSha1)
       return readDeckFile(readPath, mime, `cuedeck-media://document/program?v=${encodeURIComponent(pdfSha1 ?? '')}`)
     } catch {
       return null
@@ -1070,6 +1072,7 @@ export function registerIpcHandlers(): void {
     try {
       const readPath = kind === 'pptx' && sha1 ? cachedPdfPathFor(sha1) : path
       const mime = kind === 'pptx' ? 'application/pdf' : mimeOf(path)
+      if (sharedPdfEnabled && mime === 'application/pdf' && sha1) return sharedPdfFile(readPath, sha1)
       return readDeckFile(readPath, mime, `cuedeck-media://document/preview?v=${encodeURIComponent(sha1 ?? '')}`)
     } catch {
       return null
@@ -1699,7 +1702,8 @@ export function registerIpcHandlers(): void {
 
   // Мониторы выходов под эфиром (живые снимки окон суфлёра/зала)
   ipcMain.handle('monitor:audience-size', (event) => {
-    if (event.sender !== getOperatorWindow()?.webContents) return { width: 1920, height: 1080 }
+    const operator = getOperatorWindow()
+    if (!operator || operator.isDestroyed() || event.sender !== operator.webContents) return { width: 1920, height: 1080 }
     const win = getActiveWindows().get('audience') ?? ghostWindow('audience')
     if (win && !win.isDestroyed()) {
       const [width, height] = win.getContentSize()
