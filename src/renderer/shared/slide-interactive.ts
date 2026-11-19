@@ -1,7 +1,7 @@
+import { paintComposition, sprite, invalidateComposition } from './animation-compositor'
 import type { AppState, SlideInteractiveScene } from '../../shared/types'
 import { slideActorAt } from '../../shared/slide-triggers'
-import { PdfLoader } from './animation-frame-loader'
-import { renderForegroundPair } from './slide-video-foreground'
+import { AnimationFrames as PdfLoader, renderForegroundPair } from './animation-client'
 import { placeSlideOverlay } from './video'
 
 const fullSlide = { x: 0, y: 0, w: 1, h: 1 }
@@ -22,6 +22,7 @@ export class SlideInteractive {
     this.raf = undefined
     const request = this.request
     if (!request) return
+    invalidateComposition(this.layer)
     request.abort.abort()
     for (const canvas of [request.base, ...request.layers]) if (canvas) canvas.width = canvas.height = 0
     this.request = undefined
@@ -51,10 +52,8 @@ export class SlideInteractive {
     const request = this.request
     if (!request.base || request.layers.length !== scene.layers.length) return
     const { width: w, height: h } = request.base
-    if (this.layer.width !== w || this.layer.height !== h) { this.layer.width = w; this.layer.height = h }
-    const ctx = this.layer.getContext('2d')!
-    ctx.drawImage(request.base, 0, 0)
-    const now = Date.now()
+    const items = [sprite(request.base)]
+    const now = Math.floor(Date.now() / (1000/60)) * (1000/60)
     let moving = false
     const opacity: Record<string, number> = {}
     scene.layers.forEach((layer, index) => {
@@ -62,10 +61,9 @@ export class SlideInteractive {
       moving ||= playing
       if (layer.shape) opacity[layer.shape] = Math.round(value.opacity * 1000) / 1000
       if (!value.opacity) return
-      ctx.save()
-      ctx.globalAlpha = value.opacity
+      const matrix = new DOMMatrix()
       if (active) {
-        ctx.translate(value.x * w, value.y * h)
+        matrix.translateSelf(value.x * w, value.y * h)
         if (active.rotations?.length) {
           const local = elapsed % active.durationMs
           const next = active.rotations.findIndex(point => point.timeMs > local)
@@ -73,16 +71,16 @@ export class SlideInteractive {
             const a = active.rotations[next - 1], b = active.rotations[next]
             const { x, y } = layer.rect
             const cx = (x + layer.rect.w / 2) * w, cy = (y + layer.rect.h / 2) * h
-            ctx.translate(cx, cy)
-            ctx.rotate(interpolate(a.degrees, b.degrees, (local - a.timeMs) / (b.timeMs - a.timeMs)) * Math.PI / 180)
-            ctx.translate(-cx, -cy)
+            matrix.translateSelf(cx, cy)
+            matrix.rotateSelf(interpolate(a.degrees, b.degrees, (local - a.timeMs) / (b.timeMs - a.timeMs)))
+            matrix.translateSelf(-cx, -cy)
           }
         }
       }
       const { x, y, w: width, h: height } = layer.rect
-      ctx.drawImage(request.layers[index], x * w, y * h, width * w, height * h)
-      ctx.restore()
+      items.push(sprite(request.layers[index],value.opacity,[matrix.a,matrix.b,matrix.c,matrix.d,matrix.e,matrix.f],[x*w,y*h,width*w,height*h]))
     })
+    paintComposition(this.layer,w,h,items)
     this.layer.dataset.interactive = moving ? 'playing' : 'ready'
     this.layer.dataset.actors = JSON.stringify(opacity)
     placeSlideOverlay(this.layer, this.reference, fullSlide)
@@ -97,10 +95,8 @@ export class SlideInteractive {
     const loader = new PdfLoader()
     const { signal } = request.abort
     try {
-      const bytes = await window.api.pptx.readAnimationFrames(scene.file, sha)
-      if (signal.aborted) return
-      if (!bytes || !await loader.loadDocument(bytes)) throw new Error('Interactive slide frames unavailable')
-      const base = await loader.renderRegion(scene.firstPage, fullSlide, width, signal)
+      if (!await loader.open(scene.file, sha, signal)) return
+      const base = await loader.renderRegion(scene.firstPage, fullSlide, loader.shared ? 1280 : width, signal)
       if (signal.aborted) { if (base) base.width = base.height = 0; return }
       if (!base) throw new Error('Interactive slide background unavailable')
       request.base = base

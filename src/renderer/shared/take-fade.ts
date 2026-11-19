@@ -1,5 +1,5 @@
 import { pushOffset, type PptxSlideTransition } from '../../shared/pptx-transition'
-import { PdfLoader } from './animation-frame-loader'
+import { AnimationFrames as PdfLoader } from './animation-client'
 import { FADE_MAX_MS, type TakeTransition } from '../../shared/take-transition'
 import { canvasContentBox, paddingBox, type ContentBox } from './element-box'
 
@@ -57,19 +57,16 @@ export class TakeFade {
     cache.promise=(async()=>{
       const loader=cache.loader, signal=cache.abort.signal
       try {
-        const bytes=await window.api.pptx.readAnimationFrames(build.framesFile!,sha)
-        if(signal.aborted) return []
-        if(!bytes) throw new Error('Animation PDF unavailable')
-        if(!await loader.loadDocument(bytes)) return []
+        if(!await loader.open(build.framesFile!, sha, signal)) return []
         if(signal.aborted) return []
         if(loader.totalPages()!==build.frameCount || build.frameCount!>31 || build.frameCount!<1) throw new Error('Animation PDF count mismatch')
-        const page=await loader.getDocument()!.getPage(1), base=page.getViewport({scale:1})
+        const base=loader.info!
         const dpr=Math.min(window.devicePixelRatio||1,2), r=build.rect
         if(![r.x,r.y,r.w,r.h].every(Number.isFinite)||r.w<=0||r.h<=0)throw new Error('Animation bounds invalid')
         // Budget the whole sequence, keeping the authored crop and timing. Only
         // oversized sequences lower raster resolution; current crops fit unchanged.
         const maxWidth=Math.max(1,Math.floor(Math.sqrt(NATIVE_FRAME_BYTES/(4*build.frameCount!*r.w*r.h*(base.height/base.width))))-4)
-        const renderWidth=Math.min(width,maxWidth/dpr)
+        const renderWidth=loader.shared ? Math.min(1920,maxWidth) : Math.min(width,maxWidth/dpr)
         let bytesUsed=0
         for(let page=1;page<=build.frameCount!;page++) {
           if(signal.aborted || this.nativeCache!==cache) return []

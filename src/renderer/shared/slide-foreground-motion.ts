@@ -1,3 +1,4 @@
+import { paintComposition, sprite } from './animation-compositor'
 import type { SlideForegroundActor, SlideForegroundMotion, SlideForegroundStep } from '../../shared/types'
 
 export interface RasterMotion {
@@ -28,13 +29,7 @@ function rotationAt(actor: SlideForegroundStep, time: number): number {
 
 export function drawForegroundMotion(layer: HTMLCanvasElement, stage: RasterMotion, elapsed: number): void {
   const { width, height } = stage.base
-  if (layer.width !== width || layer.height !== height) {
-    layer.width = width
-    layer.height = height
-  }
-  const ctx = layer.getContext('2d')!
-  ctx.clearRect(0, 0, width, height)
-  ctx.drawImage(stage.base, 0, 0)
+  const items = [sprite(stage.base)]
   for (const { motion, source } of stage.actors) {
     let step: SlideForegroundStep = motion
     for (const next of motion.following ?? []) {
@@ -47,14 +42,14 @@ export function drawForegroundMotion(layer: HTMLCanvasElement, stage: RasterMoti
     // Delayed fly-in actors must stay invisible until their own build begins.
     const entering = step.from.opacity === 0 || (startingOffSlide && step.to.x === 0 && step.to.y === 0)
     if (local < 0 && entering) continue
-    ctx.save()
-    ctx.globalAlpha = mix(step.from.opacity, step.to.opacity, progress)
     const x = motion.pivot.x * width, y = motion.pivot.y * height
-    ctx.translate(x + mix(step.from.x, step.to.x, progress) * width, y + mix(step.from.y, step.to.y, progress) * height)
-    ctx.rotate(rotationAt(step, Math.max(0, local)) * Math.PI / 180)
-    ctx.drawImage(source, motion.rect.x * width - x, motion.rect.y * height - y, motion.rect.w * width, motion.rect.h * height)
-    ctx.restore()
+    const angle = rotationAt(step, Math.max(0, local)) * Math.PI / 180
+    const c=Math.cos(angle), s=Math.sin(angle)
+    items.push(sprite(source,mix(step.from.opacity,step.to.opacity,progress),
+      [c,s,-s,c,x+mix(step.from.x,step.to.x,progress)*width,y+mix(step.from.y,step.to.y,progress)*height],
+      [motion.rect.x*width-x,motion.rect.y*height-y,motion.rect.w*width,motion.rect.h*height]))
   }
+  paintComposition(layer,width,height,items)
 }
 
 export function releaseForegroundMotion(stage?: RasterMotion): void {

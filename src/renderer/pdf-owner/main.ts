@@ -1,9 +1,11 @@
+import { animationFrame, composeFrame, animationStats, clearAnimations } from './animation-frames'
 import { FramePortServer, type FramePort } from '../../../packages/render-core/src/frame-port'
 import { createPdfFramePrototype } from '../shared/pdf-frame-prototype'
 import type { PdfOwnerCommand, PdfOwnerReply } from '../../shared/pdf-frames'
 import type { RenderDocumentInfo } from '../../../packages/render-core/src/kernel'
 
 declare global { interface Window { pdfOwner: {
+  animationBytes(file: string, sha: string): Promise<Uint8Array | null>
   ready(): void
   reply(value: PdfOwnerReply): void
   onCommand(callback: (command: PdfOwnerCommand) => void): void
@@ -24,7 +26,10 @@ let tail = Promise.resolve()
 let documents: RenderDocumentInfo[] = []
 async function handle(command: PdfOwnerCommand): Promise<unknown> {
   switch (command.type) {
+    case 'compose': return composeFrame(command.asset,command.scene)
+    case 'animation': return animationFrame(command.asset, command.region)
     case 'sync': {
+      clearAnimations(command.animationSha)
       const active = new Set(command.sources.map(source => source.id))
       server.updateDocuments(documents.filter(doc => active.has(doc.id)))
       documents = await owner.sync(command.sources)
@@ -36,7 +41,7 @@ async function handle(command: PdfOwnerCommand): Promise<unknown> {
       return command.page === undefined ? doc : { ...doc, ...await owner.backend.pageInfo(command.id, command.page) }
     }
     case 'detach': server.detach(command.id); return null
-    case 'stats': return { backend: owner.backend.stats, cache: owner.frames.stats,
+    case 'stats': return { animation: animationStats, backend: owner.backend.stats, cache: owner.frames.stats,
       residentBytes: owner.frames.residentBytes, transport: server.stats, inFlightBytes: server.inFlightBytes }
   }
 }

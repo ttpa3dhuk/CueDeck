@@ -392,7 +392,7 @@ function updateMediaOverlay(state: AppState): void {
   }
   mediaOverlay.volume = m.volume ?? 1
   placeSlideOverlay(mediaOverlay, currentCanvas, m.rect, m.crop)
-  const foregroundReady = videoForeground.update(m, state.pdfSha1, Boolean(state.slideMenuOpen), state.video.anchorAt, state.slideMenuOpenedAt, takeFade.active(state.takeTransition))
+  const foregroundReady = videoForeground.update(m, state.pdfSha1, Boolean(state.slideMenuOpen), state.video.anchorAt, state.slideMenuOpenedAt, takeFade.active(state.takeTransition), state.takeTransition?.durationMs ?? 0)
   mediaOverlay.classList.toggle('slide-video-wait-foreground', !foregroundReady)
   programVideoCanvas(mediaOverlay).classList.toggle('slide-video-wait-foreground', !foregroundReady)
   mediaOverlay.classList.remove('hidden')

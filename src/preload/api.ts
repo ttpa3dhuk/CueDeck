@@ -448,6 +448,8 @@ export interface PresenterApi {
     clickShape(sha: string, slide: number, shape: string): Promise<void>
     runTrigger(sha: string, slide: number, id: string, takeId?: string): Promise<void>
     showMenu(sha: string, slide: number): Promise<void>
+    composeAnimation(asset: import('../shared/pdf-frames').AnimationAsset, scene: import('../shared/pdf-frames').AnimationComposition): Promise<Uint8Array>
+    sharedAnimation?: (asset: import('../shared/pdf-frames').AnimationAsset, region?: import('../shared/pdf-frames').AnimationRegion) => Promise<import('../shared/pdf-frames').AnimationInfo | Uint8Array>
     readAnimationFrames(file: string, sha: string): Promise<Uint8Array | null>
     backend(): Promise<'libreoffice' | 'powerpoint-static'>
     setBackend(backend: 'libreoffice' | 'powerpoint-static'): Promise<void>

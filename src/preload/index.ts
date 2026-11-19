@@ -393,6 +393,8 @@ const api: PresenterApi = {
     clickShape: (sha, slide, shape) => ipcRenderer.invoke('pptx:click-shape', sha, slide, shape),
     runTrigger: (sha, slide, id, takeId) => ipcRenderer.invoke('pptx:run-trigger', sha, slide, id, takeId),
     showMenu: (sha, slide) => ipcRenderer.invoke('pptx:show-menu', sha, slide),
+    composeAnimation: (asset,scene) => ipcRenderer.invoke('pdf-frames:compose',asset,scene),
+    sharedAnimation: process.env.CUEDECK_SHARED_PDF === '0' ? undefined : (asset, region) => ipcRenderer.invoke('pdf-frames:animation', asset, region),
     readAnimationFrames: (file, sha) => ipcRenderer.invoke('pptx:read-animation', file, sha),
     readGif: (file, sha, deck) => ipcRenderer.invoke('pptx:read-gif', file, sha, deck),
     backend: () => ipcRenderer.invoke('pptx:backend'),

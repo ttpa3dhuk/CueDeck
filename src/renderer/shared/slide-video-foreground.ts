@@ -1,23 +1,14 @@
+import { invalidateComposition } from './animation-compositor'
 import { drawForegroundMotion, rasterMotion, releaseForegroundMotion, type RasterMotion } from './slide-foreground-motion'
 import type { SlideForegroundMotion, SlideMedia, SlideMediaRect, SlideVideoForeground as ForegroundScene } from '../../shared/types'
 import { t } from '../../shared/i18n'
 import { SlideLinkButtons } from './slide-link-buttons'
-import { PdfLoader } from './animation-frame-loader'
+import { AnimationFrames as PdfLoader, renderForegroundPair } from './animation-client'
 import { placeSlideOverlay } from './video'
 
 const fullSlide = { x: 0, y: 0, w: 1, h: 1 }
 
-/** Recover the foreground from two PowerPoint renders with known backgrounds. */
-export function recoverForeground(black: Uint8ClampedArray, white: Uint8ClampedArray): void {
-  for (let i = 0; i < black.length; i += 4) {
-    const alpha = 255 - Math.round((white[i] - black[i] + white[i + 1] - black[i + 1] + white[i + 2] - black[i + 2]) / 3)
-    black[i + 3] = alpha
-    if (alpha > 0 && alpha < 255) {
-      for (let channel = 0; channel < 3; channel++) black[i + channel] *= 255 / alpha
-    }
-  }
-}
-
+export { recoverForeground } from './animation-foreground'
 export class SlideVideoForeground {
   readonly layer = document.createElement('canvas')
   private buttons: SlideLinkButtons
@@ -32,7 +23,6 @@ export class SlideVideoForeground {
     entryMotion?: RasterMotion
     menuMotion?: RasterMotion
     entryStarted?: number
-    menuStarted?: number
     motionLoading: boolean
     menuMotionSettled?: boolean
     raf?: number
@@ -48,6 +38,7 @@ export class SlideVideoForeground {
 
   clear(): void {
     if (!this.request) return
+    invalidateComposition(this.layer)
     this.request.controller.abort()
     window.clearTimeout(this.request.buttonTimer)
     if (this.request.raf !== undefined) window.cancelAnimationFrame(this.request.raf)
@@ -60,7 +51,7 @@ export class SlideVideoForeground {
     this.buttons.update([])
   }
 
-  update(media: SlideMedia | undefined, sha: string | null, open: boolean, anchor: number | null, menuOpenedAt?: number, entering = false): boolean {
+  update(media: SlideMedia | undefined, sha: string | null, open: boolean, anchor: number | null, menuOpenedAt?: number, entering = false, transitionMs = 0): boolean {
     const scene = media?.foreground
     if (!media || !scene || !sha) { this.clear(); return true }
     const menuOpen = scene.kind === 'menu' && open
@@ -86,11 +77,11 @@ export class SlideVideoForeground {
     const hold = entering && !menuOpen && request.entryStarted === undefined
     let moving = false
     if (motion) {
-      const now = performance.now()
-      const started = hold ? now : menuOpen ? (request.menuStarted ??= now) : (request.entryStarted ??= now)
-      const elapsed = now - started
+      const now = Date.now()
+      const started = hold ? now : menuOpen ? (menuOpenedAt ?? now) : (request.entryStarted ??= (anchor ?? now) + transitionMs)
+      const elapsed = Math.max(0, now - started)
       if (elapsed < motion.duration || motion.repeating) {
-        drawForegroundMotion(this.layer, motion, elapsed)
+        drawForegroundMotion(this.layer, motion, Math.floor(elapsed / (1000/60)) * (1000/60))
         request.shown = undefined
         moving = true
         if (!hold && request.raf === undefined) request.raf = requestAnimationFrame(() => {
@@ -102,6 +93,7 @@ export class SlideVideoForeground {
     if (!moving) {
       if (!frame || request.motionLoading) return Boolean(request.shown)
       if (request.shown !== frame) {
+        invalidateComposition(this.layer)
         this.layer.width = frame.width
         this.layer.height = frame.height
         this.layer.getContext('2d')!.drawImage(frame, 0, 0)
@@ -138,8 +130,7 @@ export class SlideVideoForeground {
     const loader = new PdfLoader()
     const { signal } = request.controller
     try {
-      const bytes = await window.api.pptx.readAnimationFrames(scene.file, sha)
-      if (signal.aborted || !bytes || !await loader.loadDocument(bytes)) return
+      if (!await loader.open(scene.file, sha, signal)) return
       if (!menuFirst && scene.motion?.entry) {
         request.entryMotion = await this.loadMotion(loader, scene.motion.entry, width, signal)
         request.motionLoading = false
@@ -187,25 +178,4 @@ export class SlideVideoForeground {
     }
   }
 
-}
-
-export async function renderForegroundPair(loader: PdfLoader, page: number, width: number, signal: AbortSignal, region: SlideMediaRect = fullSlide): Promise<HTMLCanvasElement | undefined> {
-  const black = await loader.renderRegion(page, region, width, signal)
-  if (!black) return undefined
-  let white: HTMLCanvasElement | null = null
-  let retained = false
-  try {
-    white = await loader.renderRegion(page + 1, region, width, signal)
-    if (!white || signal.aborted) return undefined
-    const ctx = black.getContext('2d')!
-    const dark = ctx.getImageData(0, 0, black.width, black.height)
-    const light = white.getContext('2d')!.getImageData(0, 0, white.width, white.height)
-    recoverForeground(dark.data, light.data)
-    ctx.putImageData(dark, 0, 0)
-    retained = true
-    return black
-  } finally {
-    if (white) white.width = white.height = 0
-    if (!retained) black.width = black.height = 0
-  }
 }

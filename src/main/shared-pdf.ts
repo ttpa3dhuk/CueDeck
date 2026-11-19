@@ -112,7 +112,7 @@ async function synchronize(): Promise<void> {
       const sources = await registry.reconcile(decks(), (source, error) => log.warn('[shared-pdf] unavailable revision', source.sha1, String(error)))
       if (wanted !== signature()) continue
       if (!sources.length && !owner) { synchronized = wanted; return }
-      await command({ type: 'sync', sources })
+      await command({ type: 'sync', sources, animationSha: store.get().fileKind === 'pptx' ? store.get().pdfSha1 : null })
       activeIds = new Set(sources.map(source => source.id))
       if (wanted !== signature()) continue
       synchronized = wanted
@@ -147,6 +147,13 @@ function track(wc: WebContents): { wc: WebContents; ids: Set<string> } {
   return consumer
 }
 
+function validRegion(region: import('../shared/pdf-frames').AnimationRegion): boolean {
+  const r = region?.rect
+  return Boolean(r && Number.isSafeInteger(region.page) && region.page >= 1 &&
+    Number.isInteger(region.width) && region.width >= 1 && region.width <= 1920 &&
+    [r.x,r.y,r.w,r.h].every(Number.isFinite) && r.w > 0 && r.w <= 1.001 && r.h > 0 && r.h <= 1.001)
+}
+
 export function registerSharedPdfFrames(): void {
   if (initialized || !sharedPdfEnabled) return
   initialized = true
@@ -173,6 +180,25 @@ export function registerSharedPdfFrames(): void {
     replies.delete(reply.seq); clearTimeout(pending.timer)
     if (reply.ok) pending.resolve(reply.value)
     else pending.reject(new Error(reply.error ?? 'PDF owner failed'))
+  })
+  ipcMain.handle('pdf-frames:compose', async (event, asset: import('../shared/pdf-frames').AnimationAsset, scene: import('../shared/pdf-frames').AnimationComposition) => {
+    assertConsumer(event)
+    const state=store.get()
+    if (!asset || state.pdfSha1!==asset.sha || !state.slideMedia.some(m=>m.slide===state.currentSlide && (m.foreground?.file===asset.file || m.interactive?.file===asset.file))) throw new Error('Inactive animation')
+    if (!scene || !Number.isInteger(scene.width) || !Number.isInteger(scene.height) || scene.width<1 || scene.height<1 || scene.width*scene.height>4*1024*1024 ||
+        !Array.isArray(scene.sprites) || scene.sprites.length>1024 || !scene.sprites.every(s=>validRegion(s.region) &&
+          Array.isArray(s.transform) && s.transform.length===6 && s.transform.every(Number.isFinite) &&
+          Array.isArray(s.destination) && s.destination.length===4 && s.destination.every(Number.isFinite) && Number.isFinite(s.opacity))) throw new Error('Invalid composition')
+    return command({type:'compose',asset,scene})
+  })
+  ipcMain.handle('pdf-frames:animation', async (event, asset: import('../shared/pdf-frames').AnimationAsset, region?: import('../shared/pdf-frames').AnimationRegion) => {
+    assertConsumer(event)
+    const state = store.get()
+    if (asset?.sha !== state.pdfSha1 || typeof asset.file !== 'string' ||
+        !(state.slideMedia.some(m => m.foreground?.file === asset.file || m.interactive?.file === asset.file) ||
+          Object.values(state.slideBuilds ?? {}).some(b => b.framesFile === asset.file))) throw new Error('Inactive animation asset')
+    if (region && !validRegion(region)) throw new Error('Invalid animation region')
+    return command({ type: 'animation', asset, region })
   })
   ipcMain.handle('pdf-frames:connect', async (event, requestId: string, clientId: string) => {
     assertConsumer(event)
