@@ -3,11 +3,12 @@ import { getState, initBus, subscribe } from '../shared/bus'
 import { startTick, timerView } from '../shared/timer'
 
 /**
- * Таймер для выхода OMT (main/omt/outputs.ts). Окно offscreen и никогда не
+ * Таймер для выходов OMT и NDI. Окно offscreen и никогда не
  * показывается: main снимает его кадры вместе с прозрачностью и отдаёт в сеть.
  * Цвет — как на суфлёре (свой цвет таймера и жёлтый/красный в конце).
  */
 
+const transport = new URLSearchParams(location.search).get('role') === 'ndi-timer' ? 'ndi' : 'omt'
 const timerEl = document.getElementById('timer') as HTMLDivElement
 const messageEl = document.getElementById('message') as HTMLDivElement
 
@@ -25,7 +26,7 @@ function applyColors(state: AppState): void {
 }
 
 function applyMessage(state: AppState): void {
-  const msg = state.omt.timerMessage ? state.speakerMessage : null
+  const msg = state[transport].timerMessage ? state.speakerMessage : null
   if (messageEl.textContent !== (msg ?? '')) messageEl.textContent = msg ?? ''
   messageEl.classList.toggle('hidden', !msg)
 }
@@ -53,5 +54,5 @@ async function bootstrap(): Promise<void> {
 }
 
 bootstrap().catch((err) => {
-  window.api.diag.log('error', 'omt overlay: bootstrap упал', String(err))
+  window.api.diag.log('error', `${transport} overlay: bootstrap упал`, String(err))
 })

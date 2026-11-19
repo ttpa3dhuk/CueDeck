@@ -1,8 +1,9 @@
 /**
  * Narrow arbitration between the GPU audience producer and consumers that
- * need a normal audience renderer (stream and OMT program capture). Physical
+ * need a normal audience renderer (the stream encoder). OMT and NDI can
+ * subscribe to the GPU audience compositor without taking that lease. Physical
  * layout uses attachPhysical for a display-only mirror. No runtime Electron
- * imports, so windows/streamer/OMT can call it without cycles.
+ * imports, so the window and stream managers can call it without cycles.
  *
  * The GPU producer registers one stop hook. A normal consumer calls
  * stopGpuAudienceForNormalOutput() BEFORE acquiring/creating its own normal

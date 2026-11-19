@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, globalShortcut } from 'electron'
 import { companionGoodbye } from './remote/companion-push.js'
+import { shutdownNdi } from './ndi/outputs.js'
 import { shutdownStream } from './stream/streamer.js'
 import { flushPendingWrites, saveProject, stopMobileClicker } from './ipc.js'
 import { markCleanExit } from './diag.js'
@@ -97,6 +98,7 @@ export async function requestQuit(opts: { relaunch?: boolean } = {}): Promise<vo
   await stopPresentationPreparations()
   await flushPendingWrites()
   await stopMobileClicker()
+  await shutdownNdi()
   finishSessionCleanly()
   markCleanExit()
   stopSharedPdfFrames()

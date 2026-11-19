@@ -15,7 +15,7 @@ export async function showAboutDialog(): Promise<void> {
       type: 'info',
       title: t('О CueDeck'),
       message: 'CueDeck',
-      detail: `${t('Версия {version}', { version: app.getVersion() })}\n© 2026 Azat Khusaenov\nMIT\n\n${GITHUB_URL}`,
+      detail: `${t('Версия {version}', { version: app.getVersion() })}\n© 2026 Azat Khusaenov\nMIT\n\nNDI® is a registered trademark of Vizrt NDI AB\n\n${GITHUB_URL}`,
       buttons: ['GitHub', t('Скачать CueDeck'), t('Закрыть')],
       defaultId: 2,
       cancelId: 2,

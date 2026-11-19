@@ -17,6 +17,7 @@ import type {
   ProfileGroup,
   RemoteSettings,
   RemoteStatus,
+  NdiSettings, NdiStatus,
   OmtSettings,
   OmtStatus,
   ReportResult,
@@ -66,6 +67,7 @@ export type {
   ProfileGroup,
   RemoteSettings,
   RemoteStatus,
+  NdiSettings, NdiStatus,
   OmtSettings,
   OmtStatus,
   ReportResult,
@@ -337,6 +339,7 @@ export interface PresenterApi {
     >
   }
   syphonPrompter: PresenterApi['syphon']
+  ndi: { configure(settings: Partial<NdiSettings>): Promise<{ ok: true; status: NdiStatus }> }
   spoutGraphicsHelp(): Promise<{ exePath: string; options: Array<{ preference: 1 | 2; name: string | null; powershell: string }> }>
   openSpoutGraphicsSettings(): Promise<void>
   files: {

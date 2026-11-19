@@ -24,11 +24,11 @@ describe('GPU runtime source has no CPU pixel path', () => {
 })
 
 describe('GPU audience arbitration', () => {
-  it('stream and OMT program release GPU before taking a normal audience renderer', () => {
+  it('stream requests exclusive capture and OMT subscribes to the shared source', () => {
     expect(readFileSync('src/main/stream/streamer.ts', 'utf8'))
       .toContain("stopGpuAudienceForNormalOutput('stream')")
     expect(readFileSync('src/main/omt/outputs.ts', 'utf8'))
-      .toContain("stopGpuAudienceForNormalOutput('omt')")
+      .toContain('acquireNetworkVideo(this.role')
     expect(readFileSync('src/main/windows.ts', 'utf8'))
       .toContain("entry: 'gpu-view', role: 'audience-gpu-view'")
     expect(readFileSync('src/main/syphon-gpu-audience.ts', 'utf8'))

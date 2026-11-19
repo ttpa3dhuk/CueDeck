@@ -1,3 +1,4 @@
+import { fitOffscreenSize } from './offscreen-size.js'
 import { attachAudienceCloseGuard } from './audience-close-guard.js'
 import { BrowserWindow, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
@@ -32,7 +33,7 @@ function isOutputFullscreen(win: BrowserWindow): boolean {
 
 interface RendererTarget {
   entry: 'presenter' | 'audience' | 'stream' | 'overlay' | 'omt-audio' | 'gpu-view'
-  role: Role | 'stream' | 'omt-timer' | 'omt-audio' | 'audience-gpu-view'
+  role: Role | 'stream' | 'omt-timer' | 'ndi-timer' | 'omt-audio' | 'audience-gpu-view'
 }
 
 function rendererForRole(role: Role): RendererTarget {
@@ -533,24 +534,32 @@ export function createStreamEncoderWindow(): BrowserWindow {
  * состояние, как обычное окно (store.registerWindow).
  */
 export function createOmtOverlayWindow(width: number, height: number): BrowserWindow {
+  return createTimerOverlayWindow(width, height, 'omt')
+}
+
+export function createTimerOverlayWindow(width: number, height: number, transport: 'omt' | 'ndi'): BrowserWindow {
+  const ndi = transport === 'ndi'
+  const role = ndi ? 'ndi-timer' : 'omt-timer'
   const win = new BrowserWindow({
     width,
     height,
     show: false,
     frame: false,
     transparent: true,
-    title: 'CueDeck (OMT timer)',
+    ...(ndi && { useContentSize: true, thickFrame: false, enableLargerThanScreen: true }),
+    title: ndi ? 'CueDeck (NDI timer)' : 'CueDeck (OMT timer)',
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
       backgroundThrottling: false,
-      offscreen: true,
+      offscreen: ndi ? { useSharedTexture: false, deviceScaleFactor: 1 } : true,
     },
   })
-  loadRenderer(win, { entry: 'overlay', role: 'omt-timer' })
-  store.registerWindow('omt-timer', win)
+  if (ndi) fitOffscreenSize(win, width, height, 'NDI timer')
+  loadRenderer(win, { entry: 'overlay', role })
+  store.registerWindow(role, win)
   return win
 }
 
