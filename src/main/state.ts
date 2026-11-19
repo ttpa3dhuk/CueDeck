@@ -215,6 +215,17 @@ export class StateStore {
   }
 
   patch(partial: Partial<AppState>): void {
+    const slideChanged = (
+      (partial.currentSlide !== undefined && partial.currentSlide !== this.state.currentSlide) ||
+      (partial.pdfSha1 !== undefined && partial.pdfSha1 !== this.state.pdfSha1) ||
+      (partial.pdfPath !== undefined && partial.pdfPath !== this.state.pdfPath) ||
+      Object.hasOwn(partial, 'slideMedia')
+    )
+    if (slideChanged && this.state.slideMenuOpen && partial.slideMenuOpen === undefined)
+      partial = { ...partial, slideMenuOpen: false, slideMenuOpenedAt: undefined }
+    if (slideChanged && this.state.slideTriggerState)
+      partial = { ...partial, slideTriggerState: undefined }
+
     // Legacy remote/profile fields mirror the hall timer after the controls moved there.
     if (partial.audienceTimer) {
       partial = { ...partial, timerTickEnabled: partial.audienceTimer.tickEnabled,

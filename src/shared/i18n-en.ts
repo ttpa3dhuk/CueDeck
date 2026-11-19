@@ -16,13 +16,13 @@
  */
 export const EN: Record<string, string> = {
   'Импорт PPTX': 'PPTX import',
-  'PowerPoint (Mac, эксперимент)': 'PowerPoint (Mac, experimental)',
+  'PowerPoint (эксперимент)': 'PowerPoint (experimental)',
   'Экспериментальный режим: PowerPoint рисует слайды, CueDeck воспроизводит извлечённые видео, GIF и поддержанные шаги появления. Сложные анимации не поддерживаются. Выбор действует до закрытия CueDeck.': 'Experimental: PowerPoint renders slides; CueDeck plays extracted videos, GIFs and supported appearance steps. Complex animations are not supported. The choice lasts until CueDeck closes.',
   'PowerPoint выбран для PPTX; LibreOffice остаётся для PPT, ODP и KEY.': 'PowerPoint is selected for PPTX; LibreOffice remains available for PPT, ODP and KEY.',
   'PowerPoint готовит только PPTX. Для PPT, ODP и KEY нужен LibreOffice.': 'PowerPoint prepares PPTX only. PPT, ODP and KEY require LibreOffice.',
   'Не удалось выбрать импорт PPTX: {error}': 'Could not select PPTX import: {error}',
-  'PowerPoint не найден на этом Mac. Выбери LibreOffice или установи PowerPoint.': 'PowerPoint was not found on this Mac. Choose LibreOffice or install PowerPoint.',
-  'PowerPoint не создал PDF. Проверь файл и разрешения macOS, затем повтори.': 'PowerPoint did not create a PDF. Check the file and macOS permissions, then try again.',
+  'PowerPoint не найден. Выбери LibreOffice или установи PowerPoint.': 'PowerPoint was not found. Choose LibreOffice or install PowerPoint.',
+  'PowerPoint не создал PDF. Проверь файл и доступ к PowerPoint, затем повтори.': 'PowerPoint did not create a PDF. Check the file and access to PowerPoint, then try again.',
   'Экспорт PowerPoint не подтверждён. Проверь и закрой копию CueDeck в PowerPoint, затем перезапусти CueDeck.': 'PowerPoint export completion is uncertain. Check and close the CueDeck copy in PowerPoint, then restart CueDeck.',
   "Имена источников зала и суфлёра должны различаться": "The audience and prompter source names must be different",
   "Имя источника суфлёра": "Prompter source name",
@@ -872,6 +872,8 @@ export const EN: Record<string, string> = {
   'Больше не спрашивать при запуске': "Don't ask on startup",
   '3 экрана (+ суфлёр)': '3 screens (+ prompter)',
   'Продолжить': 'Continue',
+  'Перейти к слайду {n}': 'Go to slide {n}',
+  'Вернуться к выбору песни': 'Return to song selection',
   'Программу делает один человек в свободное время. Если она выручает вас на мероприятиях — поддержите разработку.': 'CueDeck is made by one person in their spare time. If it saves your events, please support its development.',
 
   // ── Внешнее управление: справочная страница ──

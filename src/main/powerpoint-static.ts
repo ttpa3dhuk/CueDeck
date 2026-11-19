@@ -1,13 +1,13 @@
 import { spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { copyFile, mkdir, rename, rm, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import { PowerpointExportError } from './powerpoint-error.js'
+import { exportPowerpointWindows, powerpointWindowsVersion } from './powerpoint-windows.js'
+export { PowerpointExportError } from './powerpoint-error.js'
 
 const appPath = '/Applications/Microsoft PowerPoint.app'
-export class PowerpointExportError extends Error {
-  constructor(message: string, readonly uncertain = false, readonly missing = false) { super(message) }
-}
 const script = `on run argv
  set expectedName to item 1 of argv
  set outputPath to item 2 of argv
@@ -42,20 +42,47 @@ function command(binary: string, args: string[]): Promise<{ code: number; stderr
   })
 }
 
-export function powerpointCacheSha(sourceSha1: string, version: string): string {
-  return createHash('sha1').update(`${sourceSha1}|powerpoint-native-frames-v8|${version}`).digest('hex')
+export function powerpointCacheSha(sourceSha1: string, version: string, platform: NodeJS.Platform = process.platform): string {
+  // Preserve accepted Mac caches; never adopt Windows font/layout output there.
+  const backendVersion = platform === 'win32' ? `win32|${version}` : version
+  return createHash('sha1').update(`${sourceSha1}|powerpoint-native-frames-v17|${backendVersion}`).digest('hex')
 }
 
 /** Never edits the source. The unique staged filename is the only presentation we close. */
 export async function exportPowerpointStatic(stagedPath: string, outputDir: string, outputSha: string, signal: AbortSignal | undefined, exchangeDir: string): Promise<string> {
-  if (process.platform !== 'darwin' || !existsSync(appPath)) throw new PowerpointExportError('Microsoft PowerPoint не установлен на этом Mac', false, true) // i18n-ok: worker/main error
+  const windows = process.platform === 'win32'
+  if (windows ? !await powerpointWindowsVersion() : process.platform !== 'darwin' || !existsSync(appPath)) throw new PowerpointExportError('Microsoft PowerPoint не установлен', false, true) // i18n-ok: worker/main error
   if (signal?.aborted) throw new PowerpointExportError('PowerPoint preparation cancelled')
   await mkdir(exchangeDir, { recursive: true })
-  const uniqueBase = `cuedeck-${basename(dirname(outputDir))}`
+  const uniqueBase = `cuedeck-${basename(dirname(outputDir))}${windows ? `-${randomUUID()}` : ''}`
   const uniquePath = join(exchangeDir, `${uniqueBase}.pptx`)
   await copyFile(stagedPath, uniquePath)
   if (signal?.aborted) { await rm(uniquePath, { force: true }); throw new PowerpointExportError('PowerPoint preparation cancelled') }
   const output = join(exchangeDir, `${uniqueBase}.pdf`)
+  if (windows) {
+    let uncertain = false
+    const target = join(outputDir, `${outputSha}.pdf`)
+    const pending = `${target}.partial`
+    try {
+      await exportPowerpointWindows(uniquePath, output, signal)
+      const pdf = await stat(output).catch(() => null)
+      if (!pdf?.isFile() || pdf.size === 0) throw new PowerpointExportError('PowerPoint не создал PDF') // i18n-ok: worker/main error
+      if (signal?.aborted) throw new PowerpointExportError('PowerPoint preparation cancelled')
+      await copyFile(output, pending)
+      if (signal?.aborted) throw new PowerpointExportError('PowerPoint preparation cancelled')
+      await rename(pending, target)
+      return target
+    } catch (error) {
+      uncertain = error instanceof PowerpointExportError && error.uncertain
+      throw error
+    } finally {
+      await rm(pending, { force: true }).catch(() => undefined)
+      if (!uncertain) {
+        await rm(uniquePath, { force: true }).catch(() => undefined)
+        await rm(output, { force: true }).catch(() => undefined)
+      }
+    }
+  }
   const opened = await command('/usr/bin/open', ['-g', '-a', appPath, uniquePath])
   if (opened.code !== 0) throw new PowerpointExportError(`PowerPoint не открыл копию: ${opened.stderr.trim()}`) // i18n-ok: worker/main error
   // After open(0), the presentation may still be loading. Even if cancelled,

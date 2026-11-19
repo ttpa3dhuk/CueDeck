@@ -204,9 +204,88 @@ export interface SlideMediaRect {
  * отрендеренной страницы по rect. Плеером управляет общий клок VideoState —
  * тот же, что и для «файл целиком — видео».
  */
+export interface SlideVideoLink {
+  label?: string
+  rect: SlideMediaRect
+  slide: number
+  triggerShape?: string
+}
+
+export interface SlideForegroundStep {
+  startMs: number
+  durationMs: number
+  from: { x: number; y: number; opacity: number }
+  to: { x: number; y: number; opacity: number }
+  rotations?: Array<{ timeMs: number; degrees: number }>
+}
+
+export interface SlideForegroundActor extends SlideForegroundStep {
+  page: number
+  rect: SlideMediaRect
+  pivot: { x: number; y: number }
+  following?: SlideForegroundStep[]
+}
+
+export interface SlideForegroundMotion {
+  basePage: number
+  actors: SlideForegroundActor[]
+}
+
+export type SlideVideoForeground = {
+  file: string
+  /** First page of the black/white pair for this state. */
+  firstPage: number
+  motion?: { entry?: SlideForegroundMotion; menu?: SlideForegroundMotion }
+} & (
+  | { kind: 'menu'; button: SlideMediaRect; links: SlideVideoLink[]; buttonDelayMs?: number }
+  | { kind: 'return'; link: SlideVideoLink }
+  | { kind: 'static'; links: SlideVideoLink[] }
+)
+
+export interface SlideInteractiveScene {
+  file: string
+  firstPage: number
+  layers: SlideInteractiveLayer[]
+  triggers: SlideTrigger[]
+}
+
+export interface SlideInteractiveLayer {
+  page: number
+  rect: SlideMediaRect
+  shape?: string
+  initiallyHidden?: boolean
+}
+
+export interface SlideTrigger {
+  id: string
+  shape: string
+  rect: SlideMediaRect
+  label: string
+  restart: 'always' | 'whenNotActive' | 'never'
+  durationMs: number
+  effects: Array<SlideForegroundStep & { shape: string }>
+}
+
+export interface SlideTriggerState {
+  runs: Record<string, number>
+  actors: Record<string, SlideForegroundStep[]>
+}
+
+export type SlideAudioCue = {
+  file: string
+  volume: number
+  loop: boolean
+  delayMs?: number
+} & ({ trigger: 'enter' | 'menu' } | { trigger: 'click'; shape: string })
+
 export interface SlideMedia {
+  audio?: SlideAudioCue[]
+  clickActions?: Array<{ shape: string; rect: SlideMediaRect; label: string; restartVideo?: boolean }>
+  volume?: number
+  foreground?: SlideVideoForeground
+  interactive?: SlideInteractiveScene
   /** Отсутствует у видео из прежних проектов. GIF играет независимо от видеотранспорта. */
-  kind?: 'gif'
+  kind?: 'gif' | 'audio' | 'interactive'
   /** Номер страницы (1-based, совпадает с currentSlide). */
   slide: number
   rect: SlideMediaRect
@@ -307,8 +386,10 @@ export interface DeckState {
   playlistId: string | null
   /** Видео, вшитые в слайды (только PPTX; пусто для остальных форматов). */
   slideMedia: SlideMedia[]
-  slideTransitions?: Record<number, number>
+  slideTransitions?: Record<number, import('./pptx-transition.js').PptxSlideTransition>
   slideBuilds?: Record<number, SlideBuildAnimation>
+  slideLinks?: Record<number, SlideVideoLink[]>
+  slideKiosk?: boolean
 }
 
 export interface ProjectTransferStatus {
@@ -337,14 +418,20 @@ export interface AppState {
   fileKind: FileKind | null
   totalSlides: number
   currentSlide: number
+  slideMenuOpen?: boolean
+  slideMenuOpenedAt?: number
+  slideTriggerState?: SlideTriggerState
+  slideAudioClick?: { id: string; sha: string; slide: number; takeId?: string; at: number; cues: SlideAudioCue[] }
   /** Off-air staging deck (operator only). `take` promotes it to program. */
   preview: DeckState
   blackout: boolean
   video: VideoState
   /** Видео, вшитые в слайды программного PPTX (см. SlideMedia). */
   slideMedia: SlideMedia[]
-  slideTransitions?: Record<number, number>
+  slideTransitions?: Record<number, import('./pptx-transition.js').PptxSlideTransition>
   slideBuilds?: Record<number, SlideBuildAnimation>
+  slideLinks?: Record<number, SlideVideoLink[]>
+  slideKiosk?: boolean
   materialSettings: import('./material-settings.js').MaterialSettings
   timer: TimerState
   /** Independent countdown over the audience feed; speaker timer is unaffected. */

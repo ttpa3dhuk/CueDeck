@@ -373,8 +373,8 @@ describe('preparePptxMedia: заметки докладчика (2.23)', () => {
   it('maps the source Fade to the first expanded page only and retains it in cache', async () => {
     const files = { ...NOTES_DECK, 'ppt/slides/slide3.xml': NOTES_DECK['ppt/slides/slide3.xml'].replace('</p:sld>', '<p:transition p14:dur="350"><p:fade/></p:transition></p:sld>') }
     const deck = await buildDeck(DIR, files)
-    expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: 350, 5: 0, 6: 0 })
-    expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: 350, 5: 0, 6: 0 })
+    expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: { kind: 'fade', durationMs: 350 }, 5: 0, 6: 0 })
+    expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: { kind: 'fade', durationMs: 350 }, 5: 0, 6: 0 })
   })
 
   it('заметки по страницам PDF: абзацы, переносы, сущности; шаги; скрытый слайд пропущен', async () => {
@@ -574,4 +574,89 @@ it('reveals wipe(down) pictures upwards with a fixed bottom edge, as verified ag
     expect(target).toContain('t="93333"')
     expect(target).toContain('b="0"')
   } finally {await rm(dir,{recursive:true,force:true})}
+})
+
+it('exports both foreground states for an object-triggered menu over video', async () => {
+  const dir = join(tmpdir(), 'cuedeck-pptx-video-menu-test')
+  const button = '<p:pic><p:nvPicPr><p:cNvPr id="7" name="Menu button"/></p:nvPicPr><p:spPr><a:xfrm><a:off x="6096000" y="3429000"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:pic>'
+  const link = (id: number, name: string, x: number): string =>
+    `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${name}"><a:hlinkClick r:id="rIdJump" action="ppaction://hlinksldjump"/></p:cNvPr></p:nvPicPr><p:spPr><a:xfrm><a:off x="${x}" y="0"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:pic>`
+  const option = link(8, 'Menu option', 6096000)
+  const back = link(2, 'Back arrow', 11430000)
+  const jump = (target: string): string => slideRels(null, true).replace(
+    '</Relationships>', `<Relationship Id="rIdJump" Type="${REL}/slide" Target="${target}"/></Relationships>`,
+  )
+  const rules = '<p:sp><p:nvSpPr><p:cNvPr id="9" name="Rules"/></p:nvSpPr></p:sp>'
+  const visibility = (id: number, value: string) =>
+    `<p:set><p:cBhvr><p:tgtEl><p:spTgt spid="${id}"/></p:tgtEl><p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="${value}"/></p:to></p:set>`
+  const timing = '<p:timing><p:video><p:cMediaNode><p:cTn repeatCount="indefinite"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn><p:tgtEl><p:spTgt spid="6"/></p:tgtEl></p:cMediaNode></p:video>' +
+    '<p:seq><p:cTn nodeType="interactiveSeq"><p:stCondLst><p:cond evt="onClick"><p:tgtEl><p:spTgt spid="7"/></p:tgtEl></p:cond></p:stCondLst><p:childTnLst>' +
+    visibility(7, 'hidden') + visibility(9, 'hidden') + visibility(8, 'visible') + '</p:childTnLst></p:cTn></p:seq></p:timing>'
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': `<p:sld ${NS}><p:cSld><p:spTree>${VIDEO_PIC}${rules}${button}${option}</p:spTree></p:cSld>${timing}</p:sld>`,
+      'ppt/slides/_rels/slide1.xml.rels': jump('slide4.xml'),
+      'ppt/slides/slide4.xml': `<p:sld ${NS}><p:cSld><p:spTree>${VIDEO_PIC}${back}</p:spTree></p:cSld></p:sld>`,
+      'ppt/slides/_rels/slide4.xml.rels': jump('slide1.xml'),
+    })
+    const result = await preparePptxMedia(deck, 'powerpoint-video-menu', undefined, 'powerpoint')
+    expect(result.slideMedia[0].foreground).toEqual({
+      kind: 'menu', file: 'video-foreground.pdf', firstPage: 3,
+      button: { x: .5, y: .5, w: .25, h: .25 },
+      links: [{ slide: 5, rect: { x: .5, y: 0, w: .25, h: .25 } }],
+    })
+    expect(result.slideMedia[1].foreground).toEqual({
+      kind: 'return', file: 'video-foreground.pdf', firstPage: 1,
+      link: { slide: 1, rect: { x: .9375, y: 0, w: .0625, h: .25 } },
+    })
+    const read = (deck: string, part: string) => execFileSync('unzip', ['-p', deck, `ppt/slides/${part}.xml`], { encoding: 'utf8' })
+    const preview = read(result.convertSource, 'slide1')
+    expect(preview).toContain('name="Rules"')
+    expect(preview).not.toContain('name="Menu option"')
+
+    const frames = result.nativeFrameSources!.find(source => source.file === 'video-foreground.pdf')!.sourcePath
+    expect(read(frames, '_cuedeck_frame_0')).toContain('name="Back arrow"')
+    const dark = read(frames, '_cuedeck_frame_2')
+    const light = read(frames, '_cuedeck_frame_3')
+    const revealed = read(frames, '_cuedeck_frame_4')
+    expect(dark).toContain('val="000000"')
+    expect(light).toContain('val="FFFFFF"')
+    expect(dark).toContain('name="Rules"')
+    expect(dark).not.toContain('name="Menu option"')
+    expect(dark).not.toContain('name="video"')
+    expect(revealed).toContain('name="Menu option"')
+    expect(revealed).not.toContain('name="Rules"')
+    expect(revealed).not.toContain('name="Menu button"')
+    expect((await preparePptxMedia(deck, 'libreoffice-video-menu')).slideMedia[0].foreground).toBeUndefined()
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+it.each([true, false])('extracts a delayed sound on a shape click with separate media timing = %s', async (hasMediaTiming) => {
+  const dir = join(tmpdir(), 'cuedeck-pptx-shape-sound-' + hasMediaTiming)
+  const shape = '<p:pic><p:nvPicPr><p:cNvPr id="20" name="Sound button"/></p:nvPicPr><p:spPr><a:xfrm><a:off x="6096000" y="3429000"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:pic>'
+  const sound = '<p:pic><p:nvPicPr><p:cNvPr id="21"/><p:nvPr><a:audioFile r:link="rIdSound"/></p:nvPr></p:nvPicPr></p:pic>'
+  const target = '<p:tgtEl><p:spTgt spid="21"/></p:tgtEl>'
+  const conditions = (ms: number) => `<p:stCondLst><p:cond delay="${ms}"/></p:stCondLst>`
+  const timing = `<p:timing><p:tnLst><p:seq><p:cTn nodeType="interactiveSeq"><p:stCondLst><p:cond evt="onClick" delay="0"><p:tgtEl><p:spTgt spid="20"/></p:tgtEl></p:cond></p:stCondLst><p:childTnLst><p:par><p:cTn>${conditions(500)}<p:childTnLst><p:par><p:cTn nodeType="withEffect" presetClass="mediacall">${conditions(25)}<p:childTnLst><p:cmd cmd="playFrom(0.0)"><p:cBhvr><p:cTn dur="528"/>${target}</p:cBhvr></p:cmd></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:seq><p:audio><p:cMediaNode vol="45000"><p:cTn dur="528"/>${target}</p:cMediaNode></p:audio></p:tnLst></p:timing>`
+  const timingXml = hasMediaTiming ? timing : timing.replace(/<p:audio>[\s\S]*?<\/p:audio>/, '')
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': slideXml(shape + sound).replace('</p:sld>', timingXml + '</p:sld>'),
+      'ppt/slides/_rels/slide1.xml.rels': slideRels(null).replace('</Relationships>',
+        `<Relationship Id="rIdSound" Type="${REL}/audio" Target="../media/cue.mp3"/></Relationships>`),
+      'ppt/media/cue.mp3': Buffer.from([255, 251, 144, 0]),
+    })
+    const result = await preparePptxMedia(deck, 'sound-shape-audio-only-' + hasMediaTiming, undefined, 'powerpoint')
+    expect(result.slideMedia[0]).toMatchObject({
+      slide: 1, kind: 'audio', audio: [{ trigger: 'click', shape: '20', file: 'cue.mp3', delayMs: 525, volume: hasMediaTiming ? .45 : 1, loop: false }],
+      clickActions: [{ shape: '20', label: 'Sound button', rect: { x: .5, y: .5, w: .25, h: .25 } }],
+    })
+    expect(slideMediaAt('pptx', result.slideMedia, 1)).toBeUndefined()
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })

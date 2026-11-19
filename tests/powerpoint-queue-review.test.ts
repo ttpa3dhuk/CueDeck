@@ -5,7 +5,7 @@ import { expect, it } from 'vitest'
 import { PresentationCache } from '../src/main/presentation-preparation-cache'
 import { PresentationPreparationQueue, type WorkerSession, type WorkerOutcome } from '../src/main/presentation-preparation-queue'
 
-for (const scenario of ['recoverable', 'uncertain-after-cancel'] as const) {
+for (const scenario of ['recoverable', 'uncertain-after-cancel', 'worker-crash'] as const) {
   it(`PowerPoint queue handles ${scenario} without a real Office process`, async () => {
     const root = await mkdtemp(join(tmpdir(), 'pp-review-'))
     const first = join(root, 'first.pptx'), second = join(root, 'second.pptx')
@@ -39,7 +39,7 @@ for (const scenario of ['recoverable', 'uncertain-after-cancel'] as const) {
       await ready
       const b = queue.prepare(second).catch((error) => error)
       if (scenario === 'uncertain-after-cancel') queue.cancelPath(first)
-      release({ type: 'error', error: { code: scenario === 'recoverable' ? 'powerpoint_failed' : 'powerpoint_uncertain', message: 'test result' } })
+      release({ type: 'error', error: { code: scenario === 'recoverable' ? 'powerpoint_failed' : scenario === 'worker-crash' ? 'worker_crash' : 'powerpoint_uncertain', message: 'test result' } })
       expect((await a).code).toBe(scenario === 'recoverable' ? 'powerpoint_failed' : 'powerpoint_uncertain')
       const secondResult = await b
       if (scenario === 'recoverable') {

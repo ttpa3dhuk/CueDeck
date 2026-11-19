@@ -435,7 +435,15 @@ export class PresentationPreparationQueue {
       const failure = error instanceof PreparationError
         ? error
         : new PreparationError('worker_crash', error instanceof Error ? error.message : String(error))
-      if (failure.code === 'powerpoint_uncertain') this.settle(job, failure)
+      if (job.backend === 'powerpoint-static' && failure.code === 'worker_crash') {
+        // Its PowerShell/COM client may still be finishing outside the worker.
+        // Never start another deck or discard files without a confirmed close.
+        this.uncertainPowerpoint = true
+        this.stopped = true
+        this.cancelAll()
+        this.settle(job, new PreparationError('powerpoint_uncertain', failure.message, failure.phase))
+      }
+      else if (failure.code === 'powerpoint_uncertain') this.settle(job, failure)
       else if (job.cancelReason === 'timeout') this.settle(job, new PreparationError('timeout', 'Preparation exceeded timeout')) // i18n-ok: worker/main error
       else if (job.cancelReason) this.settle(job, new PreparationError(job.cancelReason === 'superseded' ? 'superseded' : 'cancelled', 'Preparation cancelled')) // i18n-ok: worker/main error
       else this.settle(job, failure)
@@ -487,6 +495,8 @@ export class PresentationPreparationQueue {
         slideMedia: outcome.result.slideMedia,
         slideTransitions: outcome.result.slideTransitions ?? {},
         slideBuilds: outcome.result.slideBuilds ?? {},
+        slideLinks: outcome.result.slideLinks ?? {},
+        slideKiosk: outcome.result.slideKiosk === true,
         pageNotes: outcome.result.pageNotes,
         fonts: outcome.result.fonts,
         pdfPath: outcome.pdfPath,
@@ -521,6 +531,8 @@ export class PresentationPreparationQueue {
       slideMedia: outcome.result.slideMedia,
       slideTransitions: outcome.result.slideTransitions ?? {},
       slideBuilds: outcome.result.slideBuilds ?? {},
+      slideLinks: outcome.result.slideLinks ?? {},
+      slideKiosk: outcome.result.slideKiosk === true,
       pageNotes: outcome.result.pageNotes,
       fonts: outcome.result.fonts,
         hasManifest: outcome.hasManifest,

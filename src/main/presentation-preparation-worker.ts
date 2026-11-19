@@ -171,8 +171,10 @@ function resultOf(value: {
   sourceSha1?: string
   totalSlides: number
   slideMedia: PreparationWorkerResult['slideMedia']
-  slideTransitions?: Record<number, number>
+  slideTransitions?: Record<number, import('../shared/pptx-transition.js').PptxSlideTransition>
   slideBuilds?: Record<number, SlideBuildAnimation>
+  slideLinks?: Record<number, import('../shared/types.js').SlideVideoLink[]>
+  slideKiosk?: boolean
   pageNotes: Record<number, string>
   fonts: string[]
 }): PreparationWorkerResult {
@@ -183,6 +185,8 @@ function resultOf(value: {
     slideMedia: value.slideMedia,
     slideTransitions: value.slideTransitions ?? {},
     slideBuilds: value.slideBuilds ?? {},
+    slideLinks: value.slideLinks ?? {},
+    slideKiosk: value.slideKiosk === true,
     pageNotes: value.pageNotes,
     fonts: value.fonts,
   }

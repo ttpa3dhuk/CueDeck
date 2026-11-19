@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { powerpointWindowsVersion } from './powerpoint-windows.js'
 
 export async function powerpointVersion(): Promise<string | null> {
+  if (process.platform === 'win32') return powerpointWindowsVersion()
   const appPath = '/Applications/Microsoft PowerPoint.app'
   if (process.platform !== 'darwin' || !existsSync(appPath)) return null
   return new Promise((resolve) => {

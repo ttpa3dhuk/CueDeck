@@ -3163,3 +3163,18 @@ body[data-role="operator"] #program-playback > #current-meter {
 .settings-body .audience-timer-field-column > label:has(> select) { grid-template-columns: minmax(0, 1fr); }
 .settings-body .audience-timer-field-column > label > select { width: 100%; }
 #prompter-timer-reset { align-self: flex-start; }
+
+.current-slide .slide-video-foreground,
+.current-slide .slide-video-menu-button {
+  position: absolute;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  z-index: 3;
+}
+
+.current-slide .slide-video-foreground { pointer-events: none; }
+.current-slide .slide-video-menu-button { cursor: pointer; z-index: 4; }
+body[data-theme] .current-slide .slide-video-menu-button:is(:hover, :active) { background: transparent; }
+
+.slide-video-wait-foreground { visibility: hidden !important; }

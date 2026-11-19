@@ -17,8 +17,10 @@ export function validBuildAnimation(value: SlideBuildAnimation | undefined): val
   return [x, y, w, h].every(Number.isFinite) && x >= 0 && y >= 0 && w > 0 && h > 0 && x + w <= 1 && y + h <= 1
 }
 
+type SlideNavigationState = Pick<AppState, 'fileKind' | 'currentSlide' | 'totalSlides' | 'playlist' | 'currentPlaylistId' | 'slideMedia' | 'slideTransitions' | 'slideBuilds' | 'video'>
+
 export function slideNavigationPatch(
-  state: Pick<AppState, 'fileKind' | 'currentSlide' | 'totalSlides' | 'playlist' | 'currentPlaylistId' | 'slideMedia' | 'slideTransitions' | 'slideBuilds' | 'video'>,
+  state: SlideNavigationState,
   slide: number, id: string, now = Date.now(),
 ): Partial<AppState> | null {
   if ((state.fileKind !== 'pdf' && state.fileKind !== 'pptx') ||
@@ -30,11 +32,37 @@ export function slideNavigationPatch(
   const sameSourceSlide = sourcePage(state.currentSlide) !== undefined && sourcePage(state.currentSlide) === sourcePage(slide)
   const fade = mode === 'cut' ? 0 : mode === 'custom' ? entry?.slideFadeMs
     : state.fileKind === 'pptx' && !sameSourceSlide ? state.slideTransitions?.[slide] : 0
+  const effect = typeof fade === 'object' && fade && Number.isFinite(fade.durationMs) && fade.durationMs > 0 ? fade : undefined
+  const push = effect?.kind === 'push' && 'direction' in effect ? effect : undefined
   const candidate = state.fileKind === 'pptx' && mode === 'file' && sameSourceSlide && slide === state.currentSlide + 1 ? state.slideBuilds?.[slide] : undefined
   const buildAnimation = validBuildAnimation(candidate) ? candidate : undefined
   return {
     currentSlide: slide,
-    takeTransition: { id, durationMs: buildAnimation?.durationMs ?? sanitizeSlideFadeMs(fade), scope: 'slide', ...(buildAnimation ? { buildAnimation } : {}) },
+    takeTransition: { id, durationMs: buildAnimation?.durationMs ?? (effect ? Math.min(10000, effect.durationMs) : sanitizeSlideFadeMs(fade)),
+      scope: 'slide', ...(buildAnimation ? { buildAnimation } : {}), ...(push ? { pushDirection: push.direction } : effect ? { slideEffect: effect } : {}) },
     ...(state.fileKind === 'pptx' ? initialSlideVideo(state.fileKind, state.slideMedia, slide, state.video.muted, now) : {}),
   }
+}
+
+/** A selected clip starts as part of the same program change as the slide. */
+export function slideVideoLinkPatch(
+  state: SlideNavigationState & Pick<AppState, 'slideMenuOpen'>,
+  target: number, id: string, now = Date.now(),
+): Partial<AppState> | null {
+  if (state.fileKind !== 'pptx') return null
+  const from = state.currentSlide
+  const source = state.slideMedia.find(media => media.slide === from)?.foreground
+  if (!source) return null
+  if (source.kind === 'return' ? source.link.slide !== target
+    : (source.kind === 'menu' && !state.slideMenuOpen) || !source.links.some(link => link.slide === target)) return null
+
+  const destination = state.slideMedia.find(media => media.slide === target)?.foreground
+  const returnsToMenu = source.kind === 'return' && destination?.kind === 'menu'
+  if (source.kind === 'return' && !returnsToMenu) return null
+  const patch = slideNavigationPatch(state, target, id, now)
+  if (!patch) return null
+  if (source.kind === 'menu' && destination?.kind === 'return' && destination.link.slide === from && patch.video) {
+    patch.video = { ...patch.video, playing: true, anchorAt: now }
+  }
+  return { ...patch, slideMenuOpen: returnsToMenu, slideMenuOpenedAt: undefined }
 }

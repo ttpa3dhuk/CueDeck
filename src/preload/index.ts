@@ -363,7 +363,13 @@ const api: PresenterApi = {
     remove: () => ipcRenderer.invoke('fonts:remove'),
   },
   pptx: {
+    followSlideLink: (sha, from, target, shape) => ipcRenderer.invoke('pptx:follow-slide-link', sha, from, target, shape),
+    followVideoLink: (sha, from, target, shape) => ipcRenderer.invoke('pptx:follow-video-link', sha, from, target, shape),
+    clickShape: (sha, slide, shape) => ipcRenderer.invoke('pptx:click-shape', sha, slide, shape),
+    runTrigger: (sha, slide, id, takeId) => ipcRenderer.invoke('pptx:run-trigger', sha, slide, id, takeId),
+    showMenu: (sha, slide) => ipcRenderer.invoke('pptx:show-menu', sha, slide),
     readAnimationFrames: (file, sha) => ipcRenderer.invoke('pptx:read-animation', file, sha),
+    readGif: (file, sha, deck) => ipcRenderer.invoke('pptx:read-gif', file, sha, deck),
     backend: () => ipcRenderer.invoke('pptx:backend'),
     setBackend: (backend) => ipcRenderer.invoke('pptx:set-backend', backend),
     rebuild: (path: string) => ipcRenderer.invoke('pptx:rebuild', path),

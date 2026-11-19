@@ -99,7 +99,7 @@ export function slideMediaAt(
   slide: number,
 ): SlideMedia | undefined {
   if (kind !== 'pptx') return undefined
-  return slideMedia.find((m) => m.slide === slide && m.kind !== 'gif')
+  return slideMedia.find((m) => m.slide === slide && m.kind === undefined)
 }
 
 /**

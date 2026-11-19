@@ -6,7 +6,8 @@ import { timerAdjustments } from '../shared/timer-controls.js'
 import { materialTakeTimer, sanitizeMaterialSettings, validMaterialDuration } from '../shared/material-settings.js'
 import { setMaterialSettings } from './display-mapping.js'
 import { initialSlideVideo } from '../shared/slide-video.js'
-import { slideNavigationPatch, sanitizeSlideFadeMs } from '../shared/slide-transition.js'
+import { startSlideTrigger } from '../shared/slide-triggers.js'
+import { slideNavigationPatch, slideVideoLinkPatch, sanitizeSlideFadeMs } from '../shared/slide-transition.js'
 import { clearSessionDecks, restoreSessionDecks } from './session-restore.js'
 import { assertSessionIdle, waitForSessionRestore, beginSessionRestore, finishSessionRestore, beginEmptyProject, finishEmptyProject, configureStartup, flushSessionCheckpoint, initSessionLifecycle, shouldRestoreAtStartup } from './session-lifecycle.js'
 import { recoveryTakeFrame } from '../shared/recovery-take.js'
@@ -198,6 +199,7 @@ export function mimeOf(path: string): string {
     bmp: 'image/bmp',
     mp4: 'video/mp4',
     m4v: 'video/mp4',
+    mp3: 'audio/mpeg',
     mov: 'video/quicktime',
     webm: 'video/webm',
   }
@@ -211,8 +213,10 @@ interface InspectedFile {
   notes: Record<number, string>
   sha1Mismatch: boolean
   slideMedia: SlideMedia[]
-  slideTransitions?: Record<number, number>
+  slideTransitions?: Record<number, import('../shared/pptx-transition.js').PptxSlideTransition>
   slideBuilds?: Record<number, SlideBuildAnimation>
+  slideLinks?: Record<number, import('../shared/types.js').SlideVideoLink[]>
+  slideKiosk?: boolean
 }
 
 /**
@@ -277,8 +281,10 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
   let notesPath = filePath
   let totalSlides = 1
   let slideMedia: SlideMedia[] = []
-  let slideTransitions: Record<number, number> = {}
+  let slideTransitions: Record<number, import('../shared/pptx-transition.js').PptxSlideTransition> = {}
   let slideBuilds: Record<number, SlideBuildAnimation> = {}
+  let slideLinks: NonNullable<AppState['slideLinks']> = {}
+  let slideKiosk = false
   let pptxNotes: Record<number, string> = {}
 
   if (kind === 'pdf') {
@@ -301,6 +307,8 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     slideMedia = prepared.slideMedia
     slideTransitions = prepared.slideTransitions ?? {}
     slideBuilds = prepared.slideBuilds ?? {}
+    slideLinks = prepared.slideLinks ?? {}
+    slideKiosk = prepared.slideKiosk === true
     pptxNotes = prepared.pageNotes
     pptxNotesBySha1.set(sha1, pptxNotes)
   } else if (kind === 'video') {
@@ -323,6 +331,8 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     slideMedia,
     slideTransitions,
     slideBuilds,
+    slideLinks,
+    slideKiosk,
   }
 }
 
@@ -527,6 +537,8 @@ async function openFile(
       slideMedia: info.slideMedia,
       slideTransitions: info.slideTransitions ?? {},
       slideBuilds: info.slideBuilds ?? {},
+      slideLinks: info.slideLinks ?? {},
+      slideKiosk: info.slideKiosk === true,
       currentPlaylistId: playlistId,
       sourceMuted: entry?.sourceMuted === true,
       // Reset the playback clock for every file load; keep audience-mute preference.
@@ -600,6 +612,8 @@ async function loadPreview(
       slideMedia: info.slideMedia,
       slideTransitions: info.slideTransitions ?? {},
       slideBuilds: info.slideBuilds ?? {},
+      slideLinks: info.slideLinks ?? {},
+      slideKiosk: info.slideKiosk === true,
       video: {
         playing: false,
         anchorSec: entryRange?.inSec ?? 0,
@@ -646,6 +660,7 @@ async function programNext(): Promise<void> {
     return
   }
   const state = store.get()
+  if (state.fileKind === 'pptx' && state.slideKiosk) return
   const { currentSlide, totalSlides, autoAdvance, playlist, currentPlaylistId } = state
 
   // Механика живых шоу (спикер с кликером, DSan MicroCue и т.п.): на слайде
@@ -653,7 +668,7 @@ async function programNext(): Promise<void> {
   // стартует видео тем же кликером. Следующий «далее» листает дальше. Ролик,
   // который уже играл (позиция > 0 или доигран), клик не перезапускает.
   if (state.fileKind === 'pptx' && !state.video.playing && state.video.anchorSec === 0) {
-    const m = state.slideMedia.find((mm) => mm.slide === currentSlide && mm.kind !== 'gif')
+    const m = state.slideMedia.find((mm) => mm.slide === currentSlide && mm.kind === undefined)
     if (m) {
       store.patchVideo({ playing: true, anchorSec: 0, anchorAt: Date.now() })
       return
@@ -698,6 +713,7 @@ function programPrev(): void {
     return
   }
   const state = store.get()
+  if (state.fileKind === 'pptx' && state.slideKiosk) return
   if (state.fileKind === 'live') return
   if (state.fileKind === 'video') {
     programSeekBy(-5)
@@ -1242,6 +1258,8 @@ export function registerIpcHandlers(): void {
       slideMedia: state.slideMedia,
       slideTransitions: state.slideTransitions ?? {},
       slideBuilds: state.slideBuilds ?? {},
+      slideLinks: state.slideLinks ?? {},
+      slideKiosk: state.slideKiosk === true,
       video:
         state.fileKind === 'video'
           ? {
@@ -1271,6 +1289,8 @@ export function registerIpcHandlers(): void {
       slideMedia: p.slideMedia,
       slideTransitions: p.slideTransitions ?? {},
       slideBuilds: p.slideBuilds ?? {},
+      slideLinks: p.slideLinks ?? {},
+      slideKiosk: p.slideKiosk === true,
       video,
       // Цикл берём у выдаваемой записи: ролик-заставка должен уйти в эфир
       // зациклённым сразу, без второго действия оператора.
@@ -2216,18 +2236,87 @@ export function registerIpcHandlers(): void {
     }
   })
 
+  ipcMain.handle('pptx:show-menu', (event, sha: string, slide: number) => {
+    if (event.sender !== getOperatorWindow()?.webContents) return
+    const state = store.get()
+    if (state.fileKind !== 'pptx' || state.pdfSha1 !== sha || state.currentSlide !== slide || state.slideMenuOpen ||
+        !state.slideMedia.some(media => media.slide === slide && media.foreground?.kind === 'menu')) return
+    store.patch({ slideMenuOpen: true, slideMenuOpenedAt: Date.now() })
+  })
+  const shapeAudio = (state: AppState, slide: number, shape: string | undefined, takeId?: string): AppState['slideAudioClick'] => {
+    if (!shape || !state.pdfSha1) return undefined
+    const cues = state.slideMedia.filter(media => media.slide === slide).flatMap(media =>
+      (media.audio ?? []).filter(cue => cue.trigger === 'click' && cue.shape === shape))
+    return cues.length ? { id: randomUUID(), sha: state.pdfSha1, slide, takeId, at: Date.now(), cues } : undefined
+  }
+  ipcMain.handle('pptx:click-shape', (event, sha: string, slide: number, shape: string) => {
+    if (event.sender !== getOperatorWindow()?.webContents) return
+    const state = store.get()
+    if (state.fileKind !== 'pptx' || state.pdfSha1 !== sha || state.currentSlide !== slide) return
+    const action = state.slideMedia.filter(media => media.slide === slide)
+      .flatMap(media => media.clickActions ?? []).find(action => action.shape === shape)
+    if (!action) return
+    store.patch({
+      slideAudioClick: shapeAudio(state, slide, shape, state.takeTransition?.id),
+      ...(action.restartVideo ? { video: { ...state.video, playing: true, anchorSec: 0, anchorAt: Date.now() } } : {}),
+    })
+  })
+  ipcMain.handle('pptx:run-trigger', (event, sha: string, slide: number, id: string, takeId?: string) => {
+    const operator = getOperatorWindow()?.webContents
+    if (event.sender !== operator || event.senderFrame !== operator?.mainFrame) return
+    const state = store.get()
+    if (state.fileKind !== 'pptx' || state.pdfSha1 !== sha || state.currentSlide !== slide || state.takeTransition?.id !== takeId) return
+    const scene = state.slideMedia.find(media => media.slide === slide && media.interactive)?.interactive
+    const trigger = scene?.triggers.find(trigger => trigger.id === id)
+    if (!scene || !trigger) return
+    const next = startSlideTrigger(trigger, scene.layers, state.slideTriggerState, Date.now())
+    if (next) store.patch({ slideTriggerState: next, slideAudioClick: shapeAudio(state, slide, trigger.shape, takeId) })
+  })
+  ipcMain.handle('pptx:follow-video-link', (event, sha: string, from: number, target: number, shape?: string) => {
+    if (event.sender !== getOperatorWindow()?.webContents) return
+    const state = store.get()
+    if (state.fileKind !== 'pptx' || state.pdfSha1 !== sha || state.currentSlide !== from) return
+    const patch = slideVideoLinkPatch(state, target, randomUUID())
+    if (!patch) return
+    const foreground = state.slideMedia.find(media => media.slide === from)?.foreground
+    const trigger = foreground && foreground.kind !== 'return' &&
+      foreground.links.find(link => link.slide === target && link.triggerShape === shape)?.triggerShape
+    store.patch({ ...patch, slideAudioClick: shapeAudio(state, from, trigger || undefined, patch.takeTransition?.id) })
+  })
+  ipcMain.handle('pptx:follow-slide-link', (event, sha: string, from: number, target: number, shape?: string) => {
+    if (event.sender !== getOperatorWindow()?.webContents) return
+    const state = store.get()
+    if (state.fileKind !== 'pptx' || state.pdfSha1 !== sha || state.currentSlide !== from ||
+        state.slideMedia.some(media => media.slide === from && media.foreground) ||
+        !state.slideLinks?.[from]?.some(link => link.slide === target)) return
+    const patch = slideNavigationPatch(state, target, randomUUID())
+    if (!patch) return
+    const trigger = state.slideLinks[from].find(link => link.slide === target && link.triggerShape === shape)?.triggerShape
+    store.patch({ ...patch, slideAudioClick: shapeAudio(state, from, trigger, patch.takeTransition?.id) })
+  })
   ipcMain.handle('pptx:read-animation', async (_event, file: unknown, sha: unknown) => {
     const state=store.get()
     if(typeof file!=='string' || typeof sha!=='string' || sha!==state.pdfSha1 || /[/\\\0]/.test(file) || !file.endsWith('.pdf') ||
-      !Object.values(state.slideBuilds??{}).some(build=>build.framesFile===file)) return null
+      !(Object.values(state.slideBuilds??{}).some(build=>build.framesFile===file) ||
+        state.slideMedia.some(media => media.foreground?.file === file || media.interactive?.file === file))) return null
     const path=join(mediaDirFor(sha),file), info=await stat(path).catch(()=>null)
     if(!info?.isFile() || info.size>24*1024*1024) return null
+    return new Uint8Array(await readFile(path))
+  })
+  ipcMain.handle('pptx:read-gif', async (_event, file: unknown, sha: unknown, deck: unknown) => {
+    if (deck !== 'program' && deck !== 'preview') return null
+    const state = store.get()
+    const current = deck === 'preview' ? state.preview : {kind: state.fileKind, sha1: state.pdfSha1, slideMedia: state.slideMedia}
+    if (typeof file !== 'string' || typeof sha !== 'string' || current.kind !== 'pptx' || sha !== current.sha1 ||
+      /[/\\\0]/.test(file) || !current.slideMedia.some(media => media.kind === 'gif' && media.file === file)) return null
+    const path = join(mediaDirFor(sha), file), info = await stat(path).catch(() => null)
+    if (!info?.isFile() || info.size > 64 * 1024 * 1024) return null
     return new Uint8Array(await readFile(path))
   })
   ipcMain.handle('pptx:backend', () => getPptxBackend())
   ipcMain.handle('pptx:set-backend', (_event, backend: unknown) => {
     if (backend !== 'libreoffice' && backend !== 'powerpoint-static') throw new Error('Invalid PPTX backend')
-    if (backend === 'powerpoint-static' && process.platform !== 'darwin') throw new Error('PowerPoint static mode is Mac only')
+    if (backend === 'powerpoint-static' && !['darwin', 'win32'].includes(process.platform)) throw new Error('PowerPoint is unavailable on this platform')
     setPptxBackend(backend)
   })
   ipcMain.handle('soffice:check', async () => {

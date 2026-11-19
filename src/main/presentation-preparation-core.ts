@@ -1,3 +1,4 @@
+import { validSlideAudioCue } from '../shared/slide-video.js'
 import type { SlideBuildAnimation } from '../shared/types.js'
 import { createHash } from 'node:crypto'
 import { open } from 'node:fs/promises'
@@ -114,8 +115,10 @@ function rootsFor(artifactsDir: string): PptxMediaRoots {
 export async function validateArtifacts(artifactsDir: string, sha1: string): Promise<{
   hasManifest: boolean
   slideMedia: SlideMedia[]
-  slideTransitions?: Record<number, number>
+  slideTransitions?: Record<number, import('../shared/pptx-transition.js').PptxSlideTransition>
   slideBuilds?: Record<number, SlideBuildAnimation>
+  slideLinks?: Record<number, import('../shared/types.js').SlideVideoLink[]>
+  slideKiosk?: boolean
   pageNotes: Record<number, string>
   fonts: string[]
 }> {
@@ -130,8 +133,10 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
     version?: unknown
     rebuilt?: unknown
     slideMedia?: unknown
-    slideTransitions?: Record<number, number>
+    slideTransitions?: Record<number, import('../shared/pptx-transition.js').PptxSlideTransition>
   slideBuilds?: Record<number, SlideBuildAnimation>
+  slideLinks?: Record<number, import('../shared/types.js').SlideVideoLink[]>
+  slideKiosk?: boolean
     pageNotes?: unknown
     fonts?: unknown
   }
@@ -151,6 +156,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
   if (manifest.slideMedia.length && !(await stat(mediaDir).catch(() => null))?.isDirectory()) {
     throw new PreparationFailure('invalid_cache', 'Missing media directory', 'validate') // i18n-ok: worker/main error
   }
+  const foregroundCounts = new Map<string, number>()
   for (const media of manifest.slideMedia as SlideMedia[]) {
     if (!media || typeof media.file !== 'string' || !media.file ||
         /[/\\\0]/.test(media.file) || media.file === '.' || media.file === '..' ||
@@ -160,6 +166,74 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
     }
     const file = await stat(join(mediaDir, media.file)).catch(() => null)
     if (!file?.isFile()) throw new PreparationFailure('invalid_cache', `Missing media ${media.file}`, 'validate') // i18n-ok: worker/main error
+    if (media.audio !== undefined && (!Array.isArray(media.audio) || !media.audio.every(validSlideAudioCue))) {
+      throw new PreparationFailure('invalid_cache', 'Invalid slide audio cue', 'validate')
+    }
+    for (const cue of media.audio ?? []) {
+      if (!(await stat(join(mediaDir, cue.file)).catch(() => null))?.isFile())
+        throw new PreparationFailure('invalid_cache', 'Missing slide audio', 'validate')
+    }
+    if (media.interactive) {
+      const { file, firstPage, layers, triggers } = media.interactive
+      const rectOk = (rect: SlideMedia['rect']): boolean => Boolean(rect &&
+        [rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) && rect.x >= 0 && rect.y >= 0 &&
+        rect.w > 0 && rect.h > 0 && rect.x + rect.w <= 1 && rect.y + rect.h <= 1)
+      const shapeIds = new Set(layers?.map(layer => layer.shape).filter(Boolean))
+      if (file !== 'video-foreground.pdf' || !Number.isInteger(firstPage) || firstPage < 1 ||
+          !Array.isArray(layers) || !layers.length || layers.length > 25 ||
+          !layers.every(layer => Number.isInteger(layer.page) && layer.page > firstPage && rectOk(layer.rect) &&
+            (layer.shape === undefined || /^\d+$/.test(layer.shape))) ||
+          !Array.isArray(triggers) || !triggers.length || triggers.length > 32 ||
+          !triggers.every(trigger => /^\d+$/.test(trigger.id) && /^\d+$/.test(trigger.shape) && rectOk(trigger.rect) &&
+            typeof trigger.label === 'string' && ['always', 'whenNotActive', 'never'].includes(trigger.restart) &&
+            Number.isFinite(trigger.durationMs) && trigger.durationMs > 0 && trigger.durationMs <= 70_000 &&
+            Array.isArray(trigger.effects) && trigger.effects.every(effect => shapeIds.has(effect.shape) &&
+              [effect.startMs, effect.durationMs, effect.from?.x, effect.from?.y, effect.from?.opacity,
+                effect.to?.x, effect.to?.y, effect.to?.opacity].every(Number.isFinite) && effect.startMs >= 0 && effect.durationMs > 0))) {
+        throw new PreparationFailure('invalid_cache', 'Invalid interactive PPTX scene', 'validate')
+      }
+      foregroundCounts.set(file, Math.max(foregroundCounts.get(file) ?? 0, ...layers.map(layer => layer.page + 1)))
+    }
+    if (media.foreground) {
+      const foreground = media.foreground
+      const { file, firstPage } = foreground
+      const validRect = (rect: SlideMedia['rect'] | undefined): boolean => Boolean(rect &&
+        [rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) &&
+        rect.x >= 0 && rect.y >= 0 && rect.w > 0 && rect.h > 0 && rect.x + rect.w <= 1 && rect.y + rect.h <= 1)
+      const validLink = (link: import('../shared/types.js').SlideVideoLink | undefined): boolean =>
+        Boolean(link && Number.isInteger(link.slide) && link.slide > 0 && validRect(link.rect))
+      const valid = foreground.kind === 'menu'
+        ? validRect(foreground.button) && Array.isArray(foreground.links) && foreground.links.every(validLink) &&
+          (foreground.buttonDelayMs === undefined || Number.isInteger(foreground.buttonDelayMs) &&
+            foreground.buttonDelayMs > 0 && foreground.buttonDelayMs <= 60_000)
+        : foreground.kind === 'return' ? validLink(foreground.link)
+        : foreground.kind === 'static' && Array.isArray(foreground.links) && foreground.links.every(validLink)
+      if (file !== 'video-foreground.pdf' || !Number.isInteger(firstPage) || firstPage < 1 || !valid) {
+        throw new PreparationFailure('invalid_cache', 'Invalid slide video foreground', 'validate')
+      }
+      const lastPage = firstPage + (foreground.kind === 'menu' ? (foreground.buttonDelayMs ? 5 : 3) : 1)
+      let maxPage = lastPage
+      const validStep = (step: import('../shared/types.js').SlideForegroundStep): boolean =>
+        Boolean(step && [step.startMs, step.durationMs, step.from?.x, step.from?.y,
+          step.from?.opacity, step.to?.x, step.to?.y, step.to?.opacity].every(Number.isFinite) &&
+          step.startMs >= 0 && step.durationMs > 0 && step.durationMs <= 60_000)
+      for (const motion of [foreground.motion?.entry, foreground.motion?.menu]) {
+        if (!motion) continue
+        if (!Number.isInteger(motion.basePage) || motion.basePage < 1 ||
+            !Array.isArray(motion.actors) || !motion.actors.length || motion.actors.length > 16 ||
+            !motion.actors.every(actor => Number.isInteger(actor.page) && actor.page > 0 && validRect(actor.rect) &&
+              [actor.pivot?.x, actor.pivot?.y].every(Number.isFinite) && validStep(actor) &&
+              (actor.following === undefined || Array.isArray(actor.following) && actor.following.every(validStep)))) {
+          throw new PreparationFailure('invalid_cache', 'Invalid foreground motion', 'validate')
+        }
+        maxPage = Math.max(maxPage, motion.basePage + 1, ...motion.actors.map(actor => actor.page + 1))
+      }
+      foregroundCounts.set(file, Math.max(foregroundCounts.get(file) ?? 0, maxPage))
+    }
+  }
+  for (const [file, count] of foregroundCounts) {
+    if (countPdfPages(await readFile(join(mediaDir, file))) !== count)
+      throw new PreparationFailure('invalid_cache', 'Slide video foreground page count mismatch', 'validate')
   }
   for (const build of Object.values(manifest.slideBuilds ?? {})) {
     if (!build.framesFile) continue
@@ -172,6 +246,8 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
     slideMedia: manifest.slideMedia as SlideMedia[],
     slideTransitions: manifest.slideTransitions ?? {},
     slideBuilds: manifest.slideBuilds ?? {},
+    slideLinks: manifest.slideLinks ?? {},
+    slideKiosk: manifest.slideKiosk === true,
     pageNotes: manifest.pageNotes as Record<number, string>,
     fonts: manifest.fonts as string[],
   }
@@ -270,7 +346,7 @@ export async function prepareStagedArtifacts(options: PrepareArtifactsOptions): 
     const validated = await validateArtifacts(artifactsDir, sha1)
     return {
       sha1, sourceSha1: options.sourceSha1, totalSlides: pages,
-      slideMedia: validated.slideMedia, slideTransitions: validated.slideTransitions, slideBuilds: validated.slideBuilds ?? {},
+      slideMedia: validated.slideMedia, slideTransitions: validated.slideTransitions, slideBuilds: validated.slideBuilds ?? {}, slideLinks: validated.slideLinks ?? {}, slideKiosk: validated.slideKiosk === true,
       pageNotes: prepared.pageNotes, fonts: [],
       artifactsDir, identity: identityAfter, hasManifest: validated.hasManifest,
     }
@@ -325,6 +401,8 @@ export async function prepareStagedArtifacts(options: PrepareArtifactsOptions): 
     slideMedia: validated.slideMedia,
     slideTransitions: validated.slideTransitions ?? {},
     slideBuilds: validated.slideBuilds ?? {},
+    slideLinks: validated.slideLinks ?? {},
+    slideKiosk: validated.slideKiosk === true,
     pageNotes: validated.pageNotes,
     fonts,
     artifactsDir,
@@ -358,6 +436,8 @@ export async function inspectCachedArtifacts(options: InspectCacheOptions): Prom
     slideMedia: validated.slideMedia,
     slideTransitions: validated.slideTransitions ?? {},
     slideBuilds: validated.slideBuilds ?? {},
+    slideLinks: validated.slideLinks ?? {},
+    slideKiosk: validated.slideKiosk === true,
     pageNotes: validated.pageNotes,
     fonts: substitutedFonts(validated.fonts, pdf),
     artifactsDir: cacheRoot,

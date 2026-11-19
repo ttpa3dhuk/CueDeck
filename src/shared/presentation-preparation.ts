@@ -57,8 +57,10 @@ export interface PreparedPresentation {
   sourceSha1?: string
   totalSlides: number
   slideMedia: SlideMedia[]
-  slideTransitions?: Record<number, number>
+  slideTransitions?: Record<number, import('./pptx-transition.js').PptxSlideTransition>
   slideBuilds?: Record<number, SlideBuildAnimation>
+  slideLinks?: Record<number, import('./types.js').SlideVideoLink[]>
+  slideKiosk?: boolean
   pageNotes: Record<number, string>
   fonts: string[]
   pdfPath: string
@@ -77,8 +79,10 @@ export interface PreparedCacheMetadata {
   totalSlides: number
   fonts: string[]
   slideMedia: SlideMedia[]
-  slideTransitions?: Record<number, number>
+  slideTransitions?: Record<number, import('./pptx-transition.js').PptxSlideTransition>
   slideBuilds?: Record<number, SlideBuildAnimation>
+  slideLinks?: Record<number, import('./types.js').SlideVideoLink[]>
+  slideKiosk?: boolean
   pageNotes: Record<number, string>
   /** Для pptx в root есть <sha>.media.json версии 7. */
   hasManifest: boolean
@@ -128,8 +132,10 @@ export interface PreparationWorkerResult {
   sourceSha1?: string
   totalSlides: number
   slideMedia: SlideMedia[]
-  slideTransitions?: Record<number, number>
+  slideTransitions?: Record<number, import('./pptx-transition.js').PptxSlideTransition>
   slideBuilds?: Record<number, SlideBuildAnimation>
+  slideLinks?: Record<number, import('./types.js').SlideVideoLink[]>
+  slideKiosk?: boolean
   pageNotes: Record<number, string>
   fonts: string[]
 }
