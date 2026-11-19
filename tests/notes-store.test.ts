@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { loadNotes, NotesWriter, notesWriter, sha1FromBuffer, sidecarPathFor } from '../src/main/notes-store'
+import { presentationNotesPath } from '../src/main/presentation-notes-path'
 
 let dir: string
 
@@ -16,6 +17,18 @@ afterEach(async () => {
 })
 
 describe('sidecarPathFor', () => {
+  it('isolates notes edited on PowerPoint static pages from LibreOffice animation pages', async () => {
+    const source = join(dir, 'deck.pptx')
+    const lo = presentationNotesPath(source, 'source-sha')
+    const pp = presentationNotesPath(source, 'powerpoint-cache-sha', 'source-sha')
+    expect(sidecarPathFor(pp)).not.toBe(sidecarPathFor(lo))
+    const writer = new NotesWriter()
+    writer.schedule(lo, 'source-sha', { 2: 'LibreOffice step 1' })
+    writer.schedule(pp, 'powerpoint-cache-sha', { 2: 'PowerPoint slide 2' })
+    await writer.flush()
+    expect((await loadNotes(lo, 'source-sha')).notes).toEqual({ 2: 'LibreOffice step 1' })
+    expect((await loadNotes(pp, 'powerpoint-cache-sha')).notes).toEqual({ 2: 'PowerPoint slide 2' })
+  })
   it('кладёт <имя>.notes.json рядом с файлом', () => {
     expect(sidecarPathFor('/decks/show.pdf')).toBe('/decks/show.notes.json')
   })

@@ -1,3 +1,6 @@
+import { SlideInteractive } from '../shared/slide-interactive'
+import { SlideAudio } from '../shared/slide-audio'
+import { SlideVideoForeground } from '../shared/slide-video-foreground'
 import { rejectAudioOnlyVideo } from '../shared/video-content'
 import { SlideGifs } from '../shared/slide-gifs'
 import { configureProgramMirror, loadProgramVideo, releaseProgramVideo, programVideoCanvas, programVideoReady } from '../shared/program-mirror'
@@ -41,15 +44,18 @@ let slideVideo = document.getElementById('slide-video') as HTMLVideoElement
 const liveVideo = document.getElementById('live-video') as HTMLVideoElement
 const liveStatus = document.getElementById('live-status') as HTMLDivElement
 let mediaOverlay = document.getElementById('media-overlay') as HTMLVideoElement
+const videoForeground = new SlideVideoForeground(canvas, mediaOverlay, false, () => updateMediaOverlay(getState()))
+const slideAudio = new SlideAudio()
+const slideInteractive = new SlideInteractive(canvas, () => updateMediaOverlay(getState()))
 const blackout = document.getElementById('blackout') as HTMLDivElement
 const kvImage = document.getElementById('keyvisual') as HTMLImageElement
 const kvVideo = document.getElementById('keyvisual-video') as HTMLVideoElement
 const slideImageUnder = document.getElementById('slide-image-under') as HTMLImageElement
 
-const takeFade = new TakeFade(document.body, () => [slideImageUnder, canvas, slideImage, slideVideo, programVideoCanvas(slideVideo), liveVideo, mediaOverlay, programVideoCanvas(mediaOverlay), ...slideGifs.elements()], retainAudienceVideo)
+const takeFade = new TakeFade(document.body, () => [slideImageUnder, canvas, slideImage, slideVideo, programVideoCanvas(slideVideo), liveVideo, mediaOverlay, programVideoCanvas(mediaOverlay), videoForeground.layer, slideInteractive.layer, ...slideGifs.elements()], retainAudienceVideo)
 
 function retainAudienceVideo(video: HTMLVideoElement): HTMLVideoElement | null {
-  if (video !== slideVideo && video !== mediaOverlay) return null
+  if (video !== slideVideo && video !== mediaOverlay || slideAudio.output.has(video)) return null
   const replacement = video.cloneNode(false) as HTMLVideoElement
   replacement.removeAttribute('src')
   releaseProgramVideo(video)
@@ -94,11 +100,12 @@ function programFrameReady(): boolean {
   if (s.fileKind === 'live') return liveVideo.readyState >= 2
   if (s.fileKind === 'image') return slideImage.complete && slideImage.naturalWidth > 0
   if (!docLoaded || slidePaint.pending || lastRenderedSlide !== s.currentSlide) return false
-  if (!slideGifs.ready()) return false
+  if (!slideGifs.ready() || s.slideMedia.some(media => media.slide === s.currentSlide && media.interactive) && !slideInteractive.settled()) return false
   const media = slideMediaAt(s.fileKind, s.slideMedia, s.currentSlide)
   if (!media || !s.pdfSha1) return true
   const expected = slideVideoSrc('program', media.file, s.pdfSha1)
   return overlayFailedSrc === expected || (overlaySlide === s.currentSlide &&
+    !mediaOverlay.classList.contains('slide-video-wait-foreground') &&
     overlayFrameReady(expected, overlaySrc, overlayFailedSrc, programVideoReady(mediaOverlay) ? 2 : 0, false))
 }
 
@@ -199,11 +206,16 @@ function unloadVideo(): void {
 
 let overlaySrc: string | null = null
 let overlaySlide = -1
+let overlayAnchorAt: number | null = null
 let overlaySinkId: string | null | undefined = undefined
 // src, на котором <video> упал (кодек) — не перезаряжать его на каждом тике.
 let overlayFailedSrc: string | null = null
 
-function unloadMediaOverlay(): void {
+function unloadMediaOverlay(clearAudio = true): void {
+  if (clearAudio) { slideAudio.clear(); slideInteractive.clear() }
+  videoForeground.clear()
+  mediaOverlay.classList.remove('slide-video-wait-foreground')
+  programVideoCanvas(mediaOverlay).classList.remove('slide-video-wait-foreground')
   releaseProgramVideo(mediaOverlay)
   if (mediaOverlay.src) {
     mediaOverlay.pause()
@@ -216,39 +228,60 @@ function unloadMediaOverlay(): void {
 }
 
 function updateMediaOverlay(state: AppState): void {
+  const restarting = overlayAnchorAt !== state.video.anchorAt && state.video.playing &&
+    state.video.anchorSec === 0 && mediaOverlay.currentTime > 0.35
+  const leaving = overlaySlide >= 0 && (state.fileKind !== 'pptx' || overlaySlide !== state.currentSlide || restarting)
+  if (leaving && slideAudio.output.holdForSwitch(mediaOverlay, () => updateMediaOverlay(getState()))) return
+  slideAudio.updateTransition(state, 'audience')
   slideGifs.update(state.fileKind, state.slideMedia, state.currentSlide, state.pdfSha1,
     docLoaded && !slidePaint.pending && lastRenderedSlide === state.currentSlide)
   if (state.fileKind === 'pptx' && (!docLoaded || slidePaint.pending || lastRenderedSlide !== state.currentSlide)) {
+    slideInteractive.clear()
+    slideAudio.clear()
+    videoForeground.clear()
     mediaOverlay.muted = true
     mediaOverlay.pause()
     return
   }
+  const interactive = state.fileKind === 'pptx' ? state.slideMedia.find(media => media.slide === state.currentSlide && media.interactive)?.interactive : undefined
+  slideInteractive.update(interactive, state)
+  const soundMedia = state.fileKind === 'pptx' ? state.slideMedia.find(media => media.slide === state.currentSlide && media.audio?.length) : undefined
+  slideAudio.update(soundMedia, state, 'audience')
   const m = slideMediaAt(state.fileKind, state.slideMedia, state.currentSlide)
   if (!m || !state.pdfSha1 || canvas.classList.contains('hidden')) {
-    unloadMediaOverlay()
+    unloadMediaOverlay(false)
     return
   }
   const src = slideVideoSrc('program', m.file, state.pdfSha1)
   if (src === overlayFailedSrc) {
-    unloadMediaOverlay()
+    unloadMediaOverlay(false)
     return
   }
   overlaySlide = state.currentSlide
+  overlayAnchorAt = state.video.anchorAt
   if (overlaySrc !== src) {
     overlaySrc = src
     loadProgramVideo(mediaOverlay, src)
   }
-  mediaOverlay.muted = shouldMute(state, 'audience')
-  if (state.audioOutputId !== overlaySinkId) {
-    overlaySinkId = state.audioOutputId
-    applySinkId(mediaOverlay, state.audioOutputId)
-  }
+  mediaOverlay.volume = m.volume ?? 1
   placeSlideOverlay(mediaOverlay, canvas, m.rect, m.crop)
+  const foregroundReady = videoForeground.update(m, state.pdfSha1, Boolean(state.slideMenuOpen), state.video.anchorAt, state.slideMenuOpenedAt, takeFade.active(state.takeTransition))
+  mediaOverlay.classList.toggle('slide-video-wait-foreground', !foregroundReady)
+  programVideoCanvas(mediaOverlay).classList.toggle('slide-video-wait-foreground', !foregroundReady)
   mediaOverlay.classList.remove('hidden')
   syncVideoElement(mediaOverlay, state.video)
+  const muted = shouldMute(state, 'audience')
+  const routed = slideAudio.output.configure(mediaOverlay, muted, state.audioOutputId)
+  mediaOverlay.muted = muted
+  if (!routed && overlaySinkId !== state.audioOutputId) {
+    overlaySinkId = state.audioOutputId
+    if (state.audioOutputId) void applySinkId(mediaOverlay, state.audioOutputId)
+    else if (mediaOverlay.sinkId) void applySinkId(mediaOverlay, null)
+  }
 }
 
 async function loadFile(): Promise<void> {
+  takeFade.clearNative()
   clearDocument()
   // Внутри списка с наплывом уходящий кадр ещё нужен нижнему слою.
   disposeSlideImage(listFadeMs(getState()) + 500)
@@ -311,7 +344,7 @@ async function loadFile(): Promise<void> {
   slideImage.classList.add('hidden')
   slideImage.removeAttribute('src')
   canvas.classList.remove('hidden')
-  await loadDocument(data.pdf ?? data.bytes)
+  if (!await loadDocument(data.pdf ?? data.bytes)) return
   if (stale()) return
   docLoaded = true
   await renderSlide()
@@ -333,6 +366,8 @@ async function renderSlide(): Promise<void> {
   if (generation !== programLoadGeneration || !docLoaded || getState().pdfPath !== path || getState().currentSlide !== slide) return
   if (!slidePaint.finish(request)) return
   lastRenderedSlide = slide
+  const upcoming = Object.entries(state.slideBuilds ?? {}).filter(([page, build]) => Number(page) >= slide && Number(page) <= slide + 1 && build.kind === 'native-frames').sort((a,b)=>Number(a[0])-Number(b[0]))[0]?.[1]
+  void takeFade.prepareNative(upcoming, state.pdfSha1)
   window.api.diag.log('info', `слайд ${state.currentSlide} отрисован за ${Math.round(performance.now() - t0)} мс`)
   if (state.currentSlide + 1 <= state.totalSlides) {
     prerender(state.currentSlide + 1, width).catch(() => undefined)
@@ -407,6 +442,8 @@ async function applyState(state: AppState): Promise<void> {
     if (lastFilePath !== null) {
       lastFilePath = null
       docLoaded = false
+      clearDocument()
+      takeFade.clearNative()
       lastRenderedSlide = -1
       disposeSlideImage()
       unloadVideo()
@@ -455,7 +492,7 @@ async function bootstrap(): Promise<void> {
     }
     const contentChanged = patch && (Object.hasOwn(patch, 'takeTransition') || Object.hasOwn(patch, 'pdfPath'))
     applyState(state).then(() => {
-      if (contentChanged) void takeFade.reveal(state.takeTransition, programFrameReady)
+      if (contentChanged) void takeFade.reveal(state.takeTransition, programFrameReady).then(() => updateMediaOverlay(getState()))
     }).catch((err) => window.api.diag.log('error', 'applyState упал', String(err?.stack ?? err)))
   })
 

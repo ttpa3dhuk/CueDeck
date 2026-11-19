@@ -1,3 +1,4 @@
+import { validSlideAudioCue } from '../shared/slide-video.js'
 import { app } from 'electron'
 import { existsSync, readdirSync, lstatSync, readFileSync } from 'node:fs'
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, rmdir } from 'node:fs/promises'
@@ -43,6 +44,13 @@ function validPreparedRoot(root: string, sha1: string): boolean {
           !Number.isInteger(media.slide) || media.slide < 1 ||
           !media.rect || !['x', 'y', 'w', 'h'].every((key: string) => Number.isFinite(media.rect[key]))) return false
       if (!lstatSync(`${root}/${sha1}.media/${media.file}`).isFile()) return false
+      if (media.audio !== undefined && !Array.isArray(media.audio)) return false
+      for (const cue of media.audio ?? []) {
+        if (!validSlideAudioCue(cue) ||
+            !lstatSync(`${root}/${sha1}.media/${cue.file}`).isFile()) return false
+      }
+      if (media.foreground && (media.foreground.file !== 'video-foreground.pdf' ||
+          !lstatSync(`${root}/${sha1}.media/${media.foreground.file}`).isFile())) return false
     }
     return true
   } catch {
@@ -316,6 +324,17 @@ async function cacheMedia(root: string, sha1: string, needsManifest: boolean): P
           media.crop.left + media.crop.right >= 1 || media.crop.top + media.crop.bottom >= 1)) return null
       if (!(await regularFile(join(root, `${sha1}.media`, media.file)))) return null
       files.add(media.file)
+      if (media.audio !== undefined && !Array.isArray(media.audio)) return null
+      for (const cue of media.audio ?? []) {
+        if (!validSlideAudioCue(cue) ||
+            !(await regularFile(join(root, `${sha1}.media`, cue.file)))) return null
+        files.add(cue.file)
+      }
+      if (media.foreground) {
+        const name = media.foreground.file
+        if (name !== 'video-foreground.pdf' || !(await regularFile(join(root, `${sha1}.media`, name)))) return null
+        files.add(name)
+      }
     }
     return [...files]
   } catch {

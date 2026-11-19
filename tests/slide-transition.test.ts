@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('electron', () => ({ BrowserWindow: class {} }))
 import { StateStore } from '../src/main/state'
-import { sanitizeSlideFadeMs, slideNavigationPatch } from '../src/shared/slide-transition'
+import { sanitizeSlideFadeMs, slideNavigationPatch, slideVideoLinkPatch } from '../src/shared/slide-transition'
 import { loadProjectFile, saveProjectFile } from '../src/main/project'
 
 describe('per-presentation slide fade', () => {
@@ -65,4 +65,47 @@ it('holds the outgoing frame until the matching video has decoded and completed 
   expect(overlayFrameReady('new', 'new', null, 4, true)).toBe(false)
   expect(overlayFrameReady('new', 'new', null, 2, false)).toBe(true)
   expect(overlayFrameReady('new', null, 'new', 0, false)).toBe(true)
+})
+
+
+it('plays an authored build fade only on the adjacent forward step, preserving 500ms', () => {
+  const store = new StateStore()
+  const build = { durationMs: 500, rect: { x: .1, y: .2, w: .3, h: .1 } }
+  store.patch({fileKind:'pptx',totalSlides:12,currentSlide:8,slideTransitions:{7:0},slideBuilds:{9:build}})
+  expect(slideNavigationPatch(store.get(),9,'fade')?.takeTransition).toMatchObject({durationMs:500,buildAnimation:build})
+  expect(slideNavigationPatch({...store.get(),currentSlide:7},9,'jump')?.takeTransition).not.toHaveProperty('buildAnimation')
+  expect(slideNavigationPatch({...store.get(),currentSlide:10},9,'back')?.takeTransition).not.toHaveProperty('buildAnimation')
+  expect(slideNavigationPatch({...store.get(),slideBuilds:{9:{...build,rect:{x:-1,y:0,w:1,h:1}}}},9,'invalid')?.takeTransition).not.toHaveProperty('buildAnimation')
+})
+
+it('starts a selected clip atomically and returns to the revealed menu without changing direct navigation', () => {
+  const store = new StateStore()
+  const rect = { x: 0, y: 0, w: 1, h: 1 }
+  const frames = { file: 'video-foreground.pdf', firstPage: 1 }
+  store.patch({
+    fileKind: 'pptx', totalSlides: 5, currentSlide: 2, slideMenuOpen: true,
+    slideMedia: [
+      { slide: 2, file: 'background.mp4', rect, autoPlay: true, loop: true,
+        foreground: { ...frames, kind: 'menu', button: rect, links: [{ slide: 3, rect }, { slide: 5, rect }] } },
+      { slide: 3, file: 'karaoke.mp4', rect,
+        foreground: { ...frames, kind: 'return', link: { slide: 2, rect } } },
+    ],
+  })
+  store.patchVideo({ muted: true })
+  expect(slideNavigationPatch(store.get(), 3, 'direct', 100)?.video?.playing).toBe(false)
+  expect(slideVideoLinkPatch({ ...store.get(), slideMenuOpen: false }, 3, 'behind-rules')).toBeNull()
+  expect(slideVideoLinkPatch(store.get(), 4, 'unknown')).toBeNull()
+  expect(slideVideoLinkPatch(store.get(), 5, 'next-round', 100)).toMatchObject({
+    currentSlide: 5, slideMenuOpen: false, video: { playing: false },
+  })
+  store.patch(slideVideoLinkPatch(store.get(), 3, 'select-song', 100)!)
+  expect(store.get()).toMatchObject({
+    currentSlide: 3, slideMenuOpen: false, videoLoop: false,
+    video: { playing: true, muted: true, anchorSec: 0, anchorAt: 100 },
+  })
+  store.patch(slideVideoLinkPatch(store.get(), 2, 'return', 400)!)
+  expect(store.get()).toMatchObject({
+    currentSlide: 2, slideMenuOpen: true, videoLoop: true,
+    video: { playing: true, muted: true, anchorSec: 0, anchorAt: 400 },
+  })
 })

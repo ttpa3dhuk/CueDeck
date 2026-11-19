@@ -12,7 +12,8 @@ function harness() {
     removeAttribute: vi.fn(function (this: { src: string }) { this.src = '' }), load: vi.fn(), classList: { add: vi.fn() } }
   const d: Record<string, any> = {
     currentVideo: video, releaseProgramVideo: vi.fn(), disposeCurrentImage: vi.fn(),
-    takeFade: { begin: vi.fn(), cancel: vi.fn(), reveal: vi.fn() }, isOperator: true,
+    takeFade: { begin: vi.fn(), cancel: vi.fn(), reveal: vi.fn().mockResolvedValue(undefined), clearNative: vi.fn() }, isOperator: true,
+    clearDocument: vi.fn(async () => {}),
     showBanner: vi.fn(), t: (x: string) => x, applyState: vi.fn(), applyProgramLive: vi.fn(),
     applyPreviewLive: vi.fn(), attachMeters: vi.fn(), handlePreviewChange: vi.fn(async () => {}),
     loadCurrentFile: vi.fn(async () => {}), renderCurrent: vi.fn(async () => {}),
@@ -43,6 +44,8 @@ it('empty program releases native decoder/mirror and invalidates pending loads',
   expect(h.video.load).toHaveBeenCalledOnce()
   expect(h.api.status()).toMatchObject({ prevFilePath: null, programLoadGeneration: 1, docLoaded: false, lastRenderedSlide: -1 })
   expect(h.d.takeFade.cancel).toHaveBeenCalled()
+  expect(h.d.takeFade.clearNative).toHaveBeenCalledOnce()
+  expect(h.d.clearDocument).toHaveBeenCalledOnce()
 })
 it('reopening the same path after New reloads it; repeated empty patches do not release again', async () => {
   const h = harness()

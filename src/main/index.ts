@@ -159,7 +159,7 @@ async function handleMediaRequest(request: Request): Promise<Response> {
     if (
       d.kind === 'pptx' &&
       d.sha1 &&
-      d.slideMedia.some((m) => m.file === file) &&
+      d.slideMedia.some((m) => m.file === file || m.audio?.some(cue => cue.file === file)) &&
       !file.includes('/') &&
       !file.includes('..')
     ) {

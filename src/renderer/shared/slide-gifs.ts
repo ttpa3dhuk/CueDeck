@@ -1,9 +1,19 @@
 import type { FileKind, SlideMedia } from '../../preload/api'
 import { placeSlideOverlay, slideVideoSrc, type MediaDeck } from './video'
+import { GifPlayer, gifDecoder } from './gif-player'
+import { GifByteCache } from './gif-byte-cache'
 
-/** Native animated images keep their own GIF frame delays/disposal/loop count. */
+const bytesCache = new GifByteCache()
+export function gifCacheStats(): ReturnType<GifByteCache['stats']> { return bytesCache.stats() }
+function readGif(file: string, sha: string, deck: MediaDeck): Promise<Uint8Array | null> {
+  // The prepared SHA identifies identical immutable bytes in program and preview.
+  return bytesCache.read(`${sha}:${file}`, () => window.api.pptx.readGif(file, sha, deck))
+}
+
+/** Decode sequentially where supported; keep native images as a compatibility fallback. */
 export class SlideGifs {
-  private images = new Map<string, HTMLImageElement>()
+  private images = new Map<string, HTMLImageElement | HTMLCanvasElement>()
+  private players = new WeakMap<HTMLCanvasElement, GifPlayer>()
   private generation = ''
   constructor(private canvas: HTMLCanvasElement, private deck: MediaDeck) {}
 
@@ -14,7 +24,8 @@ export class SlideGifs {
       this.generation = generation
     }
     if (!ready || !sha || kind !== 'pptx' || this.canvas.classList.contains('hidden')) {
-      for (const image of this.images.values()) image.hidden = true
+      // display:none/hidden alone keeps the animated image and decoder alive.
+      this.clear()
       return
     }
     const wanted = new Set<string>()
@@ -23,34 +34,68 @@ export class SlideGifs {
       wanted.add(key)
       let image = this.images.get(key)
       if (!image) {
-        image = document.createElement('img')
+        if (gifDecoder()) {
+          const canvas = document.createElement('canvas')
+          const player = new GifPlayer(canvas)
+          this.players.set(canvas, player)
+          canvas.width = 0; canvas.height = 0
+          image = canvas
+          // The owner check rejects a completed read after a slide/deck change.
+          void readGif(m.file, sha, this.deck).then(async bytes => {
+            if (this.images.get(key) !== canvas) return
+            if (!bytes) throw new Error('GIF data unavailable')
+            await player.start(bytes)
+          }).catch(() => {
+            if (this.images.get(key) !== canvas) return
+            player.stop()
+            const native = this.nativeImage(m.file, sha, slide, index)
+            native.style.cssText = canvas.style.cssText
+            canvas.replaceWith(native)
+            this.images.set(key, native)
+          })
+        } else image = this.nativeImage(m.file, sha, slide, index)
         image.className = 'slide-gif'
-        image.alt = ''
         image.style.position = 'absolute'
         image.style.pointerEvents = 'none'
-        image.onerror = () => {
-          image!.dataset.failed = '1'; image!.hidden = true
-          window.api.diag.log('warn', 'Animated PPTX GIF failed to decode')
-        }
-        // Separate URL per entry/return to restart even if another role retains the GIF.
-        image.src = `${slideVideoSrc(this.deck, m.file, sha)}&gif=${encodeURIComponent(`${slide}:${performance.now()}:${index}`)}`
         this.canvas.parentElement!.append(image)
         this.images.set(key, image)
       }
       image.hidden = image.dataset.failed === '1'
       placeSlideOverlay(image, this.canvas, m.rect, m.crop)
     })
-    for (const [key, image] of this.images) if (!wanted.has(key)) { image.remove(); image.removeAttribute('src'); this.images.delete(key) }
+    for (const [key, image] of this.images) if (!wanted.has(key)) { this.release(image); this.images.delete(key) }
+  }
+
+  private nativeImage(file: string, sha: string, slide: number, index: number): HTMLImageElement {
+    const image = document.createElement('img')
+    image.alt = ''
+    image.className = 'slide-gif'
+    image.onerror = () => {
+      image.dataset.failed = '1'; image.hidden = true
+      window.api.diag.log('warn', 'Animated PPTX GIF failed to decode')
+    }
+    // Fallback retains the existing restart behavior on older Chromium builds.
+    image.src = `${slideVideoSrc(this.deck, file, sha)}&gif=${encodeURIComponent(`${slide}:${performance.now()}:${index}`)}`
+    return image
+  }
+
+  private release(image: HTMLImageElement | HTMLCanvasElement): void {
+    const player = this.players.get(image as HTMLCanvasElement)
+    player?.stop()
+    image.onerror = null
+    image.removeAttribute('src')
+    image.remove()
   }
 
   clear(): void {
-    for (const image of this.images.values()) { image.remove(); image.removeAttribute('src') }
+    for (const image of this.images.values()) this.release(image)
     this.images.clear()
   }
 
-  elements(): HTMLImageElement[] { return [...this.images.values()] }
+  elements(): Array<HTMLImageElement | HTMLCanvasElement> { return [...this.images.values()] }
 
   ready(): boolean {
-    return [...this.images.values()].every(image => image.hidden || (image.complete && image.naturalWidth > 0))
+    return [...this.images.values()].every(image => image.hidden || image.dataset.failed === '1' ||
+      (this.players.get(image as HTMLCanvasElement)?.ready ?? ((image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)))
   }
 }

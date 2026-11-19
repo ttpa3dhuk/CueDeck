@@ -9,7 +9,7 @@ export function autoVideoTarget(s: AppState): AutoVideoTarget | null {
   if (!s.autoAdvance || s.videoLoop || s.listIndex >= 0 || !s.video.playing ||
       !['video', 'pptx'].includes(s.fileKind ?? '')) return null
   if (s.fileKind === 'pptx') {
-    if (!s.slideMedia.some(m => m.slide === s.currentSlide && m.kind !== 'gif')) return null
+    if (!s.slideMedia.some(m => m.slide === s.currentSlide && m.kind === undefined)) return null
     if (s.currentSlide < s.totalSlides) {
       const slide = s.currentSlide + 1
       return { slide, fadeMs: slideNavigationPatch(s, slide, 'auto')?.takeTransition?.durationMs ?? 0 }

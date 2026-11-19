@@ -442,6 +442,15 @@ export interface PresenterApi {
     remove(): Promise<{ ok: boolean; removed?: number; error?: string }>
   }
   pptx: {
+    readGif(file: string, sha: string, deck: 'program' | 'preview'): Promise<Uint8Array | null>
+    followSlideLink(sha: string, from: number, target: number, shape?: string): Promise<void>
+    followVideoLink(sha: string, from: number, target: number, shape?: string): Promise<void>
+    clickShape(sha: string, slide: number, shape: string): Promise<void>
+    runTrigger(sha: string, slide: number, id: string, takeId?: string): Promise<void>
+    showMenu(sha: string, slide: number): Promise<void>
+    readAnimationFrames(file: string, sha: string): Promise<Uint8Array | null>
+    backend(): Promise<'libreoffice' | 'powerpoint-static'>
+    setBackend(backend: 'libreoffice' | 'powerpoint-static'): Promise<void>
     /** Сбросить кэш PDF этого PPTX и сконвертировать заново (после установки шрифтов). */
     rebuild(path: string): Promise<{ ok: boolean; remaining?: string[]; error?: string }>
     cacheStats(): Promise<{ bytes: number; files: number; protectedBytes: number }>

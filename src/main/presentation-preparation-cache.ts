@@ -1,3 +1,5 @@
+import { validSlideAudioCue } from '../shared/slide-video.js'
+import type { SlideBuildAnimation } from '../shared/types.js'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve, sep } from 'node:path'
@@ -36,17 +38,22 @@ interface CacheIndex {
 export interface PublishInput {
   artifactsDir: string
   sha1: string
+  sourceSha1?: string
+  backend?: 'libreoffice' | 'powerpoint-static'
   generation: number
   sourcePath: string
   identity: SourceIdentity
   totalSlides: number
   slideMedia: PreparedPresentation['slideMedia']
-  slideTransitions?: Record<number, number>
+  slideTransitions?: Record<number, import('../shared/pptx-transition.js').PptxSlideTransition>
+  slideBuilds?: Record<number, SlideBuildAnimation>
+  slideLinks?: Record<number, import('../shared/types.js').SlideVideoLink[]>
+  slideKiosk?: boolean
   slideNumbering?: import('../shared/slide-numbering').SlideNumbering
   pageNotes: Record<number, string>
   fonts: string[]
   hasManifest: boolean
-  /** Проверка перед атомарным rename: force/cancel не должен опубликовать stale. */
+  /** Проверка до rename и после асинхронной валидации: stale job не становится текущим. */
   commitGuard?: () => boolean
 }
 
@@ -223,12 +230,23 @@ export class PresentationCache {
             !Array.isArray(manifest.slideMedia) || !manifest.pageNotes ||
             typeof manifest.pageNotes !== 'object' || Array.isArray(manifest.pageNotes) ||
             !Object.values(manifest.pageNotes).every((note) => typeof note === 'string')) return null
+        // An older prepared root may contain the source links only in its manifest.
+        if (!meta.slideNumbering && manifest.slideNumbering) meta.slideNumbering = manifest.slideNumbering
+        if (manifest.slideLinks && !meta.slideLinks) meta.slideLinks = manifest.slideLinks
+        if (meta.slideKiosk === undefined && manifest.slideKiosk === true) meta.slideKiosk = true
         for (const media of manifest.slideMedia) {
           if (!media || typeof media.file !== 'string' || !media.file || /[/\\\0]/.test(media.file) ||
               !Number.isInteger(media.slide) || media.slide < 1 ||
               !media.rect || !['x', 'y', 'w', 'h'].every((key: string) => Number.isFinite(media.rect[key]))) return null
           const file = await stat(join(root, `${sha1}.media`, media.file)).catch(() => null)
           if (!file?.isFile()) return null
+          if (media.audio !== undefined && !Array.isArray(media.audio)) return null
+          for (const cue of media.audio ?? []) {
+            if (!validSlideAudioCue(cue) ||
+                !(await stat(join(root, `${sha1}.media`, cue.file)).catch(() => null))?.isFile()) return null
+          }
+          if (media.foreground && (media.foreground.file !== 'video-foreground.pdf' ||
+              !(await stat(join(root, `${sha1}.media`, media.foreground.file)).catch(() => null))?.isFile())) return null
         }
       } catch {
         return null
@@ -240,10 +258,14 @@ export class PresentationCache {
   private resultOf(meta: PreparedCacheMetadata, pdfPath: string): PreparedPresentation {
     return {
       sha1: meta.sha1,
+      sourceSha1: meta.sourceSha1,
       totalSlides: meta.totalSlides,
       slideMedia: meta.slideMedia,
       slideTransitions: meta.slideTransitions ?? {},
       slideNumbering: meta.slideNumbering,
+      slideBuilds: meta.slideBuilds ?? {},
+      slideLinks: meta.slideLinks ?? {},
+      slideKiosk: meta.slideKiosk === true,
       pageNotes: meta.pageNotes,
       fonts: meta.fonts,
       pdfPath,
@@ -251,7 +273,7 @@ export class PresentationCache {
     }
   }
 
-  async lookupByIdentity(filePath: string, identity: SourceIdentity): Promise<PreparedPresentation | null> {
+  async lookupByIdentity(filePath: string, identity: SourceIdentity, backend: 'libreoffice' | 'powerpoint-static' = 'libreoffice'): Promise<PreparedPresentation | null> {
     await this.ensureIndex()
     const key = `${resolve(filePath)}\0${identityKey(identity)}`
     let locator = this.byPath.get(key)
@@ -261,7 +283,7 @@ export class PresentationCache {
     }
     if (!locator) return null
     const valid = await this.validRoot(locator.sha1, locator.generation)
-    if (!valid) {
+    if (!valid || (valid.meta.backend ?? 'libreoffice') !== backend) {
       this.byPath.delete(key)
       return null
     }
@@ -331,6 +353,8 @@ export class PresentationCache {
     const metadata: PreparedCacheMetadata = {
       version: PREPARED_METADATA_VERSION,
       sha1: input.sha1,
+      sourceSha1: input.sourceSha1,
+      backend: input.backend,
       generation: input.generation,
       sourcePath: input.sourcePath,
       identity: input.identity,
@@ -339,6 +363,9 @@ export class PresentationCache {
       slideMedia: input.slideMedia,
       slideTransitions: input.slideTransitions ?? {},
       slideNumbering: input.slideNumbering,
+      slideBuilds: input.slideBuilds ?? {},
+      slideLinks: input.slideLinks ?? {},
+      slideKiosk: input.slideKiosk === true,
       pageNotes: input.pageNotes,
       hasManifest: input.hasManifest,
       createdAt: Date.now(),
@@ -349,31 +376,42 @@ export class PresentationCache {
 
     const versionRoot = join(this.preparedRoot, input.sha1, versionName(input.generation))
     await mkdir(dirname(versionRoot), { recursive: true })
+    // Loading/rebuilding the index after rename could discover a cancelled root.
+    await this.ensureIndex()
     if (existsSync(versionRoot)) throw new Error(`preparation: generation already exists: ${versionRoot}`)
     if (input.commitGuard && !input.commitGuard()) throw new Error('preparation: stale generation')
-    await rename(input.artifactsDir, versionRoot)
-    // Main-side повторная проверка уже опубликованной целой папки: если
-    // очистка кэша успела её убрать, не отдаём битый результат.
-    if (!(await this.validRoot(input.sha1, input.generation))) {
-      await rm(versionRoot, { recursive: true, force: true }).catch(() => undefined)
-      throw new Error('preparation: published root failed validation')
+    let renamed = false
+    let committed = false
+    try {
+      await rename(input.artifactsDir, versionRoot)
+      renamed = true
+      // Cancellation can land during rename or the filesystem validation.
+      if (!(await this.validRoot(input.sha1, input.generation))) {
+        throw new Error('preparation: published root failed validation')
+      }
+      if (input.commitGuard && !input.commitGuard()) throw new Error('preparation: stale generation')
+      const locator: IndexLocator = {
+        sha1: input.sha1,
+        generation: input.generation,
+        sourcePath: input.sourcePath,
+        identity: input.identity,
+        createdAt: metadata.createdAt,
+      }
+      const entries = (this.index?.entries ?? []).filter((entry) => entry.sha1 !== input.sha1)
+      entries.push(locator)
+      // No await between the final guard and the in-memory commit.
+      this.registerRoot(input.sha1, versionRoot)
+      this.reindex(entries)
+      committed = true
+      await this.writeIndex()
+      const pdfPath = join(versionRoot, `${input.sha1}.pdf`)
+      return this.resultOf(metadata, pdfPath)
+    } catch (error) {
+      // Never remove a pre-existing or concurrently created versionRoot when
+      // the rename did not succeed; previous generations remain untouched.
+      if (renamed && !committed) await rm(versionRoot, { recursive: true, force: true }).catch(() => undefined)
+      throw error
     }
-    this.registerRoot(input.sha1, versionRoot)
-
-    await this.ensureIndex()
-    const locator: IndexLocator = {
-      sha1: input.sha1,
-      generation: input.generation,
-      sourcePath: input.sourcePath,
-      identity: input.identity,
-      createdAt: metadata.createdAt,
-    }
-    const entries = (this.index?.entries ?? []).filter((entry) => entry.sha1 !== input.sha1)
-    entries.push(locator)
-    this.reindex(entries)
-    await this.writeIndex()
-    const pdfPath = join(versionRoot, `${input.sha1}.pdf`)
-    return this.resultOf(metadata, pdfPath)
   }
 
   /** Старые незавершённые stage после падения. Новые не трогаем: возраст > 24 ч. */

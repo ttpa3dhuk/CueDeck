@@ -14,4 +14,7 @@ export interface TakeTransition {
   durationMs: number
   /** In-place slide navigation keeps media on the program route. */
   scope?: 'slide'
+  pushDirection?: import('./pptx-transition.js').PushDirection
+  slideEffect?: Exclude<import('./pptx-transition.js').PptxSlideTransition, number>
+  buildAnimation?: import('./types.js').SlideBuildAnimation
 }

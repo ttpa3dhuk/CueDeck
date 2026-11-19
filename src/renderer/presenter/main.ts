@@ -1,4 +1,8 @@
 import { slidePosition, pageForSlideLabel } from '../../shared/slide-numbering'
+import { SlideInteractive } from '../shared/slide-interactive'
+import { SlideLinkButtons } from '../shared/slide-link-buttons'
+import { SlideAudio } from '../shared/slide-audio'
+import { SlideVideoForeground } from '../shared/slide-video-foreground'
 import { rejectAudioOnlyVideo } from '../shared/video-content'
 import { SlideGifs } from '../shared/slide-gifs'
 import { configureProgramMirror, loadProgramVideo, releaseProgramVideo, programVideoCanvas, programVideoReady, programClockOwner } from '../shared/program-mirror'
@@ -226,6 +230,10 @@ let lastSinkId: string | null | undefined = undefined
 
 // ── Preview deck (operator only) ───────────────────────────────────────────
 const isOperator = role === 'operator'
+const videoForeground = new SlideVideoForeground(currentCanvas, mediaOverlay, isOperator, () => updateMediaOverlay(getState()))
+const slideAudio = new SlideAudio()
+const slideInteractive = new SlideInteractive(currentCanvas, () => updateMediaOverlay(getState()))
+const slideLinks = new SlideLinkButtons(currentCanvas, 'slide-video-menu-button slide-pptx-link')
 const previewCanvas = isOperator ? $<HTMLCanvasElement>('preview-canvas') : null
 const previewGifs = previewCanvas ? new SlideGifs(previewCanvas, 'preview') : null
 const previewImage = isOperator ? $<HTMLImageElement>('preview-image') : null
@@ -300,11 +308,16 @@ function unloadCurrentVideo(): void {
 
 let overlaySrc: string | null = null
 let overlaySlide = -1
+let overlayAnchorAt: number | null = null
 let overlaySinkId: string | null | undefined = undefined
 // src, на котором <video> упал (кодек) — не перезаряжать его на каждом тике.
 let overlayFailedSrc: string | null = null
 
-function unloadMediaOverlay(): void {
+function unloadMediaOverlay(clearAudio = true): void {
+  if (clearAudio) { slideAudio.clear(); slideInteractive.clear() }
+  videoForeground.clear()
+  mediaOverlay.classList.remove('slide-video-wait-foreground')
+  programVideoCanvas(mediaOverlay).classList.remove('slide-video-wait-foreground')
   releaseProgramVideo(mediaOverlay)
   if (mediaOverlay.src) {
     mediaOverlay.pause()
@@ -317,36 +330,81 @@ function unloadMediaOverlay(): void {
 }
 
 function updateMediaOverlay(state: AppState): void {
+  const restarting = overlayAnchorAt !== state.video.anchorAt && state.video.playing &&
+    state.video.anchorSec === 0 && mediaOverlay.currentTime > 0.35
+  const leaving = overlaySlide >= 0 && (state.fileKind !== 'pptx' || overlaySlide !== state.currentSlide || restarting)
+  if (leaving && slideAudio.output.holdForSwitch(mediaOverlay, () => updateMediaOverlay(getState()))) return
+  slideAudio.updateTransition(state, role)
   slideGifs.update(state.fileKind, state.slideMedia, state.currentSlide, state.pdfSha1,
     docLoaded && !slidePaint.pending && lastRenderedSlide === state.currentSlide)
   if (state.fileKind === 'pptx' && (!docLoaded || slidePaint.pending || lastRenderedSlide !== state.currentSlide)) {
+    slideLinks.update([])
+    slideInteractive.clear()
+    slideAudio.clear()
+    videoForeground.clear()
     mediaOverlay.muted = true
     mediaOverlay.pause()
     return
   }
+  const interactive = state.fileKind === 'pptx' ? state.slideMedia.find(media => media.slide === state.currentSlide && media.interactive)?.interactive : undefined
+  slideInteractive.update(interactive, state)
+  if (isOperator) {
+    const { pdfSha1, currentSlide } = state
+    const canClick = docLoaded && !slidePaint.pending && lastRenderedSlide === currentSlide && state.fileKind === 'pptx' && pdfSha1 &&
+      !state.slideMedia.some(media => media.slide === currentSlide && media.foreground)
+    const links = canClick ? state.slideLinks?.[currentSlide] ?? [] : []
+    const actions = canClick ? state.slideMedia.filter(media => media.slide === currentSlide).flatMap(media => media.clickActions ?? []) : []
+    slideLinks.update([
+      ...(canClick && slideInteractive.ready() ? interactive?.triggers ?? [] : []).map(trigger => ({
+        rect: trigger.rect,
+        label: trigger.label,
+        click: () => { void window.api.pptx.runTrigger(pdfSha1!, currentSlide, trigger.id, state.takeTransition?.id) },
+      })),
+      ...actions.filter(action => !interactive?.triggers.some(trigger => trigger.shape === action.shape)).map(action => ({
+        rect: action.rect,
+        label: action.label,
+        click: () => { void window.api.pptx.clickShape(pdfSha1!, currentSlide, action.shape) },
+      })),
+      ...links.map(link => ({
+        rect: link.rect,
+        label: link.label || t('Перейти к слайду {n}', { n: link.slide }),
+        click: () => { void window.api.pptx.followSlideLink(pdfSha1!, currentSlide, link.slide, link.triggerShape) },
+      })),
+    ])
+  }
+  const soundMedia = state.fileKind === 'pptx' ? state.slideMedia.find(media => media.slide === state.currentSlide && media.audio?.length) : undefined
+  slideAudio.update(soundMedia, state, role)
   const m = slideMediaAt(state.fileKind, state.slideMedia, state.currentSlide)
   if (!m || !state.pdfSha1 || currentCanvas.classList.contains('hidden')) {
-    unloadMediaOverlay()
+    unloadMediaOverlay(false)
     return
   }
   const src = slideVideoSrc('program', m.file, state.pdfSha1)
   if (src === overlayFailedSrc) {
-    unloadMediaOverlay()
+    unloadMediaOverlay(false)
     return
   }
   overlaySlide = state.currentSlide
+  overlayAnchorAt = state.video.anchorAt
   if (overlaySrc !== src) {
     overlaySrc = src
     loadProgramVideo(mediaOverlay, src)
   }
-  mediaOverlay.muted = shouldMute(state, role)
-  if (state.audioOutputId !== overlaySinkId) {
-    overlaySinkId = state.audioOutputId
-    applySinkId(mediaOverlay, state.audioOutputId)
-  }
+  mediaOverlay.volume = m.volume ?? 1
   placeSlideOverlay(mediaOverlay, currentCanvas, m.rect, m.crop)
+  const foregroundReady = videoForeground.update(m, state.pdfSha1, Boolean(state.slideMenuOpen), state.video.anchorAt, state.slideMenuOpenedAt, takeFade.active(state.takeTransition))
+  mediaOverlay.classList.toggle('slide-video-wait-foreground', !foregroundReady)
+  programVideoCanvas(mediaOverlay).classList.toggle('slide-video-wait-foreground', !foregroundReady)
   mediaOverlay.classList.remove('hidden')
   syncVideoElement(mediaOverlay, state.video)
+  const muted = shouldMute(state, role)
+  const routed = slideAudio.output.configure(mediaOverlay, muted, state.audioOutputId)
+  mediaOverlay.muted = muted
+  if (!routed && overlaySinkId !== state.audioOutputId) {
+    overlaySinkId = state.audioOutputId
+    if (state.audioOutputId) void applySinkId(mediaOverlay, state.audioOutputId)
+    else if (mediaOverlay.sinkId) void applySinkId(mediaOverlay, null)
+  }
 }
 
 function overlayIsCurrent(): boolean {
@@ -573,6 +631,7 @@ function applyPreviewLive(state: AppState): void {
 }
 
 async function loadCurrentFile(): Promise<void> {
+  takeFade.clearNative()
   clearDocument()
   const generation = ++programLoadGeneration
   const state = getState()
@@ -650,7 +709,7 @@ async function loadCurrentFile(): Promise<void> {
   currentCanvas.classList.remove('hidden')
   nextCanvas.classList.remove('hidden')
   nextEmpty.classList.add('hidden')
-  await loadDocument(data.pdf ?? data.bytes)
+  if (!await loadDocument(data.pdf ?? data.bytes)) return
   if (stale()) return
   docLoaded = true
   await window.api.pdf.reportTotal(totalPages())
@@ -679,6 +738,8 @@ async function renderCurrent(): Promise<void> {
   if (generation !== programLoadGeneration || !docLoaded || getState().pdfPath !== path || getState().currentSlide !== slide) return
   if (!slidePaint.finish(request)) return
   lastRenderedSlide = slide
+  const upcoming = Object.entries(state.slideBuilds ?? {}).filter(([page, build]) => Number(page) >= slide && Number(page) <= slide + 1 && build.kind === 'native-frames').sort((a,b)=>Number(a[0])-Number(b[0]))[0]?.[1]
+  void takeFade.prepareNative(upcoming, state.pdfSha1)
 
   const { width: nextWidth, height: nextHeight } = paddingBox(nextCanvas.parentElement!)
   if (slide + 1 <= state.totalSlides) {
@@ -688,7 +749,7 @@ async function renderCurrent(): Promise<void> {
           nextGifs.update(state.fileKind, state.slideMedia, slide + 1, state.pdfSha1, true)
       })
       .then(() => {
-        if (getState().pdfPath === path && getState().currentSlide === slide)
+        if (generation === programLoadGeneration && getState().pdfPath === path && getState().currentSlide === slide)
           return prerender(slide + 2, currentWidth)
       }).catch(() => undefined)
   } else {
@@ -950,6 +1011,7 @@ function unloadPreviewVideo(): void {
 async function loadPreviewFile(): Promise<void> {
   previewLoader?.clearDocument()
   if (!previewLoader || !previewVideo || !previewCanvas || !previewImage || !previewPlaceholder) return
+  previewLoader.clearDocument()
   const p = getState().preview
   disposePreviewImage()
   previewDocLoaded = false
@@ -1009,7 +1071,7 @@ async function loadPreviewFile(): Promise<void> {
   previewImage.classList.add('hidden')
   previewImage.removeAttribute('src')
   previewCanvas.classList.remove('hidden')
-  await previewLoader.loadDocument(data.pdf ?? data.bytes)
+  if (!await previewLoader.loadDocument(data.pdf ?? data.bytes)) return
   previewDocLoaded = true
   await window.api.preview.reportTotal(previewLoader.totalPages())
   await renderPreview()
@@ -2505,7 +2567,7 @@ async function projectSave(saveAs: boolean = false): Promise<void> {
 }
 
 const takeFade = new TakeFade(currentCanvas.parentElement!, () => [
-  ...(currentImageUnder ? [currentImageUnder] : []), currentCanvas, currentImage, currentVideo, programVideoCanvas(currentVideo), currentLive, mediaOverlay, programVideoCanvas(mediaOverlay), ...slideGifs.elements(),
+  ...(currentImageUnder ? [currentImageUnder] : []), currentCanvas, currentImage, currentVideo, programVideoCanvas(currentVideo), currentLive, mediaOverlay, programVideoCanvas(mediaOverlay), videoForeground.layer, slideInteractive.layer, ...slideGifs.elements(),
 ], retainPresenterVideo)
 
 function retainPresenterVideo(video: HTMLVideoElement): HTMLVideoElement | null {
@@ -2563,11 +2625,12 @@ function programFrameReady(): boolean {
   if (s.fileKind === 'live') return currentLive.readyState >= 2
   if (s.fileKind === 'image') return currentImage.complete && currentImage.naturalWidth > 0
   if (!docLoaded || slidePaint.pending || lastRenderedSlide !== s.currentSlide) return false
-  if (!slideGifs.ready()) return false
+  if (!slideGifs.ready() || s.slideMedia.some(media => media.slide === s.currentSlide && media.interactive) && !slideInteractive.settled()) return false
   const media = slideMediaAt(s.fileKind, s.slideMedia, s.currentSlide)
   if (!media || !s.pdfSha1) return true
   const expected = slideVideoSrc('program', media.file, s.pdfSha1)
   return overlayFailedSrc === expected || (overlaySlide === s.currentSlide &&
+    !mediaOverlay.classList.contains('slide-video-wait-foreground') &&
     overlayFrameReady(expected, overlaySrc, overlayFailedSrc, programVideoReady(mediaOverlay) ? 2 : 0, false))
 }
 
@@ -2598,6 +2661,8 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
       prevSlide = 0
       ++programLoadGeneration
       docLoaded = false
+      clearDocument()
+      takeFade.clearNative()
       lastRenderedSlide = -1
       disposeCurrentImage()
       unloadCurrentVideo()
@@ -2627,7 +2692,7 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
 
   updateMediaOverlay(getState())
   if (patch && (Object.hasOwn(patch, 'takeTransition') || Object.hasOwn(patch, 'pdfPath'))) {
-    void takeFade.reveal(state.takeTransition, programFrameReady)
+    void takeFade.reveal(state.takeTransition, programFrameReady).then(() => updateMediaOverlay(getState()))
   }
 }
 
@@ -5465,11 +5530,19 @@ function renderUiSection(): void {
 }
 
 async function renderLoSection(): Promise<void> {
+  $('pptx-backend-row').classList.toggle('hidden', !['darwin', 'win32'].includes(window.api.platform))
+  const backend = await window.api.pptx.backend()
+  ;($('pptx-backend') as HTMLSelectElement).value = backend
+  $('lo-settings-explainer').textContent = backend === 'powerpoint-static'
+    ? t('PowerPoint готовит только PPTX. Для PPT, ODP и KEY нужен LibreOffice.')
+    : t('LibreOffice превращает PPTX, PPT, ODP и KEY в PDF. Без него открываются только PDF, картинки и видео.')
   const status = $('lo-settings-status')
   const path = await window.api.soffice.current()
-  status.textContent = path ? t('✅ Найден: {path}', { path }) : t('⚠ Не найден — PPTX не откроются.')
+  status.textContent = backend === 'powerpoint-static'
+    ? t('PowerPoint выбран для PPTX; LibreOffice остаётся для PPT, ODP и KEY.')
+    : path ? t('✅ Найден: {path}', { path }) : t('⚠ Не найден — PPTX не откроются.')
   const pathsEl = $('lo-settings-paths')
-  if (path) {
+  if (path || backend === 'powerpoint-static') {
     pathsEl.classList.add('hidden')
   } else {
     const paths = await window.api.soffice.paths()
@@ -5545,6 +5618,14 @@ function openSettings(section: SettingsSection = 'screens'): void {
     })
     $('ui-lang-restart').addEventListener('click', () => void window.api.ui.relaunch())
     $('lo-settings-install').addEventListener('click', showLoModal)
+    $('pptx-backend').addEventListener('change', async () => {
+      try {
+        await window.api.pptx.setBackend(($('pptx-backend') as HTMLSelectElement).value as 'libreoffice' | 'powerpoint-static')
+      } catch (error) {
+        showBanner(t('Не удалось выбрать импорт PPTX: {error}', { error: String(error) }), 7000)
+      }
+      void renderLoSection()
+    })
     $('lo-settings-recheck').addEventListener('click', async () => {
       await recheckLibreOffice()
       void renderLoSection()

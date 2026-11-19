@@ -11,7 +11,7 @@ vi.mock('electron', () => ({
   app: { getPath: () => TEST_USER_DATA },
 }))
 
-import { mediaDirFor, parseVideoPlayback, preparePptxMedia } from '../src/main/pptx-media'
+import { mediaDirFor, parseVideoPlayback, preparePptxMedia, staticPptxNotes } from '../src/main/pptx-media'
 import { cachedPdfPathFor } from '../src/main/pptx-converter'
 import { isAnimatedGif } from '../src/shared/gif'
 import { slideMediaAt } from '../src/renderer/shared/video'
@@ -293,6 +293,20 @@ describe('PPTX chart previews and authored slide numbers', () => {
   })
   afterAll(async () => { await rm(dir, { recursive: true, force: true }) })
 
+  it('keeps native charts and embedded media for PowerPoint while expanding click steps', async () => {
+    const result = await preparePptxMedia(await buildDeck(dir, files(alternate())), 'powerpoint-native-chart', undefined, 'powerpoint')
+    const xml = execFileSync('unzip', ['-p', result.convertSource, 'ppt/slides/slide1.xml'], { encoding: 'utf8' })
+    expect(xml).toContain(alternate())
+    expect(execFileSync('unzip', ['-p', result.convertSource, 'ppt/media/media1.mp4']).toString()).toBe('fake video')
+    const steps = await staticPptxNotes(result.convertSource)
+    expect(steps.visibleSlides).toBe(6)
+    expect(result.pageNotes[2]).toBe('Про билд')
+    expect(result.pageNotes[4]).toBe('Про билд')
+    const firstStep = execFileSync('unzip', ['-p', result.convertSource, 'ppt/slides/slide3.xml'], { encoding: 'utf8' })
+    expect(firstStep).not.toContain('<p:timing>')
+    expect(firstStep).toContain('val="0"')
+  })
+
   it('uses the saved Office chart image without changing its geometry or unrelated objects', async () => {
     const result = await preparePptxMedia(await buildDeck(dir, files(alternate() + '<p:sp id="annotation"/>')), 'chart-preview')
     const xml = execFileSync('unzip', ['-p', result.convertSource, 'ppt/slides/slide1.xml'], { encoding: 'utf8' })
@@ -347,11 +361,20 @@ describe('preparePptxMedia: заметки докладчика (2.23)', () => {
     await rm(DIR, { recursive: true, force: true })
   })
 
+  it('static PowerPoint mapping keeps authored slide order, skips hidden slides and does not repeat animation steps', async () => {
+    const deck = await buildDeck(DIR, NOTES_DECK)
+    expect(await staticPptxNotes(deck)).toEqual({
+      visibleSlides: 4,
+      allSlides: 5,
+      notes: { 1: 'Поздороваться с залом\nЦены & сроки <2026>\nЯ B', 2: 'Про билд' },
+    })
+  })
+
   it('maps the source Fade to the first expanded page only and retains it in cache', async () => {
     const files = { ...NOTES_DECK, 'ppt/slides/slide3.xml': NOTES_DECK['ppt/slides/slide3.xml'].replace('</p:sld>', '<p:transition p14:dur="350"><p:fade/></p:transition></p:sld>') }
     const deck = await buildDeck(DIR, files)
-    expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: 350, 5: 0, 6: 0 })
-    expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: 350, 5: 0, 6: 0 })
+    expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: { kind: 'fade', durationMs: 350 }, 5: 0, 6: 0 })
+    expect((await preparePptxMedia(deck, 'fade-steps')).slideTransitions).toEqual({ 1: 0, 2: { kind: 'fade', durationMs: 350 }, 5: 0, 6: 0 })
   })
 
   it('retains source slide and animation labels, including hidden source numbers, in cache', async () => {
@@ -490,4 +513,165 @@ describe('PPTX video playback timing', () => {
     expect(parseVideoPlayback(timing(media('100')), '6').autoPlay).toBe(false)
     expect(parseVideoPlayback(timing(seq(media('0'), 'interactiveSeq')), '6').autoPlay).toBe(false)
   })
+})
+
+
+describe('PowerPoint authored object fade', () => {
+  const dir = join(tmpdir(), 'cuedeck-build-fade-test')
+  afterAll(async () => { await rm(dir, { recursive: true, force: true }) })
+  const effect = (filter: string, delay = '0') => `<p:timing><p:tnLst><p:seq><p:cTn nodeType="mainSeq"><p:childTnLst><p:par><p:cTn presetClass="entr"><p:stCondLst><p:cond delay="${delay}"/></p:stCondLst><p:childTnLst><p:animEffect transition="in" filter="${filter}"><p:cBhvr><p:cTn dur="500"/><p:tgtEl><p:spTgt spid="5"/></p:tgtEl></p:cBhvr></p:animEffect></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:seq></p:tnLst></p:timing>`
+  async function prepare(filter: string, transform = 'flipH="1"', delay = '0') {
+    const shape = slideXml().replace('</p:nvSpPr>', '</p:nvSpPr><p:spPr><a:xfrm '+transform+'><a:off x="1219200" y="685800"/><a:ext cx="2438400" cy="1371600"/></a:xfrm></p:spPr>')
+    const file = await buildDeck(dir, { ...NOTES_DECK, 'ppt/slides/slide1.xml': shape.replace('</p:sld>', effect(filter, delay)+'</p:sld>') })
+    return preparePptxMedia(file, 'build-'+filter+'-'+transform+'-'+delay, undefined, 'powerpoint')
+  }
+  it('retains 500ms and flipped object bounds on the destination build page', async () => {
+    const result = await prepare('fade')
+    expect(result.slideBuilds?.[2]).toEqual({ kind: 'fade', durationMs: 500, rect: { x: .1, y: .1, w: expect.closeTo(.2), h: expect.closeTo(.2) } })
+  })
+  it('keeps distinct wipe/split effects and authored delay', async () => {
+    expect((await prepare('wipe(down)')).slideBuilds?.[2]).toMatchObject({kind:'wipe-up',durationMs:500})
+    expect((await prepare('barn(inVertical)')).slideBuilds?.[2]).toMatchObject({kind:'split-in-vertical',durationMs:500})
+    expect((await prepare('wheel(4)')).slideBuilds).toEqual({})
+    expect((await prepare('fade', '', '300')).slideBuilds?.[2]).toMatchObject({kind:'fade',delayMs:300})
+  })
+  it('falls back to an ordinary step when rotated bounds are not supported', async () => {
+    expect((await prepare('fade', 'rot="5400000"')).slideBuilds).toEqual({})
+  })
+})
+
+
+it('uses a separate native frame deck when foreground text intersects the picture', async () => {
+  const dir = join(tmpdir(), 'cuedeck-fly-layering')
+  try {
+    const anim = (axis: string, start: string) => `<p:anim calcmode="lin"><p:cBhvr><p:cTn dur="500"/><p:tgtEl><p:spTgt spid="11"/></p:tgtEl><p:attrNameLst><p:attrName>ppt_${axis}</p:attrName></p:attrNameLst></p:cBhvr><p:tavLst><p:tav tm="0"><p:val><p:strVal val="${start}"/></p:val></p:tav><p:tav tm="100000"><p:val><p:strVal val="#ppt_${axis}"/></p:val></p:tav></p:tavLst></p:anim>`
+    const timing = `<p:timing><p:seq><p:cTn nodeType="mainSeq"><p:childTnLst><p:par><p:cTn presetClass="entr"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>${anim('x','#ppt_x')}${anim('y','1+#ppt_h/2')}</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:seq></p:timing>`
+    const xf = '<a:xfrm><a:off x="1219200" y="685800"/><a:ext cx="2438400" cy="1371600"/></a:xfrm>'
+    const pic = `<p:pic><p:nvPicPr><p:cNvPr id="11"/></p:nvPicPr><p:blipFill><a:blip r:embed="photo"/></p:blipFill><p:spPr>${xf}</p:spPr></p:pic>`
+    for (const overlap of [false,true]) {
+      const foreground = overlap ? `<p:sp><p:nvSpPr><p:cNvPr id="18"/></p:nvSpPr><p:spPr>${xf}</p:spPr></p:sp>` : ''
+      const deck = await buildDeck(dir, {...NOTES_DECK,'ppt/slides/slide1.xml':slideXml(pic+foreground).replace('</p:sld>',timing+'</p:sld>'),
+        'ppt/slides/_rels/slide1.xml.rels':slideRels(null).replace('</Relationships>',`<Relationship Id="photo" Type="${REL}/image" Target="../media/photo.jpeg"/></Relationships>`),
+        'ppt/media/photo.jpeg':Buffer.from([255,216,255,224])})
+      const result = await preparePptxMedia(deck,'fly-layer-'+overlap,undefined,'powerpoint')
+      if (overlap) {
+        expect(result.slideBuilds?.[2]).toMatchObject({kind:'native-frames',frameCount:16,framesFile:'build-2.pdf'})
+        expect(result.nativeFrameSources).toHaveLength(1)
+        const native=result.nativeFrameSources![0].sourcePath
+        const first=execFileSync('unzip',['-p',native,'ppt/slides/_cuedeck_frame_0.xml'],{encoding:'utf8'})
+        const last=execFileSync('unzip',['-p',native,'ppt/slides/_cuedeck_frame_15.xml'],{encoding:'utf8'})
+        expect(first).toContain('<p:cNvPr id="18"/>')
+        expect(last).toContain('<p:cNvPr id="18"/>')
+        expect(first).toContain('y="6858000"')
+        expect(last).toContain('y="685800"')
+      }
+      else expect(result.slideBuilds?.[2]).toMatchObject({kind:'fly-bottom',durationMs:500})
+    }
+  } finally { await rm(dir,{recursive:true,force:true}) }
+})
+
+
+it('reveals wipe(down) pictures upwards with a fixed bottom edge, as verified against PowerPoint', async () => {
+  const dir=join(tmpdir(),'cuedeck-wipe-direction')
+  try {
+    const pic='<p:pic><p:nvPicPr><p:cNvPr id="11"/></p:nvPicPr><p:blipFill><a:blip r:embed="photo"/><a:srcRect/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="1219200" y="685800"/><a:ext cx="2438400" cy="1371600"/></a:xfrm></p:spPr></p:pic>'
+    const timing='<p:timing><p:seq><p:cTn nodeType="mainSeq"><p:childTnLst><p:par><p:cTn presetClass="entr"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst><p:animEffect transition="in" filter="wipe(down)"><p:cBhvr><p:cTn dur="500"/><p:tgtEl><p:spTgt spid="11"/></p:tgtEl></p:cBhvr></p:animEffect></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:seq></p:timing>'
+    const deck=await buildDeck(dir,{...NOTES_DECK,'ppt/slides/slide1.xml':slideXml(pic).replace('</p:sld>',timing+'</p:sld>'),
+      'ppt/slides/_rels/slide1.xml.rels':slideRels(null).replace('</Relationships>',`<Relationship Id="photo" Type="${REL}/image" Target="../media/photo.jpeg"/></Relationships>`),
+      'ppt/media/photo.jpeg':Buffer.from([255,216,255,224])})
+    const result=await preparePptxMedia(deck,'wipe-up-direction',undefined,'powerpoint')
+    expect(result.slideBuilds?.[2]).toMatchObject({kind:'native-frames',durationMs:500})
+    const frame=execFileSync('unzip',['-p',result.nativeFrameSources![0].sourcePath,'ppt/slides/_cuedeck_frame_1.xml'],{encoding:'utf8'})
+    const target=frame.match(/<p:pic>[\s\S]*?<\/p:pic>/)![0]
+    const y=Number(target.match(/<a:off[^>]*y="(\d+)"/)![1]), h=Number(target.match(/<a:ext[^>]*cy="(\d+)"/)![1])
+    expect(y).toBeGreaterThan(685800)
+    expect(y+h).toBe(685800+1371600)
+    expect(target).toContain('t="93333"')
+    expect(target).toContain('b="0"')
+  } finally {await rm(dir,{recursive:true,force:true})}
+})
+
+it('exports both foreground states for an object-triggered menu over video', async () => {
+  const dir = join(tmpdir(), 'cuedeck-pptx-video-menu-test')
+  const button = '<p:pic><p:nvPicPr><p:cNvPr id="7" name="Menu button"/></p:nvPicPr><p:spPr><a:xfrm><a:off x="6096000" y="3429000"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:pic>'
+  const link = (id: number, name: string, x: number): string =>
+    `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${name}"><a:hlinkClick r:id="rIdJump" action="ppaction://hlinksldjump"/></p:cNvPr></p:nvPicPr><p:spPr><a:xfrm><a:off x="${x}" y="0"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:pic>`
+  const option = link(8, 'Menu option', 6096000)
+  const back = link(2, 'Back arrow', 11430000)
+  const jump = (target: string): string => slideRels(null, true).replace(
+    '</Relationships>', `<Relationship Id="rIdJump" Type="${REL}/slide" Target="${target}"/></Relationships>`,
+  )
+  const rules = '<p:sp><p:nvSpPr><p:cNvPr id="9" name="Rules"/></p:nvSpPr></p:sp>'
+  const visibility = (id: number, value: string) =>
+    `<p:set><p:cBhvr><p:tgtEl><p:spTgt spid="${id}"/></p:tgtEl><p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="${value}"/></p:to></p:set>`
+  const timing = '<p:timing><p:video><p:cMediaNode><p:cTn repeatCount="indefinite"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn><p:tgtEl><p:spTgt spid="6"/></p:tgtEl></p:cMediaNode></p:video>' +
+    '<p:seq><p:cTn nodeType="interactiveSeq"><p:stCondLst><p:cond evt="onClick"><p:tgtEl><p:spTgt spid="7"/></p:tgtEl></p:cond></p:stCondLst><p:childTnLst>' +
+    visibility(7, 'hidden') + visibility(9, 'hidden') + visibility(8, 'visible') + '</p:childTnLst></p:cTn></p:seq></p:timing>'
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': `<p:sld ${NS}><p:cSld><p:spTree>${VIDEO_PIC}${rules}${button}${option}</p:spTree></p:cSld>${timing}</p:sld>`,
+      'ppt/slides/_rels/slide1.xml.rels': jump('slide4.xml'),
+      'ppt/slides/slide4.xml': `<p:sld ${NS}><p:cSld><p:spTree>${VIDEO_PIC}${back}</p:spTree></p:cSld></p:sld>`,
+      'ppt/slides/_rels/slide4.xml.rels': jump('slide1.xml'),
+    })
+    const result = await preparePptxMedia(deck, 'powerpoint-video-menu', undefined, 'powerpoint')
+    expect(result.slideMedia[0].foreground).toEqual({
+      kind: 'menu', file: 'video-foreground.pdf', firstPage: 3,
+      button: { x: .5, y: .5, w: .25, h: .25 },
+      links: [{ slide: 5, rect: { x: .5, y: 0, w: .25, h: .25 } }],
+    })
+    expect(result.slideMedia[1].foreground).toEqual({
+      kind: 'return', file: 'video-foreground.pdf', firstPage: 1,
+      link: { slide: 1, rect: { x: .9375, y: 0, w: .0625, h: .25 } },
+    })
+    const read = (deck: string, part: string) => execFileSync('unzip', ['-p', deck, `ppt/slides/${part}.xml`], { encoding: 'utf8' })
+    const preview = read(result.convertSource, 'slide1')
+    expect(preview).toContain('name="Rules"')
+    expect(preview).not.toContain('name="Menu option"')
+
+    const frames = result.nativeFrameSources!.find(source => source.file === 'video-foreground.pdf')!.sourcePath
+    expect(read(frames, '_cuedeck_frame_0')).toContain('name="Back arrow"')
+    const dark = read(frames, '_cuedeck_frame_2')
+    const light = read(frames, '_cuedeck_frame_3')
+    const revealed = read(frames, '_cuedeck_frame_4')
+    expect(dark).toContain('val="000000"')
+    expect(light).toContain('val="FFFFFF"')
+    expect(dark).toContain('name="Rules"')
+    expect(dark).not.toContain('name="Menu option"')
+    expect(dark).not.toContain('name="video"')
+    expect(revealed).toContain('name="Menu option"')
+    expect(revealed).not.toContain('name="Rules"')
+    expect(revealed).not.toContain('name="Menu button"')
+    expect((await preparePptxMedia(deck, 'libreoffice-video-menu')).slideMedia[0].foreground).toBeUndefined()
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+it.each([true, false])('extracts a delayed sound on a shape click with separate media timing = %s', async (hasMediaTiming) => {
+  const dir = join(tmpdir(), 'cuedeck-pptx-shape-sound-' + hasMediaTiming)
+  const shape = '<p:pic><p:nvPicPr><p:cNvPr id="20" name="Sound button"/></p:nvPicPr><p:spPr><a:xfrm><a:off x="6096000" y="3429000"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:pic>'
+  const sound = '<p:pic><p:nvPicPr><p:cNvPr id="21"/><p:nvPr><a:audioFile r:link="rIdSound"/></p:nvPr></p:nvPicPr></p:pic>'
+  const target = '<p:tgtEl><p:spTgt spid="21"/></p:tgtEl>'
+  const conditions = (ms: number) => `<p:stCondLst><p:cond delay="${ms}"/></p:stCondLst>`
+  const timing = `<p:timing><p:tnLst><p:seq><p:cTn nodeType="interactiveSeq"><p:stCondLst><p:cond evt="onClick" delay="0"><p:tgtEl><p:spTgt spid="20"/></p:tgtEl></p:cond></p:stCondLst><p:childTnLst><p:par><p:cTn>${conditions(500)}<p:childTnLst><p:par><p:cTn nodeType="withEffect" presetClass="mediacall">${conditions(25)}<p:childTnLst><p:cmd cmd="playFrom(0.0)"><p:cBhvr><p:cTn dur="528"/>${target}</p:cBhvr></p:cmd></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:seq><p:audio><p:cMediaNode vol="45000"><p:cTn dur="528"/>${target}</p:cMediaNode></p:audio></p:tnLst></p:timing>`
+  const timingXml = hasMediaTiming ? timing : timing.replace(/<p:audio>[\s\S]*?<\/p:audio>/, '')
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': slideXml(shape + sound).replace('</p:sld>', timingXml + '</p:sld>'),
+      'ppt/slides/_rels/slide1.xml.rels': slideRels(null).replace('</Relationships>',
+        `<Relationship Id="rIdSound" Type="${REL}/audio" Target="../media/cue.mp3"/></Relationships>`),
+      'ppt/media/cue.mp3': Buffer.from([255, 251, 144, 0]),
+    })
+    const result = await preparePptxMedia(deck, 'sound-shape-audio-only-' + hasMediaTiming, undefined, 'powerpoint')
+    expect(result.slideMedia[0]).toMatchObject({
+      slide: 1, kind: 'audio', audio: [{ trigger: 'click', shape: '20', file: 'cue.mp3', delayMs: 525, volume: hasMediaTiming ? .45 : 1, loop: false }],
+      clickActions: [{ shape: '20', label: 'Sound button', rect: { x: .5, y: .5, w: .25, h: .25 } }],
+    })
+    expect(slideMediaAt('pptx', result.slideMedia, 1)).toBeUndefined()
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
