@@ -8,7 +8,7 @@ import { startTick, timerView } from '../shared/timer'
  * Цвет — как на суфлёре (свой цвет таймера и жёлтый/красный в конце).
  */
 
-const transport = new URLSearchParams(location.search).get('role') === 'ndi-timer' ? 'ndi' : 'omt'
+const showMessage = new URLSearchParams(location.search).get('role') === 'timer-with-message'
 const timerEl = document.getElementById('timer') as HTMLDivElement
 const messageEl = document.getElementById('message') as HTMLDivElement
 
@@ -26,7 +26,7 @@ function applyColors(state: AppState): void {
 }
 
 function applyMessage(state: AppState): void {
-  const msg = state[transport].timerMessage ? state.speakerMessage : null
+  const msg = showMessage ? state.speakerMessage : null
   if (messageEl.textContent !== (msg ?? '')) messageEl.textContent = msg ?? ''
   messageEl.classList.toggle('hidden', !msg)
 }
@@ -54,5 +54,5 @@ async function bootstrap(): Promise<void> {
 }
 
 bootstrap().catch((err) => {
-  window.api.diag.log('error', `${transport} overlay: bootstrap упал`, String(err))
+  window.api.diag.log('error', `Timer overlay: bootstrap упал`, String(err))
 })

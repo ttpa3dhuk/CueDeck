@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
   ipcMain: { handle: (_channel: string, configure: Configure) => { fixture.configure = configure } },
 }))
 vi.mock('electron-log/main', () => ({ default: { info: vi.fn(), warn: vi.fn() } }))
-vi.mock('../src/main/windows.js', () => ({ createOmtOverlayWindow: vi.fn() }))
+vi.mock('../src/main/windows.js', () => ({ createTimerOverlayWindow: vi.fn() }))
 vi.mock('../src/main/state.js', async () => {
   const { DEFAULT_OMT_SETTINGS, OMT_OUTPUT_OFF } = await import('../src/shared/types')
   return {

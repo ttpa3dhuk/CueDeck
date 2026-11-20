@@ -193,7 +193,7 @@ function positionOf(v: VideoState): number {
 }
 
 /** Окна, которым рассылается состояние: роли раскладки + служебные (оверлей OMT). */
-export type WindowKey = Role | 'omt-timer' | 'ndi-timer' | 'gpu-prompter'
+export type WindowKey = Role | 'timer-only' | 'timer-with-message' | 'gpu-prompter'
 
 type Listener = (state: AppState, patch: Partial<AppState>) => void
 

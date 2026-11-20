@@ -1,4 +1,4 @@
-import { ipcMain, type BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
 import log from 'electron-log/main'
 import { store } from '../state.js'
 import {
@@ -13,14 +13,9 @@ import {
 } from '../../shared/types.js'
 import { cleanNdiFps, cleanNdiName, cleanNdiResolution, getNdiSettings, setNdiSettings } from '../display-mapping.js'
 import { acquireNetworkVideo, acquireProgramAudio } from '../network-output-source.js'
-import { createTimerOverlayWindow } from '../windows.js'
+import { NetworkTimerOutput } from '../network-timer-output.js'
 import { loadNdi, ndiLoadError, type NdiLib } from './libndi.js'
 import { NdiSender } from './sender.js'
-
-/** Ширина кадра 16:9 для разрешения выхода. */
-function widthOf(res: NdiResolution): number {
-  return Math.round((res * 16) / 9)
-}
 
 interface Output {
   readonly sender: NdiSender
@@ -28,33 +23,6 @@ interface Output {
   stop(): Promise<void>
   /** Частота меняется на лету: источник в сети не пропадает. */
   setFps(fps: NdiFps): void
-}
-
-/** Таймер: своё offscreen-окно на прозрачном фоне. */
-class TimerOutput implements Output {
-  private win: BrowserWindow | null = null
-
-  constructor(readonly sender: NdiSender) {}
-
-  start(): void {
-    this.sender.start()
-    const { size } = this.sender
-    const win = createTimerOverlayWindow(widthOf(size), size, 'ndi')
-    this.win = win
-    win.webContents.setFrameRate(this.sender.fps)
-    win.webContents.on('paint', (_e, _dirty, image) => this.sender.push(image))
-  }
-
-  setFps(fps: NdiFps): void {
-    this.sender.setFps(fps)
-    if (this.win && !this.win.isDestroyed()) this.win.webContents.setFrameRate(fps)
-  }
-
-  stop(): Promise<void> {
-    if (this.win && !this.win.isDestroyed()) this.win.destroy()
-    this.win = null
-    return this.sender.stop()
-  }
 }
 
 class WindowOutput implements Output {
@@ -146,7 +114,7 @@ function makeOutput(lib: NdiLib, id: NdiOutputId, name: string, size: NdiResolut
   }
   const out: Output =
     id === 'timer'
-      ? new TimerOutput(new NdiSender(lib, name, size, fps, true, onStatus))
+      ? new NetworkTimerOutput('ndi', new NdiSender(lib, name, size, fps, true, onStatus))
       : new WindowOutput(new NdiSender(lib, name, size, fps, false, onStatus), id === 'program' ? 'audience' : 'speaker')
   return out
 }

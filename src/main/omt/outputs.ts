@@ -17,7 +17,7 @@
  * Кодирование идёт в рабочем потоке koffi (`.async`) — главный процесс держит
  * IPC всех окон и не должен вставать на кодеке.
  */
-import { app, BrowserWindow, ipcMain, screen, type NativeImage } from 'electron'
+import { app, ipcMain, type NativeImage } from 'electron'
 import log from 'electron-log/main'
 import { store } from '../state.js'
 import { t } from '../../shared/i18n.js'
@@ -34,7 +34,7 @@ import {
 } from '../../shared/types.js'
 import { cleanOmtFps, cleanOmtName, cleanOmtResolution, getOmtSettings, setOmtSettings } from '../display-mapping.js'
 import { acquireNetworkVideo, acquireProgramAudio, type ProgramAudioChunk } from '../network-output-source.js'
-import { createOmtOverlayWindow } from '../windows.js'
+import { NetworkTimerOutput } from '../network-timer-output.js'
 import {
   loadOmt,
   omtLoadError,
@@ -50,11 +50,6 @@ import {
   type OmtLib,
 } from './libomt.js'
 
-
-/** Ширина кадра 16:9 для разрешения выхода. */
-function widthOf(res: OmtResolution): number {
-  return Math.round((res * 16) / 9)
-}
 
 /** Кадр, ещё не сжатый: BGRA (у таймера альфа premultiplied). */
 interface RawFrame {
@@ -387,36 +382,6 @@ interface Output {
   setFps(fps: OmtFps): void
 }
 
-/** Таймер: своё offscreen-окно на прозрачном фоне. */
-class TimerOutput implements Output {
-  private win: BrowserWindow | null = null
-
-  constructor(readonly sender: OmtSender) {}
-
-  start(): void {
-    this.sender.start()
-    // Offscreen рисует в пикселях экрана (Retina — вдвое больше), а нам нужно
-    // ровно выбранное разрешение: окно делаем меньше на масштаб основного дисплея.
-    const sf = screen.getPrimaryDisplay().scaleFactor || 1
-    const { size } = this.sender
-    const win = createOmtOverlayWindow(Math.round(widthOf(size) / sf), Math.round(size / sf))
-    this.win = win
-    win.webContents.setFrameRate(this.sender.fps)
-    win.webContents.on('paint', (_e, _dirty, image) => this.sender.push(image))
-  }
-
-  setFps(fps: OmtFps): void {
-    this.sender.setFps(fps)
-    if (this.win && !this.win.isDestroyed()) this.win.webContents.setFrameRate(fps)
-  }
-
-  stop(): Promise<void> {
-    if (this.win && !this.win.isDestroyed()) this.win.destroy()
-    this.win = null
-    return this.sender.stop()
-  }
-}
-
 /**
  * Зал или суфлёр: кадры того окна роли, что сейчас есть. Окна пересоздаются
  * при смене раскладки и экранов — раз в полсекунды проверяем, на то ли окно
@@ -482,7 +447,7 @@ function makeOutput(lib: OmtLib, id: OmtOutputId, name: string, size: OmtResolut
   }
   const out: Output =
     id === 'timer'
-      ? new TimerOutput(new OmtSender(lib, name, size, fps, true, onStatus))
+      ? new NetworkTimerOutput('omt', new OmtSender(lib, name, size, fps, true, onStatus))
       : new WindowOutput(new OmtSender(lib, name, size, fps, false, onStatus), id === 'program' ? 'audience' : 'speaker')
   return out
 }
