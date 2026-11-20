@@ -1,3 +1,4 @@
+import { programAudioCaptured } from '../../shared/program-source.js'
 import type { AppState, FileKind, Layout, Role, SlideMedia, SlideMediaRect, VideoState } from '../../preload/api'
 import { syncProgramMirror } from './program-mirror'
 import { FADE_MAX_MS } from '../../shared/take-transition'
@@ -204,7 +205,7 @@ export function shouldMute(state: AppState, role: Role): boolean {
  * звучит (скрытое) окно зала — иначе в захват попадала бы тишина.
  */
 export function programCaptured(state: AppState): boolean {
-  return Boolean(state.stream?.running) || (state.omt?.outputs?.program?.state === 'on' && state.omt.programAudio)
+  return programAudioCaptured(state)
 }
 
 const DEFAULT_DRIFT_SEC = 0.4

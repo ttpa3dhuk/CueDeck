@@ -1,8 +1,14 @@
 import type { AppState, Role } from './types'
 
-export function programVideoOwner(s: Pick<AppState, 'layout' | 'stream' | 'omt'>): Role {
-  const captured = Boolean(s.stream?.running) || (s.omt?.outputs?.program?.state === 'on' && s.omt.programAudio)
-  return s.layout === 'solo' && !captured ? 'operator' : 'audience'
+type ProgramOutputs = Pick<AppState, 'stream' | 'omt'> & Partial<Pick<AppState, 'ndi'>>
+
+export function programAudioCaptured(s: ProgramOutputs): boolean {
+  return Boolean(s.stream?.running) || (s.omt?.outputs?.program?.state === 'on' && s.omt.programAudio)
+    || (s.ndi?.outputs?.program?.state === 'on' && s.ndi.programAudio)
+}
+
+export function programVideoOwner(s: ProgramOutputs & Pick<AppState, 'layout'>): Role {
+  return s.layout === 'solo' && !programAudioCaptured(s) ? 'operator' : 'audience'
 }
 
 /** Canonical identity of the active file-backed program video. */

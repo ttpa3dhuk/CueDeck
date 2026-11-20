@@ -254,6 +254,7 @@ const api: PresenterApi = {
   },
   spoutGraphicsHelp: () => ipcRenderer.invoke('spout:graphics-help'),
   openSpoutGraphicsSettings: () => ipcRenderer.invoke('spout:open-graphics-settings'),
+  ndi: { configure: (settings) => ipcRenderer.invoke('ndi:configure', settings) },
   syphonPrompter: {
     status: () => ipcRenderer.invoke('syphon-prompter:status'),
     configure: (settings) => ipcRenderer.invoke('syphon-prompter:configure', settings),

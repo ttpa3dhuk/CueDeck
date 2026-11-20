@@ -152,7 +152,7 @@ describe('GPU audience mode', () => {
     expect(mode.status().active).toBe(false)
   })
 
-  it('accepts a physical layout but refuses a running stream, OMT program, or existing ghost', async () => {
+  it('accepts a physical display and network program outputs, refuses a stream or an unrelated ghost', async () => {
     h.state.layout = 'presenter-audience'
     const physical = { id: 55 }
     h.getActiveWindows.mockReturnValue(new Map([['audience', physical]]))
@@ -173,11 +173,12 @@ describe('GPU audience mode', () => {
     expect(new GpuAudienceMode().start().ok).toBe(false)
     h.state.stream.running = false
     h.state.omt.enabled.program = true
-    expect(new GpuAudienceMode().start().ok).toBe(false)
-    h.state.omt.enabled.program = false
-    h.state.omt.outputs.program.state = 'off'
-  h.state.omt.enabled.program = false
-    h.ghostWindow.mockReturnValueOnce({ isDestroyed: () => false } as any)
+    const shared = new GpuAudienceMode()
+    expect(shared.start().ok).toBe(true)
+    await shared.stop('test')
+    h.acquireGhost.mockClear()
+    const ghost = { isDestroyed: () => false }
+    h.ghostWindow.mockReturnValueOnce(ghost).mockReturnValueOnce(ghost)
     expect(new GpuAudienceMode().start().ok).toBe(false)
     expect(h.acquireGhost).not.toHaveBeenCalled()
   })
@@ -193,7 +194,7 @@ describe('GPU audience mode', () => {
     expect(h.win.destroy).toHaveBeenCalled()
   })
 
-  it('retains on layout changes but stops on stream/OMT state changes', () => {
+  it('retains on layout and OMT changes and stops for stream capture', () => {
     const mode = new GpuAudienceMode()
     expect(mode.start().ok).toBe(true)
     h.state.layout = 'operator-speaker-audience'
@@ -214,7 +215,7 @@ describe('GPU audience mode', () => {
     expect(omtMode.start().ok).toBe(true)
     h.state.omt.enabled.program = true
     for (const fn of h.listeners) fn(h.state)
-    expect(Publisher.instances[0].stopAndWait).toHaveBeenCalled()
-    expect(isGpuAudienceActive()).toBe(false)
+    expect(Publisher.instances[0].stopAndWait).not.toHaveBeenCalled()
+    expect(isGpuAudienceActive()).toBe(true)
   })
 })

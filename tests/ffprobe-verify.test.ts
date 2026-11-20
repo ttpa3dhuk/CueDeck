@@ -21,6 +21,8 @@ function fixtureVendor(): string {
   const vendor = join(dir, 'vendor', 'ffprobe')
   cpSync(REAL_VENDOR, vendor, {
     recursive: true,
+    // Worktrees may link vendor resources. Corruption tests must modify a private copy.
+    dereference: true,
     filter: (source) => !source.includes('/.build') && (!source.includes('/mac-') || source.endsWith('manifest.json')),
   })
   // win-x64 is enough for a read-only manifest test; keep the full manifest.

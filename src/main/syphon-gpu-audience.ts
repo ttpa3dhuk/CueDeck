@@ -7,7 +7,7 @@
  *
  * The physical audience, when present, is a display-only GPU mirror of this
  * source. It never registers as the audience role or decodes media again.
- * Stream and OMT program acquisition stop this mode before taking a normal
+ * Stream acquisition stops this mode before taking a normal
  * audience renderer; neither consumer is disabled here.
  * - stopping keeps one in-flight JS texture until native completion and the
  *   manager blocks a new start if that completion does not arrive within a
@@ -62,10 +62,6 @@ function numericEnv(name: string, fallback: number, min: number, max: number): n
 function nativePath(): string {
   return localGpuNativePath(process.platform, app.isPackaged, app.getAppPath(), process.resourcesPath, process.env)
 }
-function omtProgramActive(state = store.get()): boolean {
-  return state.omt.outputs.program.state === 'on' || state.omt.enabled.program
-}
-
 export interface GpuAudienceOptions {
   name: string
   isPublic: boolean
@@ -161,17 +157,18 @@ export class GpuAudienceMode {
     if (process.env.CUEDECK_SYPHON_GPU === '1') return this.refuse('synthetic', 'CUEDECK_SYPHON_GPU=1 is active')
     if (process.env.CUEDECK_SYPHON_BRIDGE === '1') return this.refuse('cpu-bridge', 'CUEDECK_SYPHON_BRIDGE=1 is active')
     const state = store.get()
-    const physicalAudience = getActiveWindows().get('audience')
-    const registeredAudience = store.registeredWindow('audience')
-    if (registeredAudience && registeredAudience !== physicalAudience) return this.refuse('physical-audience', 'another audience renderer is registered')
-    if (ghostWindow('audience')) return this.refuse('audience-lease', 'another hidden audience lease exists')
     if (state.stream.running) return this.refuse('stream', 'stream is running')
-    if (omtProgramActive(state)) return this.refuse('omt-program', 'OMT program output is running')
     if (!existsSync(this.options.nativePath)) {
       return this.refuse('native-missing', `native publisher not found: ${this.options.nativePath}`)
     }
     if (!GpuAudienceMirror.available()) return this.refuse('runtime', 'shared texture display import is unavailable')
 
+    // Network senders keep their handles and follow the new compositor on the next tick.
+    if (ghostWindow('audience')) releaseGhost('audience', 'network-output')
+    const physicalAudience = getActiveWindows().get('audience')
+    const registeredAudience = store.registeredWindow('audience')
+    if (registeredAudience && registeredAudience !== physicalAudience) return this.refuse('physical-audience', 'another audience renderer is registered')
+    if (ghostWindow('audience')) return this.refuse('audience-lease', 'another hidden audience lease exists')
     try {
       this.mirror = new GpuAudienceMirror((error) => this.fail(`GPU display: ${error.message}`))
       setGpuAudienceGuard(this.guard)
@@ -220,7 +217,6 @@ export class GpuAudienceMode {
       this.unsubscribe = store.onChange((next) => {
         if (this.disposed) return
         if (next.stream.running) void this.stop('conflict:stream')
-        else if (omtProgramActive(next)) void this.stop('conflict:omt-program')
       })
       win.once('closed', () => {
         if (!this.disposed && this.win === win) void this.stop('window-closed')

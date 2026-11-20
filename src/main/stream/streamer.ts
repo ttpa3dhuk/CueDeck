@@ -694,10 +694,11 @@ export function initStream(): void {
   // Захват окна зала: getDisplayMedia кодировщика получает вкладку зала целиком —
   // и картинку, и её звук. enableLocalEcho — зал продолжает звучать в колонках.
   session.defaultSession.setDisplayMediaRequestHandler((req, cb) => {
-    const aud = audienceWindow()
     const pid = req.frame?.processId
     const fromEncoder = enc !== null && !enc.isDestroyed() && pid === enc.webContents.getProcessId()
     const fromClient = [...captureClients].some((w) => !w.isDestroyed() && pid === w.webContents.getProcessId())
+    // A physical GPU mirror has no audio. Capture the registered program renderer.
+    const aud = fromClient ? store.registeredWindow('audience') : audienceWindow()
     if ((!fromEncoder && !fromClient) || !aud) {
       cb({})
       return

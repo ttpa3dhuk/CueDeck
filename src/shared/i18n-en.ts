@@ -854,7 +854,6 @@ export const EN: Record<string, string> = {
   'Если Homebrew уже установлен (терминал)': 'If Homebrew is already installed (terminal)',
   'Если LibreOffice уже установлен, выбери LibreOffice.app в папке «Программы» или там, куда ты его перенёс.': 'If LibreOffice is already installed, select LibreOffice.app in Applications or wherever you moved it.',
   'Установить LibreOffice…': 'Install LibreOffice…',
-  'Выходы OMT выключены. Нажми, чтобы настроить.': 'OMT outputs are off. Click to configure.',
   'Вариант 2 — через winget (PowerShell)': 'Option 2 — with winget (PowerShell)',
   'Скопировать': 'Copy',
   'После установки нажми «Проверить снова» — перезапуск не нужен.': 'After installing, press “Check again” — no restart needed.',
@@ -1269,8 +1268,8 @@ export const EN: Record<string, string> = {
   'Источники в сети для vMix 29+ и OBS (плагин OMT).': 'Network sources for vMix 29+ and OBS (OMT plugin).',
   'Локальный видеовыход для Resolume и OBS. Только картинка, без звука.':
     'Local video output for Resolume and OBS. Picture only, no sound.',
-  'Работает вместе с окном зала. OMT «Зал» и стрим занимают этот выход.':
-    'Works alongside the audience window. OMT “Audience” and streaming occupy this output.',
+  'Работает вместе с окном зала и выходами OMT и NDI. Трансляция занимает этот выход.':
+    'Works alongside the audience window and OMT and NDI outputs. Streaming occupies this output.',
   'Имя источника': 'Source name',
   'Работает': 'On',
   'Запускается…': 'Starting…',
@@ -1340,6 +1339,17 @@ export const EN: Record<string, string> = {
     'Frame stepping is unavailable: the codec produced no frames',
   'Покадровый шаг не удался: соседний кадр не найден':
     'Frame stepping failed: the neighbouring frame was not found',
+  'Требует внимания': 'Needs attention',
+  'Внешние выходы выключены. Нажми, чтобы настроить.': 'External outputs are off. Click to configure.',
+  'Скачать NDI Runtime…': 'Download NDI Runtime…',
+  // ── Настройки → Выходы NDI ──
+  'Выходы NDI': 'NDI outputs',
+  'Для NDI нужен установленный NDI Runtime. После установки выключи и снова включи выход.': 'NDI requires an installed NDI Runtime. After installation, turn the output off and on again.',
+  'Источники в сети для OBS, vMix, Wirecast и любых NDI-программ.': 'Network sources for OBS, vMix, Wirecast and any NDI program.',
+  'NDI в CueDeck есть только на macOS и Windows': 'NDI in CueDeck is available on macOS and Windows only',
+  'NDIlib_initialize не сработала': 'NDIlib_initialize failed',
+  'не удалось создать источник NDI': 'could not create the NDI source',
+  '⚠ NDI недоступен на этом компьютере: {error}': '⚠ NDI is not available on this computer: {error}',
 }
 
 /**

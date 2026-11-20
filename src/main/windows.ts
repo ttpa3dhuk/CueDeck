@@ -1,3 +1,4 @@
+import { fitOffscreenSize } from './offscreen-size.js'
 import { attachAudienceCloseGuard } from './audience-close-guard.js'
 import { BrowserWindow, screen } from 'electron'
 import { fileURLToPath } from 'node:url'
@@ -32,7 +33,7 @@ function isOutputFullscreen(win: BrowserWindow): boolean {
 
 interface RendererTarget {
   entry: 'presenter' | 'audience' | 'stream' | 'overlay' | 'omt-audio' | 'gpu-view'
-  role: Role | 'stream' | 'omt-timer' | 'omt-audio' | 'audience-gpu-view'
+  role: Role | 'stream' | 'timer-only' | 'timer-with-message' | 'omt-audio' | 'audience-gpu-view'
 }
 
 function rendererForRole(role: Role): RendererTarget {
@@ -528,29 +529,32 @@ export function createStreamEncoderWindow(): BrowserWindow {
 }
 
 /**
- * Оверлей для выхода OMT (omt/outputs.ts): offscreen, прозрачный фон — кадры
+ * Общий таймер NDI и OMT: offscreen, прозрачный фон — кадры
  * берутся событием `paint` вместе с альфой. Никогда не показывается. Получает
  * состояние, как обычное окно (store.registerWindow).
  */
-export function createOmtOverlayWindow(width: number, height: number): BrowserWindow {
+export function createTimerOverlayWindow(width: number, height: number, showMessage: boolean): BrowserWindow {
+  const role = showMessage ? 'timer-with-message' : 'timer-only'
   const win = new BrowserWindow({
     width,
     height,
     show: false,
     frame: false,
     transparent: true,
-    title: 'CueDeck (OMT timer)',
+    useContentSize: true, thickFrame: false, enableLargerThanScreen: true,
+    title: 'CueDeck (' + role + ')',
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
       backgroundThrottling: false,
-      offscreen: true,
+      offscreen: { useSharedTexture: false, deviceScaleFactor: 1 },
     },
   })
-  loadRenderer(win, { entry: 'overlay', role: 'omt-timer' })
-  store.registerWindow('omt-timer', win)
+  fitOffscreenSize(win, width, height, role)
+  loadRenderer(win, { entry: 'overlay', role })
+  store.registerWindow(role, win)
   return win
 }
 

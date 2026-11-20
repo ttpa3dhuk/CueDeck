@@ -17,7 +17,7 @@
  * Кодирование идёт в рабочем потоке koffi (`.async`) — главный процесс держит
  * IPC всех окон и не должен вставать на кодеке.
  */
-import { app, BrowserWindow, ipcMain, screen, type NativeImage } from 'electron'
+import { app, ipcMain, type NativeImage } from 'electron'
 import log from 'electron-log/main'
 import { store } from '../state.js'
 import { t } from '../../shared/i18n.js'
@@ -33,18 +33,8 @@ import {
   type OmtStatus,
 } from '../../shared/types.js'
 import { cleanOmtFps, cleanOmtName, cleanOmtResolution, getOmtSettings, setOmtSettings } from '../display-mapping.js'
-import { allowAudienceCapture } from '../stream/streamer.js'
-import { acquireFrameTap, type FrameTapLease } from '../frame-tap.js'
-import { stopGpuAudienceForNormalOutput } from '../gpu-audience-arbiter.js'
-import {
-  acquireGhost,
-  createHiddenAudienceWindow,
-  createOmtAudioWindow,
-  createHiddenSpeakerWindow,
-  createOmtOverlayWindow,
-  getActiveWindows,
-  releaseGhost,
-} from '../windows.js'
+import { acquireNetworkVideo, acquireProgramAudio, type ProgramAudioChunk } from '../network-output-source.js'
+import { NetworkTimerOutput } from '../network-timer-output.js'
 import {
   loadOmt,
   omtLoadError,
@@ -61,11 +51,6 @@ import {
 } from './libomt.js'
 
 
-/** Ширина кадра 16:9 для разрешения выхода. */
-function widthOf(res: OmtResolution): number {
-  return Math.round((res * 16) / 9)
-}
-
 /** Кадр, ещё не сжатый: BGRA (у таймера альфа premultiplied). */
 interface RawFrame {
   width: number
@@ -81,14 +66,6 @@ interface VmxFrame {
 }
 
 type StatusFn = (s: Partial<OmtOutputStatus>) => void
-
-/** Кусок звука от окна звука OMT (renderer/omt-audio): float по каналам подряд. */
-export interface OmtAudioChunk {
-  sampleRate: number
-  channels: number
-  frames: number
-  data: Float32Array
-}
 
 /**
  * Метки времени OMT — единицы по 100 нс. Свои, а не «-1» (тогда libomt сама
@@ -118,8 +95,6 @@ class OmtSender {
    */
   private pendingImage: NativeImage | null = null
   private encoding = false
-  /** Когда принят прошлый кадр от источника — чаще частоты выхода не берём. */
-  private lastAcceptAt = 0
   /** Буфер под сжатый кадр — один на отправителя, а не 8 МБ на каждый кадр. */
   private scratch: Buffer | null = null
   /** Счётчики за окно журнала (раз в 10 с, пока есть получатели). */
@@ -195,6 +170,7 @@ class OmtSender {
   /** Повтор последнего кадра с частотой fps. setInterval на 60 к/с давал бы 59 (округление до 17 мс). */
   private tickPump(): void {
     if (this.closing) return
+    this.encodeNext()
     this.sendCurrent()
     const period = 1000 / this.fps
     this.nextAt += period
@@ -240,15 +216,11 @@ class OmtSender {
     log.info(`omt: «${this.name}» ${fps} к/с`)
   }
 
-  /** Новый кадр от источника. Чаще частоты выхода — пропускаем (90% периода — запас на дрожь). */
+  /** Keep the newest compositor frame, including the last paint of a static slide. */
   push(image: NativeImage): void {
     if (this.closing || image.isEmpty()) return
-    const now = performance.now()
-    if (now - this.lastAcceptAt < 900 / this.fps) return
-    this.lastAcceptAt = now
     this.stats.pushed++
     this.pendingImage = image
-    this.encodeNext()
   }
 
   /** Байты кадра: вписываем в выбранный предел по обеим сторонам, без обрезки. */
@@ -301,7 +273,6 @@ class OmtSender {
       this.encoding = false
       if (data) this.current = { width: raw.width, height: raw.height, data }
       if (this.closing) this.finishStop()
-      else this.encodeNext()
     })
   }
 
@@ -337,7 +308,7 @@ class OmtSender {
    * когда IPC отдаёт пачку позже; откаты считает `audioBackward` (в журнале
    * «откат метки»). Изменение политики требует отдельного живого прогона.
    */
-  pushAudio(chunk: OmtAudioChunk): void {
+  pushAudio(chunk: ProgramAudioChunk): void {
     if (!this.inst || this.closing) return
     const { sampleRate, channels, frames, data } = chunk
     if (!sampleRate || !channels || !frames || data.length < frames * channels) return
@@ -411,142 +382,35 @@ interface Output {
   setFps(fps: OmtFps): void
 }
 
-/** Таймер: своё offscreen-окно на прозрачном фоне. */
-class TimerOutput implements Output {
-  private win: BrowserWindow | null = null
-
-  constructor(readonly sender: OmtSender) {}
-
-  start(): void {
-    this.sender.start()
-    // Offscreen рисует в пикселях экрана (Retina — вдвое больше), а нам нужно
-    // ровно выбранное разрешение: окно делаем меньше на масштаб основного дисплея.
-    const sf = screen.getPrimaryDisplay().scaleFactor || 1
-    const { size } = this.sender
-    const win = createOmtOverlayWindow(Math.round(widthOf(size) / sf), Math.round(size / sf))
-    this.win = win
-    win.webContents.setFrameRate(this.sender.fps)
-    win.webContents.on('paint', (_e, _dirty, image) => this.sender.push(image))
-  }
-
-  setFps(fps: OmtFps): void {
-    this.sender.setFps(fps)
-    if (this.win && !this.win.isDestroyed()) this.win.webContents.setFrameRate(fps)
-  }
-
-  stop(): Promise<void> {
-    if (this.win && !this.win.isDestroyed()) this.win.destroy()
-    this.win = null
-    return this.sender.stop()
-  }
-}
-
 /**
  * Зал или суфлёр: кадры того окна роли, что сейчас есть. Окна пересоздаются
  * при смене раскладки и экранов — раз в полсекунды проверяем, на то ли окно
  * подписаны.
  */
 class WindowOutput implements Output {
-  private win: BrowserWindow | null = null
-  private tap: FrameTapLease | null = null
-  private watch: NodeJS.Timeout | null = null
-  /** Окно звука (только у зала): снимает звук вкладки зала. */
-  audioWin: BrowserWindow | null = null
-  private readonly holder: string
+  private video: { release(): void } | null = null
+  private releaseAudio: (() => void) | null = null
 
-  constructor(
-    readonly sender: OmtSender,
-    private readonly role: 'audience' | 'speaker',
-  ) {
-    this.holder = `omt-${role}`
-  }
+  constructor(readonly sender: OmtSender, private readonly role: 'audience' | 'speaker') {}
 
   start(): void {
     this.sender.start()
-    this.follow()
-    this.watch = setInterval(() => this.follow(), 500)
+    this.video = acquireNetworkVideo(this.role, this.sender.fps, image => this.sender.push(image), this.sender.size)
   }
 
-  setFps(fps: OmtFps): void {
-    this.sender.setFps(fps)
-  }
+  setFps(fps: OmtFps): void { this.sender.setFps(fps) }
 
-  /** Звук эфира (только у зала) — включается и выключается без перезапуска источника. */
   setAudio(on: boolean): void {
-    if (this.role !== 'audience') return
-    if (on && !this.audioWin) {
-      const aw = createOmtAudioWindow()
-      allowAudienceCapture(aw)
-      this.audioWin = aw
-      aw.on('closed', () => {
-        if (this.audioWin === aw) this.audioWin = null
-      })
-      log.info(`omt: «${this.sender.name}» со звуком`)
-    } else if (!on && this.audioWin) {
-      if (!this.audioWin.isDestroyed()) this.audioWin.destroy()
-      this.audioWin = null
-      log.info(`omt: «${this.sender.name}» без звука`)
+    if (on && !this.releaseAudio) this.releaseAudio = acquireProgramAudio(chunk => this.sender.pushAudio(chunk))
+    if (!on) {
+      this.releaseAudio?.()
+      this.releaseAudio = null
     }
-  }
-
-  private follow(): void {
-    if (this.role === 'audience') stopGpuAudienceForNormalOutput('omt')
-    const real = getActiveWindows().get(this.role)
-    let target: BrowserWindow
-    if (real && !real.isDestroyed()) {
-      releaseGhost(this.role, this.holder)
-      target = real
-    } else {
-      target = acquireGhost(this.role, this.holder, () => this.createGhost())
-    }
-    if (target === this.win) return
-    this.unsubscribe()
-    this.win = target
-    const wc = target.webContents
-    // A shared tap: Electron has only one frame subscriber per WebContents.
-    // Taking it directly here would overwrite another consumer (and vice versa).
-    try {
-      this.tap = acquireFrameTap(wc, this.holder, (image) => this.sender.push(image))
-    } catch (err) {
-      log.warn(`omt: не удалось подписаться на кадры окна — ${(err as Error).message}`)
-      this.win = null
-      return
-    }
-    // Кадры приходят только на изменения — первый, пока на экране статичный слайд, вызываем сами.
-    const kick = (): void => {
-      if (!target.isDestroyed()) wc.invalidate()
-    }
-    if (wc.isLoading()) wc.once('did-finish-load', () => setTimeout(kick, 300))
-    else kick()
-    log.info(`omt: «${this.sender.name}» снимает окно «${target.getTitle()}»`)
-  }
-
-  /**
-   * Зал — ровно выбранное разрешение в пикселях (на Retina вдвое меньше в
-   * точках): там только слайд во весь экран. Суфлёр — как настоящий, 1920×1080
-   * точек: его вёрстка в пикселях CSS, в другом размере всё стало бы крупнее
-   * или мельче; лишнее разрешение ужмёт push().
-   */
-  private createGhost(): BrowserWindow {
-    if (this.role === 'speaker') return createHiddenSpeakerWindow()
-    const sf = screen.getPrimaryDisplay().scaleFactor || 1
-    const { size } = this.sender
-    return createHiddenAudienceWindow(Math.round(widthOf(size) / sf), Math.round(size / sf))
-  }
-
-  private unsubscribe(): void {
-    this.tap?.release()
-    this.tap = null
-    this.win = null
   }
 
   stop(): Promise<void> {
-    if (this.watch) clearInterval(this.watch)
-    this.watch = null
-    this.unsubscribe()
-    if (this.audioWin && !this.audioWin.isDestroyed()) this.audioWin.destroy()
-    this.audioWin = null
-    releaseGhost(this.role, this.holder)
+    this.video?.release()
+    this.setAudio(false)
     return this.sender.stop()
   }
 }
@@ -583,7 +447,7 @@ function makeOutput(lib: OmtLib, id: OmtOutputId, name: string, size: OmtResolut
   }
   const out: Output =
     id === 'timer'
-      ? new TimerOutput(new OmtSender(lib, name, size, fps, true, onStatus))
+      ? new NetworkTimerOutput('omt', new OmtSender(lib, name, size, fps, true, onStatus))
       : new WindowOutput(new OmtSender(lib, name, size, fps, false, onStatus), id === 'program' ? 'audience' : 'speaker')
   return out
 }
@@ -669,13 +533,6 @@ export function initOmt(): void {
 }
 
 export function registerOmtIpc(): void {
-  // Звук зала — только от окна звука текущего выхода «Зал».
-  ipcMain.on('omt:audio', (e, chunk: OmtAudioChunk) => {
-    const out = outputs.get('program')
-    if (!(out instanceof WindowOutput) || !out.audioWin || out.audioWin.webContents !== e.sender) return
-    if (!chunk || !(chunk.data instanceof Float32Array)) return
-    out.sender.pushAudio(chunk)
-  })
   ipcMain.handle('omt:configure', async (_e, v: Partial<OmtSettings>) => {
     const next = sanitize(v ?? {})
     setOmtSettings(next)

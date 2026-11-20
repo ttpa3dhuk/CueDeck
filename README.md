@@ -63,6 +63,10 @@ A ready-made [Bitfocus Companion](https://bitfocus.io/companion) page: live time
 
 ![Preview and video buttons from the CueDeck library in Companion (Russian page)](docs/screenshots/streamdeck.png?v=b9a1681c97f9)
 
+## Network requirements
+
+To send NDI and OMT at the same time, use a wired Ethernet link of at least 1 Gbps between the CueDeck computer and the receiver. If you use a switch, both connections must run at gigabit speed or faster.
+
 ## Download
 
 | Computer | File from [the latest release](https://github.com/ttpa3dhuk/CueDeck/releases/latest) |
