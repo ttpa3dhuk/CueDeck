@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NativeImage } from 'electron'
 import { NDI_FOURCC_BGRA, type NdiLib } from '../src/main/ndi/libndi-native'
 import { NdiSender } from '../src/main/ndi/sender'
+import { ProgramVideoTimeline } from '../src/main/program-playout'
+import log from 'electron-log/main'
 vi.mock('electron-log/main', () => ({ default: { info: vi.fn(), warn: vi.fn() } }))
 
 function fixture(alpha = false) {
@@ -24,6 +26,22 @@ beforeEach(() => vi.useFakeTimers())
 afterEach(() => vi.useRealTimers())
 
 describe('NDI native send ownership', () => {
+  it('logs accepted source captures even when native output is busy', async () => {
+    vi.mocked(log.info).mockClear()
+    const f = fixture(), timeline = new ProgramVideoTimeline()
+    f.sender.setProgramCursor(timeline.consumer())
+    for (let id = 0; id < 30; id++) {
+      timeline.push(f.image(id), performance.now())
+      vi.advanceTimersByTime(333)
+    }
+    vi.advanceTimersByTime(400)
+    const row = vi.mocked(log.info).mock.calls.map(([message]) => String(message))
+      .find(message => message.includes('кадров от источника'))
+    expect(row).toMatch(/кадров от источника [1-9]/)
+    f.sends[0]?.done(null)
+    const stop = f.sender.stop(); f.destroys[0](null); await stop
+  })
+
   it('bounds native work to one call and sends the latest frame after a slow send', async () => {
     const f = fixture()
     vi.advanceTimersByTime(40)
@@ -85,5 +103,23 @@ describe('NDI native send ownership', () => {
     vi.advanceTimersByTime(40); f.sender.push(f.image(8)); vi.advanceTimersByTime(40)
     f.sender.destroyNow()
     expect(f.lib.sendDestroy).not.toHaveBeenCalled()
+  })
+
+  it('keeps a static heartbeat through a mute-like cut with no new paint', async () => {
+    const f = fixture()
+    const timeline = new ProgramVideoTimeline()
+    f.sender.setProgramCursor(timeline.consumer())
+    timeline.push(f.image(7), performance.now())
+    vi.advanceTimersByTime(110)
+    expect(f.sends).toHaveLength(1)
+    f.sends[0].done(null)
+    timeline.markCut(performance.now())
+    vi.advanceTimersByTime(40)
+    expect(f.sends[1].frame.p_data[0]).toBe(7)
+    f.sends[1].done(null)
+    vi.advanceTimersByTime(120)
+    expect(f.sends.at(-1)!.frame.p_data[0]).toBe(7)
+    f.sends.at(-1)!.done(null)
+    const stop = f.sender.stop(); f.destroys[0](null); await stop
   })
 })

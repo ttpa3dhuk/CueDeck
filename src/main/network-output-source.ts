@@ -5,6 +5,8 @@ import { isGpuAudienceActive } from './gpu-audience-arbiter.js'
 import { allowAudienceCapture } from './stream/streamer.js'
 import { acquireGhost, createHiddenAudienceWindow, createHiddenSpeakerWindow, createOmtAudioWindow,
   getActiveWindows, ghostWindow, releaseGhost } from './windows.js'
+import { ProgramAudioTimeline, ProgramVideoTimeline, type ProgramVideoCursor } from './program-playout.js'
+import { clearProgramBitmapCache } from './program-bitmap-cache.js'
 
 type Role = 'audience' | 'speaker'
 type Listener = (image: NativeImage) => void
@@ -44,6 +46,7 @@ function follow(role: Role, source: VideoSource): void {
     }
   }
   if (source.win === target && source.tap) return
+  if (role === 'audience' && source.win && programVideoUsers > 0) programVideo.markCut()
   source.tap?.release()
   source.tap = null
   source.win = target
@@ -90,6 +93,34 @@ export function acquireNetworkVideo(role: Role, _fps: number, listener: Listener
   return { release }
 }
 
+const programVideo = new ProgramVideoTimeline()
+let programVideoUsers = 0
+let lastProgramImage: NativeImage | null = null
+
+export function markProgramTransition(): void { programVideo.markCut() }
+
+/** Both program encoders read one bounded capture timeline at their own free slots. */
+export function acquireProgramVideo(fps: number, height: number): { cursor: ProgramVideoCursor; release(): void } {
+  const lease = acquireNetworkVideo('audience', fps, image => {
+    if (image === lastProgramImage) return
+    lastProgramImage = image
+    programVideo.push(image)
+  }, height)
+  programVideoUsers++
+  const cursor = programVideo.consumer()
+  let released = false
+  return { cursor, release: () => {
+    if (released) return
+    released = true
+    lease.release()
+    if (--programVideoUsers === 0) {
+      programVideo.reset()
+      clearProgramBitmapCache()
+      lastProgramImage = null
+    }
+  } }
+}
+
 export interface ProgramAudioChunk {
   sampleRate: number
   channels: number
@@ -97,8 +128,24 @@ export interface ProgramAudioChunk {
   data: Float32Array
 }
 const audio = new Set<(chunk: ProgramAudioChunk) => void>()
+const programAudio = new ProgramAudioTimeline()
 let audioWindow: BrowserWindow | null = null
 let registered = false
+let audioPump: NodeJS.Timeout | null = null
+
+function scheduleAudio(): void {
+  if (audioPump || !audio.size) return
+  const due = programAudio.nextDueAt()
+  if (due === null) return
+  audioPump = setTimeout(() => {
+    audioPump = null
+    const chunk = programAudio.due()
+    if (chunk) for (const sink of audio) {
+      try { sink(chunk) } catch (error) { log.warn('network audio sink:', error) }
+    }
+    scheduleAudio()
+  }, Math.max(1, due - performance.now()))
+}
 
 /** One tab audio capture and resampler; both transports receive the same planar PCM. */
 export function acquireProgramAudio(fn: (chunk: ProgramAudioChunk) => void): () => void {
@@ -106,9 +153,8 @@ export function acquireProgramAudio(fn: (chunk: ProgramAudioChunk) => void): () 
     ipcMain.on('omt:audio', (event, chunk: ProgramAudioChunk) => {
       if (!audioWindow || event.sender !== audioWindow.webContents || !(chunk?.data instanceof Float32Array)) return
       if (chunk.channels !== 2 || chunk.sampleRate !== 48000 || chunk.frames <= 0 || chunk.data.length !== chunk.frames * 2) return
-      for (const sink of audio) {
-        try { sink(chunk) } catch (error) { log.warn('network audio sink:', error) }
-      }
+      programAudio.push(chunk)
+      scheduleAudio()
     })
     registered = true
   }
@@ -116,11 +162,14 @@ export function acquireProgramAudio(fn: (chunk: ProgramAudioChunk) => void): () 
     const win = createOmtAudioWindow()
     allowAudienceCapture(win)
     audioWindow = win
-    win.on('closed', () => { if (audioWindow === win) audioWindow = null })
+    win.on('closed', () => { if (audioWindow === win) { audioWindow = null; programAudio.reset() } })
   }
   audio.add(fn)
   return () => {
     if (!audio.delete(fn) || audio.size) return
+    if (audioPump) clearTimeout(audioPump)
+    audioPump = null
+    programAudio.reset()
     if (audioWindow && !audioWindow.isDestroyed()) audioWindow.destroy()
     audioWindow = null
   }

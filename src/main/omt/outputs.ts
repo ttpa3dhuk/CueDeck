@@ -33,7 +33,9 @@ import {
   type OmtStatus,
 } from '../../shared/types.js'
 import { cleanOmtFps, cleanOmtName, cleanOmtResolution, getOmtSettings, setOmtSettings } from '../display-mapping.js'
-import { acquireNetworkVideo, acquireProgramAudio, type ProgramAudioChunk } from '../network-output-source.js'
+import { acquireNetworkVideo, acquireProgramVideo, acquireProgramAudio, markProgramTransition, type ProgramAudioChunk } from '../network-output-source.js'
+import { isProgramTransition, type ProgramVideoCursor } from '../program-playout.js'
+import { programBitmap } from '../program-bitmap-cache.js'
 import { NetworkTimerOutput } from '../network-timer-output.js'
 import {
   loadOmt,
@@ -94,14 +96,22 @@ class OmtSender {
    * копировать те, что всё равно выбросим, нельзя (на i3 это съедало ядро).
    */
   private pendingImage: NativeImage | null = null
+  private programCursor: ProgramVideoCursor | null = null
+  private programEpoch = -1
+  private missedEncodeSlot = false
+  private missedSendSlot = false
+  private lastSendAt = 0
+  private earlySendWake: NodeJS.Timeout | null = null
   private encoding = false
+  private encodingStartedAt = 0
   /** Буфер под сжатый кадр — один на отправителя, а не 8 МБ на каждый кадр. */
   private scratch: Buffer | null = null
   /** Счётчики за окно журнала (раз в 10 с, пока есть получатели). */
-  private stats = { pushed: 0, encoded: 0, encodeMs: 0, sent: 0, audioChunks: 0, audioBackward: 0, audioResyncs: 0, audioLeadTicks: 0, since: 0 }
+  private stats = { pushed: 0, encoded: 0, encodeMs: 0, sent: 0, audioChunks: 0, audioSamples: 0, audioBackward: 0, audioResyncs: 0, audioLeadTicks: 0, since: 0 }
   private receivers = 0
   /** Последний сжатый кадр — уходит получателям с постоянной частотой. */
   private current: VmxFrame | null = null
+  private currentFresh = false
   private sending: VmxFrame | null = null
   private pump: NodeJS.Timeout | null = null
   /** Когда уйти следующему кадру (мс, performance.now) — счёт от расписания, а не от прошлого вызова: без накопленного опоздания. */
@@ -170,8 +180,10 @@ class OmtSender {
   /** Повтор последнего кадра с частотой fps. setInterval на 60 к/с давал бы 59 (округление до 17 мс). */
   private tickPump(): void {
     if (this.closing) return
-    this.encodeNext()
-    this.sendCurrent()
+    if (this.encoding && this.programCursor) this.missedEncodeSlot = true
+    else this.encodeNext()
+    if (this.sending && this.programCursor) this.missedSendSlot = true
+    else this.sendCurrent()
     const period = 1000 / this.fps
     this.nextAt += period
     const now = performance.now()
@@ -191,23 +203,24 @@ class OmtSender {
     const dt = (now - this.stats.since) / 1000
     if (dt < 10) return
     const st = this.stats
+    const sourceFrames = this.programCursor ? this.programCursor.takeSourceCaptures() : st.pushed
     if (this.receivers > 0) {
       const enc = st.encoded ? (st.encodeMs / st.encoded).toFixed(0) : '—'
       log.info(
-        `omt: «${this.name}» за ${dt.toFixed(0)} с: кадров от источника ${(st.pushed / dt).toFixed(1)}/с, ` + // i18n-ok: журнал
+        `omt: «${this.name}» за ${dt.toFixed(0)} с: кадров от источника ${(sourceFrames / dt).toFixed(1)}/с, ` + // i18n-ok: журнал
           `сжато ${(st.encoded / dt).toFixed(1)}/с по ${enc} мс, отправлено ${(st.sent / dt).toFixed(1)}/с (цель ${this.fps})`, // i18n-ok: журнал
       )
       if (st.audioChunks) {
-        const rate = st.audioChunks / dt
+        const coverage = st.audioSamples / 48000 / dt * 100
         log.info(
-          `omt: «${this.name}» звук: ${st.audioChunks} кусков за ${dt.toFixed(1)} с (${rate.toFixed(1)}/с, ` + // i18n-ok: журнал
-            `пакет 20 мс = ${((st.audioChunks * 0.02) / dt * 100).toFixed(1)}% времени), ` + // i18n-ok: журнал
+          `omt: «${this.name}» звук: ${st.audioChunks} кусков за ${dt.toFixed(1)} с, ` + // i18n-ok: журнал
+            `семплов ${st.audioSamples}, покрытие ${coverage.toFixed(1)}% времени), ` + // i18n-ok: журнал
             `опоздало >150 мс: ${st.audioResyncs}, откат метки: ${st.audioBackward}, ` + // i18n-ok: журнал
             `счётчик впереди прихода до ${(st.audioLeadTicks / 10000).toFixed(0)} мс`, // i18n-ok: журнал
         )
       }
     }
-    this.stats = { pushed: 0, encoded: 0, encodeMs: 0, sent: 0, audioChunks: 0, audioBackward: 0, audioResyncs: 0, audioLeadTicks: 0, since: now }
+    this.stats = { pushed: 0, encoded: 0, encodeMs: 0, sent: 0, audioChunks: 0, audioSamples: 0, audioBackward: 0, audioResyncs: 0, audioLeadTicks: 0, since: now }
   }
 
   setFps(fps: OmtFps): void {
@@ -223,22 +236,42 @@ class OmtSender {
     this.pendingImage = image
   }
 
+  setProgramCursor(cursor: ProgramVideoCursor | null): void {
+    this.programCursor = cursor
+    this.programEpoch = cursor?.epoch ?? -1
+    this.pendingImage = null
+    this.current = null
+    this.currentFresh = false
+  }
+
   /** Байты кадра: вписываем в выбранный предел по обеим сторонам, без обрезки. */
   private toRaw(image: NativeImage): RawFrame | null {
-    let img = image
-    const source = img.getSize()
+    const source = image.getSize()
     const target = omtFrameSize(source.width, source.height, this.size)
     if (!target) return null
-    if (source.width !== target.width || source.height !== target.height) img = img.resize({ ...target, quality: 'good' })
-    const { width, height } = img.getSize()
+    const shared = this.programCursor ? programBitmap(image, target.width, target.height) : null
+    const img = shared ? null : source.width !== target.width || source.height !== target.height
+      ? image.resize({ ...target, quality: 'good' }) : image
+    const { width, height } = shared ?? img!.getSize()
     if (width < 16 || height < 16) return null
-    return { width, height, buf: img.toBitmap() }
+    return { width, height, buf: shared?.bitmap ?? img!.toBitmap() }
   }
 
   /** Сжать самый свежий кадр; пока кодек занят, промежуточные кадры отбрасываются. */
   private encodeNext(): void {
-    const image = this.pendingImage
-    if (!image || this.encoding || this.closing) return
+    if (this.encoding || this.closing) return
+    if (this.programCursor && this.programEpoch !== this.programCursor.epoch) {
+      this.programEpoch = this.programCursor.epoch
+      this.current = null
+      this.currentFresh = false
+    }
+    // Program must hand the prepared frame to native send before selecting
+    // another source frame. The prompter and timer retain their old cadence.
+    if (this.programCursor && this.currentFresh) return
+    const selected = this.programCursor?.next(this.fps)
+    if (selected?.cut) { this.current = null; this.currentFresh = false }
+    const image = selected?.image ?? this.pendingImage
+    if (!image) return
     this.pendingImage = null
     const raw = this.toRaw(image)
     if (!raw) return
@@ -253,9 +286,12 @@ class OmtSender {
       }
     }
     this.encoding = true
+    const encodingEpoch = this.programEpoch
+    const encodingFrameId = selected?.id
     const vmx = this.vmx
     const encode = this.alpha ? lib.vmxEncodeBGRA : lib.vmxEncodeBGRX
     const t0 = performance.now()
+    this.encodingStartedAt = t0
     encode.async(vmx, raw.buf, raw.width * 4, 0, (err: unknown, hr: number) => {
       // Сохранение — копия в буфер, быстро: делаем здесь же, кодек ещё наш.
       let data: Buffer | null = null
@@ -271,12 +307,41 @@ class OmtSender {
         log.warn(`omt: кадр не сжался (${err ? String(err) : `VMX ${hr}`})`)
       }
       this.encoding = false
-      if (data) this.current = { width: raw.width, height: raw.height, data }
+      const superseded = encodingFrameId !== undefined && this.programCursor?.superseded(encodingFrameId)
+      if (superseded) { this.current = null; this.currentFresh = false }
+      if (data && !superseded && (!this.programCursor || encodingEpoch === this.programCursor.epoch)) {
+        this.current = { width: raw.width, height: raw.height, data }
+        this.currentFresh = true
+      }
       if (this.closing) this.finishStop()
+      else {
+        if (this.programCursor && this.missedEncodeSlot) {
+          this.missedEncodeSlot = false
+          setTimeout(() => { if (!this.closing && !this.encoding) this.encodeNext() }, 0)
+        }
+        if (this.programCursor && this.currentFresh && !this.sending)
+          setTimeout(() => { if (!this.closing && !this.sending) this.sendCurrent() }, 0)
+      }
     })
   }
 
   private sendCurrent(): void {
+    // A moving program frame is already in VMX. Preserve the next transport
+    // slot for that completion, instead of filling it with the previous frame.
+    // An unusually long encode still gets a bounded old-frame heartbeat.
+    if (this.programCursor && this.encoding &&
+      performance.now() - this.encodingStartedAt < Math.max(150, 3 * 1000 / this.fps)) return
+    if (this.programCursor?.hasFreshCut()) { this.current = null; this.currentFresh = false }
+    if (this.programCursor && this.lastSendAt > 0) {
+      const remaining = 1000 / this.fps - (performance.now() - this.lastSendAt)
+      if (remaining > 1) {
+        if (!this.earlySendWake) this.earlySendWake = setTimeout(() => {
+          this.earlySendWake = null
+          this.sendCurrent()
+        }, remaining)
+        return
+      }
+    }
     const f = this.current
     if (!f || !this.inst || this.sending || this.closing) return
     const frame = {
@@ -290,12 +355,30 @@ class OmtSender {
     }
     // Буфер должен жить, пока libomt его копирует в рабочем потоке, — держим ссылку.
     this.sending = f
+    this.currentFresh = false
+    this.lastSendAt = performance.now()
     this.lib.send.async(this.inst, frame, (err: unknown) => {
       this.sending = null
       this.stats.sent++
       if (err) log.warn('omt: кадр не ушёл', err)
       if (this.closing) this.finishStop()
+      else if (this.programCursor && this.currentFresh) {
+        // VMX may have prepared the next frame while native send held this one.
+        // The cadence guard in sendCurrent schedules any remaining wait.
+        this.missedSendSlot = false
+        setTimeout(() => { if (!this.closing && !this.sending) this.sendCurrent() }, 0)
+      }
+      else if (this.programCursor && this.missedSendSlot) {
+        this.missedSendSlot = false
+        if (performance.now() - this.lastSendAt >= 1000 / this.fps - 2)
+          setTimeout(() => { if (!this.closing && !this.sending) this.sendCurrent() }, 0)
+      }
     })
+    // The compressed frame is now owned by native send. Start the next VMX
+    // operation without waiting for the next timer tick; at most one prepared
+    // frame remains ahead of transport.
+    if (this.programCursor)
+      setTimeout(() => { if (!this.closing && !this.encoding && !this.currentFresh) this.encodeNext() }, 0)
   }
 
   /**
@@ -328,6 +411,7 @@ class OmtSender {
     }
     this.audioSamples += frames
     this.stats.audioChunks++
+    this.stats.audioSamples += frames
     const buf = Buffer.from(data.buffer, data.byteOffset, frames * channels * 4)
     this.lib.send(this.inst, {
       Type: OMT_FRAME_AUDIO, Timestamp: ts, Codec: OMT_CODEC_FPA1,
@@ -341,9 +425,12 @@ class OmtSender {
   /** Остановить: дождаться кадра в работе, потом освободить отправителя и кодек. */
   stop(): Promise<void> {
     if (this.pump) clearTimeout(this.pump)
+    if (this.earlySendWake) clearTimeout(this.earlySendWake)
+    this.earlySendWake = null
     if (this.poll) clearInterval(this.poll)
     this.pump = this.poll = null
     this.pendingImage = null
+    this.programCursor = null
     this.closing = true
     return new Promise((resolve) => {
       this.onStopped = resolve
@@ -390,12 +477,22 @@ interface Output {
 class WindowOutput implements Output {
   private video: { release(): void } | null = null
   private releaseAudio: (() => void) | null = null
+  private releaseCuts: (() => void) | null = null
 
   constructor(readonly sender: OmtSender, private readonly role: 'audience' | 'speaker') {}
 
   start(): void {
     this.sender.start()
-    this.video = acquireNetworkVideo(this.role, this.sender.fps, image => this.sender.push(image), this.sender.size)
+    if (this.role === 'audience') {
+      const lease = acquireProgramVideo(this.sender.fps, this.sender.size)
+      this.sender.setProgramCursor(lease.cursor)
+      this.video = lease
+      let before = store.get()
+      this.releaseCuts = store.onChange((state, patch) => {
+        if (isProgramTransition(patch, before)) markProgramTransition()
+        before = state
+      })
+    } else this.video = acquireNetworkVideo(this.role, this.sender.fps, image => this.sender.push(image), this.sender.size)
   }
 
   setFps(fps: OmtFps): void { this.sender.setFps(fps) }
@@ -411,6 +508,9 @@ class WindowOutput implements Output {
   stop(): Promise<void> {
     this.video?.release()
     this.setAudio(false)
+    this.releaseCuts?.()
+    this.releaseCuts = null
+    this.sender.setProgramCursor(null)
     return this.sender.stop()
   }
 }

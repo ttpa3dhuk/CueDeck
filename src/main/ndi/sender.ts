@@ -6,6 +6,8 @@ import type { NdiFps, NdiResolution, NdiOutputStatus } from '../../shared/types.
 import { NDI_FOURCC_BGRA, NDI_FOURCC_BGRX, NDI_FRAME_FORMAT_PROGRESSIVE, NDI_TIMECODE_SYNTHESIZE, type NdiLib } from './libndi-native.js'
 
 import { ndiFrameSize } from './frame-size.js'
+import type { ProgramVideoCursor } from '../program-playout.js'
+import { programBitmap } from '../program-bitmap-cache.js'
 
 /** Кадр для NDI: BGRA c прямой альфой либо BGRX. */
 interface RawFrame {
@@ -39,6 +41,11 @@ export class NdiSender {
   /** Последний принятый кадр — уходит получателям с постоянной частотой. */
   private current: RawFrame | null = null
   private pendingImage: NativeImage | null = null
+  private programCursor: ProgramVideoCursor | null = null
+  private programEpoch = -1
+  private missedNativeSlot = false
+  private lastSubmitAt = 0
+  private earlyWake: NodeJS.Timeout | null = null
   /** Кадр, отправленный последним: держим ссылку, пока NDI его кодирует. */
   private lastSent: RawFrame | null = null
   private pump: NodeJS.Timeout | null = null
@@ -97,7 +104,8 @@ export class NdiSender {
   /** Повтор последнего кадра с частотой fps. setInterval на 60 к/с давал бы 59 (округление до 17 мс). */
   private tickPump(): void {
     if (this.closing) return
-    this.sendCurrent()
+    if (this.sending && this.programCursor) this.missedNativeSlot = true
+    else this.sendCurrent()
     const period = 1000 / this.fps
     this.nextAt += period
     const now = performance.now()
@@ -112,10 +120,11 @@ export class NdiSender {
     if (!this.stats.since) this.stats.since = now
     const dt = (now - this.stats.since) / 1000
     if (dt < 10) return
+    const st = this.stats
+    const sourceFrames = this.programCursor ? this.programCursor.takeSourceCaptures() : st.pushed
     if (this.receivers > 0) {
-      const st = this.stats
       log.info(
-        `ndi: «${this.name}» за ${dt.toFixed(0)} с: кадров от источника ${(st.pushed / dt).toFixed(1)}/с, ` + // i18n-ok: журнал
+        `ndi: «${this.name}» за ${dt.toFixed(0)} с: кадров от источника ${(sourceFrames / dt).toFixed(1)}/с, ` + // i18n-ok: журнал
           `отправлено ${(st.sent / dt).toFixed(1)}/с (цель ${this.fps})`, // i18n-ok: журнал
       )
     }
@@ -135,16 +144,24 @@ export class NdiSender {
     this.pendingImage = image
   }
 
+  setProgramCursor(cursor: ProgramVideoCursor | null): void {
+    this.programCursor = cursor
+    this.programEpoch = cursor?.epoch ?? -1
+    this.current = null
+    this.pendingImage = null
+  }
+
   /** Байты кадра; шире выбранного разрешения (Retina, 4K-проектор) — ужимаем. */
   private toRaw(image: NativeImage): RawFrame | null {
-    let img = image
-    const source = img.getSize()
+    const source = image.getSize()
     const target = ndiFrameSize(source.width, source.height, this.size)
     if (!target) return null
-    if (source.width !== target.width || source.height !== target.height) img = img.resize({ ...target, quality: 'good' })
-    const { width, height } = img.getSize()
+    const shared = this.programCursor ? programBitmap(image, target.width, target.height) : null
+    const img = shared ? null : source.width !== target.width || source.height !== target.height
+      ? image.resize({ ...target, quality: 'good' }) : image
+    const { width, height } = shared ?? img!.getSize()
     if (width < 16 || height < 16) return null
-    const bitmap = img.toBitmap()
+    const bitmap = shared?.bitmap ?? img!.toBitmap()
     if (bitmap.length !== width * height * 4) return null
     if (!this.alpha) return { width, height, buf: bitmap }
 
@@ -162,6 +179,27 @@ export class NdiSender {
 
   private sendCurrent(): void {
     if (!this.inst || this.closing || this.sending) return
+    if (this.programCursor && this.lastSubmitAt > 0) {
+      const remaining = 1000 / this.fps - (performance.now() - this.lastSubmitAt)
+      if (remaining > 1) {
+        if (!this.earlyWake) this.earlyWake = setTimeout(() => {
+          this.earlyWake = null
+          this.sendCurrent()
+        }, remaining)
+        return
+      }
+    }
+    if (this.programCursor) {
+      if (this.programEpoch !== this.programCursor.epoch) {
+        this.programEpoch = this.programCursor.epoch
+        this.current = null
+      }
+      const selected = this.programCursor.next(this.fps)
+      if (selected) {
+        const raw = this.toRaw(selected.image)
+        if (raw) this.current = raw
+      }
+    }
     if (this.pendingImage) {
       const image = this.pendingImage
       this.pendingImage = null
@@ -188,6 +226,7 @@ export class NdiSender {
     // main, with one outstanding call and only the latest pending image.
     // Both buffers stay alive until native has returned from the next send.
     this.sending = f
+    this.lastSubmitAt = performance.now()
     const complete = (error: Error | null): void => {
       if (!error) { this.lastSent = f; this.stats.sent++ }
       this.sending = null
@@ -196,6 +235,12 @@ export class NdiSender {
         void this.stop()
       }
       if (this.closing) this.finishStop()
+      else if (this.programCursor && this.missedNativeSlot) {
+        this.missedNativeSlot = false
+        // One overdue slot, never a recursive native call from a sync mock.
+        if (performance.now() - this.lastSubmitAt >= 1000 / this.fps - 2)
+          setTimeout(() => { if (!this.closing && !this.sending) this.sendCurrent() }, 0)
+      }
     }
     try { this.lib.sendVideoAsync.async(this.inst, frame, complete) }
     catch (error) { complete(error as Error) }
@@ -228,10 +273,13 @@ export class NdiSender {
   stop(): Promise<void> {
     if (this.stopping) return this.stopping
     if (this.pump) clearTimeout(this.pump)
+    if (this.earlyWake) clearTimeout(this.earlyWake)
+    this.earlyWake = null
     if (this.poll) clearInterval(this.poll)
     this.pump = this.poll = null
     this.current = null
     this.pendingImage = null
+    this.programCursor = null
     this.closing = true
     this.stopping = new Promise((resolve) => { this.onStopped = resolve })
     this.finishStop()

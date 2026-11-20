@@ -120,6 +120,8 @@ describe('network output shared capture', () => {
     m.audioHandler!({ sender: audioWindow.webContents }, { ...chunk, frames: 3 })
     expect(a).not.toHaveBeenCalled()
     m.audioHandler!({ sender: audioWindow.webContents }, chunk)
+    expect(a).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(130)
     expect(a).toHaveBeenCalledWith(chunk); expect(b).toHaveBeenCalledWith(chunk)
     video.release()
     expect(audioWindow.destroy).not.toHaveBeenCalled()

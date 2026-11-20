@@ -12,7 +12,8 @@ import {
   type NdiStatus,
 } from '../../shared/types.js'
 import { cleanNdiFps, cleanNdiName, cleanNdiResolution, getNdiSettings, setNdiSettings } from '../display-mapping.js'
-import { acquireNetworkVideo, acquireProgramAudio } from '../network-output-source.js'
+import { acquireNetworkVideo, acquireProgramVideo, acquireProgramAudio, markProgramTransition } from '../network-output-source.js'
+import { isProgramTransition } from '../program-playout.js'
 import { NetworkTimerOutput } from '../network-timer-output.js'
 import { loadNdi, ndiLoadError, type NdiLib } from './libndi.js'
 import { NdiSender } from './sender.js'
@@ -26,8 +27,9 @@ interface Output {
 }
 
 class WindowOutput implements Output {
-  private video: ReturnType<typeof acquireNetworkVideo> | null = null
+  private video: { release(): void } | null = null
   private releaseAudio: (() => void) | null = null
+  private releaseCuts: (() => void) | null = null
 
   constructor(
     readonly sender: NdiSender,
@@ -36,7 +38,16 @@ class WindowOutput implements Output {
 
   start(): void {
     this.sender.start()
-    this.video = this.acquireVideo(this.sender.fps)
+    if (this.role === 'audience') {
+      const lease = acquireProgramVideo(this.sender.fps, this.sender.size)
+      this.sender.setProgramCursor(lease.cursor)
+      this.video = lease
+      let before = store.get()
+      this.releaseCuts = store.onChange((state, patch) => {
+        if (isProgramTransition(patch, before)) markProgramTransition()
+        before = state
+      })
+    } else this.video = this.acquireVideo(this.sender.fps)
   }
 
   private acquireVideo(fps: NdiFps): ReturnType<typeof acquireNetworkVideo> {
@@ -45,6 +56,7 @@ class WindowOutput implements Output {
 
   setFps(fps: NdiFps): void {
     if (this.sender.fps === fps) return
+    if (this.role === 'audience') { this.sender.setFps(fps); return }
     const next = this.acquireVideo(fps)
     this.video?.release()
     this.video = next
@@ -65,6 +77,9 @@ class WindowOutput implements Output {
     this.setAudio(false)
     this.video?.release()
     this.video = null
+    this.releaseCuts?.()
+    this.releaseCuts = null
+    this.sender.setProgramCursor(null)
     return this.sender.stop()
   }
 }
