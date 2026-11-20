@@ -76,6 +76,7 @@ describe('full-display output windows', () => {
     expect(audience.destroyed).toBe(false)
     windows.setAudienceOutputEnabled(true)
     expect(audience.showInactive).toHaveBeenCalledTimes(2)
+    if (os === 'win32') expect(audience.setAlwaysOnTop).toHaveBeenLastCalledWith(true)
     expect(runtime.windows).toHaveLength(3)
     expect(runtime.state).toEqual(before)
   })
@@ -200,9 +201,9 @@ describe('full-display output windows', () => {
     const output = runtime.windows[1]
     expect(output.setAlwaysOnTop).toHaveBeenLastCalledWith(false)
     windows.applyLayout('presenter-audience', map, false, true)
-    expect(output.setAlwaysOnTop).toHaveBeenLastCalledWith(true)
+    expect(output.setAlwaysOnTop).toHaveBeenLastCalledWith(true, 'screen-saver')
     windows.applyLayout('presenter-audience', map, false, false)
-    expect(output.setAlwaysOnTop).toHaveBeenLastCalledWith(false)
+    expect(output.setAlwaysOnTop).toHaveBeenLastCalledWith(false, 'screen-saver')
     expect(output.bounds).toEqual({ x: -1920, y: -36, width: 1920, height: 1080 })
     expect(runtime.windows).toHaveLength(2)
   })
@@ -218,9 +219,28 @@ describe('full-display output windows', () => {
     expect(audience.showInactive).toHaveBeenCalledOnce()
     expect(audience.removeMenu).toHaveBeenCalledOnce()
     expect(audience.setAlwaysOnTop).toHaveBeenCalledWith(true)
+    expect(audience.showInactive.mock.invocationCallOrder[0]).toBeLessThan(audience.setAlwaysOnTop.mock.invocationCallOrder[0])
     expect(speaker.options.frame).toBeUndefined()
     expect(speaker.setFullScreen).toHaveBeenCalledWith(true)
     expect(runtime.windows[0].options.frame).toBeUndefined()
+  })
+  it('does not pin a windowed Windows audience or show an output disabled before ready', async () => {
+    await load('win32')
+    const map = { operator: 1, audience: 2 }
+    windows.applyLayout('presenter-audience', map, true, true)
+    ready()
+    const windowed = runtime.windows[1]
+    expect(windowed.setAlwaysOnTop).not.toHaveBeenCalled()
+    windows.applyLayout('presenter-audience', map, false, true)
+    const desktop = runtime.windows[2]
+    windows.setAudienceOutputEnabled(false)
+    ready()
+    expect(desktop.showInactive).not.toHaveBeenCalled()
+    expect(desktop.setAlwaysOnTop).not.toHaveBeenCalled()
+    windows.setAudienceOutputEnabled(true)
+    expect(desktop.showInactive).toHaveBeenCalledOnce()
+    expect(desktop.setAlwaysOnTop).toHaveBeenCalledWith(true)
+    expect(desktop.showInactive.mock.invocationCallOrder[0]).toBeLessThan(desktop.setAlwaysOnTop.mock.invocationCallOrder[0])
   })
   it.each(['darwin', 'win32'])('follows only its display resolution and removes listeners on %s', async (os) => {
     await load(os)

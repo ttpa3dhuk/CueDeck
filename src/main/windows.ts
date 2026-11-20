@@ -167,9 +167,7 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
         // The pinned mode covers the menu bar and Dock on this display.
         // Neither mode changes NSApp presentation options or creates a Space.
         if (role !== 'audience' || audienceAlwaysOnTop) win.setAlwaysOnTop(true, 'screen-saver')
-      } else if (winAudienceDisplay) {
-        win.setAlwaysOnTop(audienceAlwaysOnTop)
-      } else {
+      } else if (!winAudienceDisplay) {
         win.setFullScreen(true)
         if (role === 'audience') win.setAlwaysOnTop(audienceAlwaysOnTop)
       }
@@ -177,6 +175,9 @@ function createWindow(role: Role, displayId: number | undefined, fullscreen: boo
     if (role === 'audience' && !store.get().audienceOutputEnabled) return
     if (role !== 'operator') win.showInactive()
     else win.show()
+    // The Windows desktop output was hidden until showInactive. Apply the
+    // requested z-order once it is visible, including on the first launch.
+    if (winAudienceDisplay) win.setAlwaysOnTop(audienceAlwaysOnTop)
     if (role === 'operator') win.focus()
   })
 
@@ -270,6 +271,7 @@ export function applyLayout(layout: Layout, displayMap: DisplayMap, audienceWind
         }
         if (!displayChanged && !modeChanged && role === 'audience' && fullscreen) {
           if (process.platform === 'darwin' && desktopDisplayWindows.has(existing)) existing.setAlwaysOnTop(audienceAlwaysOnTop, 'screen-saver')
+          else if (process.platform === 'win32' && desktopDisplayWindows.has(existing)) existing.setAlwaysOnTop(audienceAlwaysOnTop, 'screen-saver')
           else existing.setAlwaysOnTop(audienceAlwaysOnTop)
         }
       }
@@ -327,6 +329,9 @@ export function setAudienceOutputEnabled(enabled: boolean): void {
     if (operator && !operator.isDestroyed()) operator.focus()
   } else if (readyWindows.has(audience)) {
     audience.showInactive()
+    if (process.platform === 'win32' && desktopDisplayWindows.has(audience)) {
+      audience.setAlwaysOnTop(state.audienceAlwaysOnTop)
+    }
   }
 }
 
