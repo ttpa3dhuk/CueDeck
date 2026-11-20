@@ -8,6 +8,7 @@ import { audienceTimerConfig, type AudienceTimerConfig } from '../shared/audienc
 import { sanitizeSlideFadeMs } from '../shared/slide-transition.js'
 import { sanitizeStoredVideoRange } from '../shared/video-range.js'
 import { programOverlay, type ProgramOverlayConfig } from '../shared/program-overlay.js'
+import { isPresentationBackend } from '../shared/presentation-preparation.js'
 
 /** 2 — пути к материалам внутри папки проекта пишутся относительными. */
 export const PROJECT_SCHEMA_VERSION = 2
@@ -78,6 +79,7 @@ function migrateEntry(raw: unknown): PlaylistEntry | null {
     ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
     ...(v.loop ? { loop: true } : {}),
     ...(typeof v.sourceMuted === 'boolean' ? { sourceMuted: v.sourceMuted } : {}),
+    ...(kind === 'pptx' && isPresentationBackend(v.pptxBackend) ? { pptxBackend: v.pptxBackend } : {}),
     ...(typeof v.slideFadeMs === 'number' ? { slideFadeMs: sanitizeSlideFadeMs(v.slideFadeMs) } : {}),
     ...(['file', 'custom', 'cut'].includes(v.slideFadeMode as string) ? { slideFadeMode: v.slideFadeMode as PlaylistEntry['slideFadeMode'] } : {}),
     ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),

@@ -1,11 +1,8 @@
 import type { AppState, PlaylistEntry } from '../shared/types.js'
+import { playlistPptxBackend, type PreparationOptions as WorkerOptions } from '../shared/presentation-preparation.js'
 
 type Status = AppState['preparations'][string]
-export interface PreparationOptions {
-  priority?: 'foreground' | 'background'
-  forceLocalCache?: boolean
-  cacheSourcePath?: string
-  cacheProjectPath?: string | null
+export interface PreparationOptions extends WorkerOptions {
   reportFontIssues?: boolean
 }
 interface PreparationStore {
@@ -60,9 +57,15 @@ export class PreparationUiState<T> {
   }
 
   background(entries: readonly PlaylistEntry[], projectPath: string | null): void {
-    for (const path of new Set(entries.filter(e => e.kind === 'pptx').map(e => e.filePath))) {
+    const prepared = new Set<string>()
+    for (const entry of entries) {
+      if (entry.kind !== 'pptx') continue
+      const backend = playlistPptxBackend(entry)
+      const key = JSON.stringify([entry.filePath, backend])
+      if (prepared.has(key)) continue
+      prepared.add(key)
       // A failed card remains retryable; background errors must not change the feed.
-      void this.prepare(path, { priority: 'background', cacheProjectPath: projectPath }).catch(() => undefined)
+      void this.prepare(entry.filePath, { backend, priority: 'background', cacheProjectPath: projectPath }).catch(() => undefined)
     }
   }
 

@@ -101,7 +101,7 @@ describe('preparation UI state', () => {
     const prepare = vi.fn(() => pending.promise)
     const tracker = new PreparationUiState(store, prepare, vi.fn())
     tracker.background([entry('a', '/a.pptx'), entry('duplicate', '/a.pptx'), entry('b', '/b.pdf', 'pdf')], '/show.pdpres')
-    expect(prepare).toHaveBeenCalledExactlyOnceWith('/a.pptx', { priority: 'background', cacheProjectPath: '/show.pdpres' })
+    expect(prepare).toHaveBeenCalledExactlyOnceWith('/a.pptx', { backend: 'libreoffice', priority: 'background', cacheProjectPath: '/show.pdpres' })
     expect(store.get().preparations['/a.pptx']).toBeUndefined()
     tracker.phase('/a.pptx', { phase: 'queued' })
     expect(store.get().preparations['/a.pptx']).toEqual({ phase: 'queued' })
@@ -115,6 +115,16 @@ describe('preparation UI state', () => {
     expect(store.get().video).toBe(before.video)
     expect(store.get().timer).toBe(before.timer)
     expect(store.get().testScreen).toBe(before.testScreen)
+  })
+
+  it('prepares one source separately when playlist cards use different engines', () => {
+    const prepare = vi.fn(async () => 'ready')
+    const tracker = new PreparationUiState(new StateStore(), prepare, vi.fn())
+    tracker.background([entry('a', '/a.pptx'), { ...entry('b', '/a.pptx'), pptxBackend: 'powerpoint-static' }], null)
+    expect(prepare.mock.calls).toEqual([
+      ['/a.pptx', { backend: 'libreoffice', priority: 'background', cacheProjectPath: null }],
+      ['/a.pptx', { backend: 'powerpoint-static', priority: 'background', cacheProjectPath: null }],
+    ])
   })
 
   it('reports errors per file and accepts a retry after failure', async () => {

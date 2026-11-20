@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
@@ -591,6 +591,33 @@ it('reveals wipe(down) pictures upwards with a fixed bottom edge, as verified ag
   } finally {await rm(dir,{recursive:true,force:true})}
 })
 
+it('exports a foreground frame deck over looping video when the main deck needs no rebuild', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'cuedeck-static-video-foreground-'))
+  const title = '<p:sp><p:nvSpPr><p:cNvPr id="7" name="Title"/></p:nvSpPr><p:spPr><a:xfrm><a:off x="6096000" y="3429000"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:sp>'
+  const timing = '<p:timing><p:video><p:cMediaNode><p:cTn repeatCount="indefinite"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn><p:tgtEl><p:spTgt spid="6"/></p:tgtEl></p:cMediaNode></p:video></p:timing>'
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': `<p:sld ${NS}><p:cSld><p:spTree>${VIDEO_PIC}${title}</p:spTree></p:cSld>${timing}</p:sld>`,
+      'ppt/slides/_rels/slide1.xml.rels': slideRels(null, true),
+      'ppt/slides/slide3.xml': slideXml(),
+    })
+    const result = await preparePptxMedia(deck, 'static-video-foreground', undefined, 'powerpoint')
+    expect(result.convertSource).toBe(deck)
+    expect(result.slideMedia[0].foreground).toMatchObject({ kind: 'static', file: 'video-foreground.pdf', firstPage: 1 })
+    expect(result.nativeFrameSources).toEqual([{ file: 'video-foreground.pdf', sourcePath: expect.any(String) }])
+    const frames = result.nativeFrameSources![0].sourcePath
+    for (const [index, color] of ['000000', 'FFFFFF'].entries()) {
+      const slide = execFileSync('unzip', ['-p', frames, `ppt/slides/_cuedeck_frame_${index}.xml`], { encoding: 'utf8' })
+      expect(slide).toContain(`val="${color}"`)
+      expect(slide).toContain('name="Title"')
+      expect(slide).not.toContain('name="video"')
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 it('exports both foreground states for an object-triggered menu over video', async () => {
   const dir = join(tmpdir(), 'cuedeck-pptx-video-menu-test')
   const button = '<p:pic><p:nvPicPr><p:cNvPr id="7" name="Menu button"/></p:nvPicPr><p:spPr><a:xfrm><a:off x="6096000" y="3429000"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:pic>'
@@ -649,14 +676,16 @@ it('exports both foreground states for an object-triggered menu over video', asy
   }
 })
 
-it.each([true, false])('extracts a delayed sound on a shape click with separate media timing = %s', async (hasMediaTiming) => {
+it.each([true, false])('imports autoplay and shape-click audio with separate media timing = %s', async (hasMediaTiming) => {
   const dir = join(tmpdir(), 'cuedeck-pptx-shape-sound-' + hasMediaTiming)
   const shape = '<p:pic><p:nvPicPr><p:cNvPr id="20" name="Sound button"/></p:nvPicPr><p:spPr><a:xfrm><a:off x="6096000" y="3429000"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:pic>'
   const sound = '<p:pic><p:nvPicPr><p:cNvPr id="21"/><p:nvPr><a:audioFile r:link="rIdSound"/></p:nvPr></p:nvPicPr></p:pic>'
   const target = '<p:tgtEl><p:spTgt spid="21"/></p:tgtEl>'
   const conditions = (ms: number) => `<p:stCondLst><p:cond delay="${ms}"/></p:stCondLst>`
   const timing = `<p:timing><p:tnLst><p:seq><p:cTn nodeType="interactiveSeq"><p:stCondLst><p:cond evt="onClick" delay="0"><p:tgtEl><p:spTgt spid="20"/></p:tgtEl></p:cond></p:stCondLst><p:childTnLst><p:par><p:cTn>${conditions(500)}<p:childTnLst><p:par><p:cTn nodeType="withEffect" presetClass="mediacall">${conditions(25)}<p:childTnLst><p:cmd cmd="playFrom(0.0)"><p:cBhvr><p:cTn dur="528"/>${target}</p:cBhvr></p:cmd></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:seq><p:audio><p:cMediaNode vol="45000"><p:cTn dur="528"/>${target}</p:cMediaNode></p:audio></p:tnLst></p:timing>`
-  const timingXml = hasMediaTiming ? timing : timing.replace(/<p:audio>[\s\S]*?<\/p:audio>/, '')
+  const entry = `<p:seq><p:cTn nodeType="mainSeq"><p:childTnLst><p:par><p:cTn nodeType="withEffect" presetClass="mediacall">${conditions(150)}<p:childTnLst><p:cmd cmd="playFrom(0.0)"><p:cBhvr>${target}</p:cBhvr></p:cmd></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:seq>`
+  const timingXml = (hasMediaTiming ? timing : timing.replace(/<p:audio>[\s\S]*?<\/p:audio>/, ''))
+    .replace('<p:tnLst>', '<p:tnLst>' + entry)
   try {
     const deck = await buildDeck(dir, {
       ...NOTES_DECK,
@@ -665,12 +694,26 @@ it.each([true, false])('extracts a delayed sound on a shape click with separate 
         `<Relationship Id="rIdSound" Type="${REL}/audio" Target="../media/cue.mp3"/></Relationships>`),
       'ppt/media/cue.mp3': Buffer.from([255, 251, 144, 0]),
     })
-    const result = await preparePptxMedia(deck, 'sound-shape-audio-only-' + hasMediaTiming, undefined, 'powerpoint')
-    expect(result.slideMedia[0]).toMatchObject({
-      slide: 1, kind: 'audio', audio: [{ trigger: 'click', shape: '20', file: 'cue.mp3', delayMs: 525, volume: hasMediaTiming ? .45 : 1, loop: false }],
-      clickActions: [{ shape: '20', label: 'Sound button', rect: { x: .5, y: .5, w: .25, h: .25 } }],
-    })
-    expect(slideMediaAt('pptx', result.slideMedia, 1)).toBeUndefined()
+    for (const renderer of ['libreoffice', 'powerpoint'] as const) {
+      const sha = [renderer, 'sound-shape-audio-only', hasMediaTiming].join('-')
+      const manifest = cachedPdfPathFor(sha).replace(/\.pdf$/, '.media.json')
+      if (renderer === 'libreoffice') {
+        await mkdir(dirname(manifest), { recursive: true })
+        await writeFile(manifest, JSON.stringify({ version: 11, renderer, rebuilt: false, slideMedia: [], pageNotes: {}, fonts: [] }))
+      }
+      const result = await preparePptxMedia(deck, sha, undefined, renderer)
+      const cue = { file: 'cue.mp3', volume: hasMediaTiming ? .45 : 1, loop: false }
+      expect(result.slideMedia[0]).toMatchObject({
+        slide: 1, kind: 'audio', audio: [
+          { ...cue, trigger: 'enter', delayMs: 150 },
+          { ...cue, trigger: 'click', shape: '20', delayMs: 525 },
+        ],
+        clickActions: [{ shape: '20', label: 'Sound button', rect: { x: .5, y: .5, w: .25, h: .25 } }],
+      })
+      expect(slideMediaAt('pptx', result.slideMedia, 1)).toBeUndefined()
+      expect(await readFile(join(mediaDirFor(sha), 'cue.mp3'))).toEqual(Buffer.from([255, 251, 144, 0]))
+      expect(JSON.parse(await readFile(manifest, 'utf8')).version).toBe(PPTX_MANIFEST_VERSION)
+    }
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

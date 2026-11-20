@@ -15,7 +15,7 @@ it('separates PowerPoint static cache from LibreOffice and PowerPoint versions',
   expect(powerpointCacheSha(source, '16.110.3')).toBe(v1)
 })
 
-it('stops the queue after a PowerPoint timeout without killing the worker or starting the next deck', async () => {
+it('blocks PowerPoint exports after a timeout without killing the active worker', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'cuedeck-pp-timeout-'))
   const first = join(dir, 'first.pptx'), second = join(dir, 'second.pptx')
   await writeFile(first, 'one'); await writeFile(second, 'two')
@@ -40,12 +40,12 @@ it('stops the queue after a PowerPoint timeout without killing the worker or sta
     while (starts === 0 && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 1))
     expect(starts).toBe(1)
     const b = queue.prepare(second); void b.catch(() => undefined)
-    await expect(a).rejects.toMatchObject({ code: 'timeout' })
-    await expect(b).rejects.toMatchObject({ code: 'cancelled' })
+    await expect(a).rejects.toMatchObject({ code: 'powerpoint_uncertain' })
+    await expect(b).rejects.toMatchObject({ code: 'powerpoint_uncertain' })
     expect(starts).toBe(1)
     expect(kills).toBe(0)
     expect(cancelReason).toBe('timeout')
-    await expect(queue.prepare(first)).rejects.toMatchObject({ code: 'cancelled' })
+    await expect(queue.prepare(first)).rejects.toMatchObject({ code: 'powerpoint_uncertain' })
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

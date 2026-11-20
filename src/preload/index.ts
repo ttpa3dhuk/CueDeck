@@ -400,6 +400,7 @@ const api: PresenterApi = {
     backend: () => ipcRenderer.invoke('pptx:backend'),
     setBackend: (backend) => ipcRenderer.invoke('pptx:set-backend', backend),
     rebuild: (path: string) => ipcRenderer.invoke('pptx:rebuild', path),
+    rebuildEntries: (backend, ids) => ipcRenderer.invoke('pptx:rebuild-entries', backend, ids),
     cacheStats: () => ipcRenderer.invoke('pptx-cache:stats'),
     openCacheFolder: () => ipcRenderer.invoke('pptx-cache:open-folder'),
     clearCache: () => ipcRenderer.invoke('pptx-cache:clear'),

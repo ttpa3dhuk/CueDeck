@@ -13,6 +13,7 @@ import { exportPowerpointStatic } from './powerpoint-static.js'
 import { substitutedFonts } from './pptx-fonts.js'
 import { convertSourceToPdf, type ConvertToPdfOptions } from './presentation-preparation-convert.js'
 import {
+  isCurrentPptxManifest,
   PPTX_MANIFEST_VERSION,
   sameIdentity,
   type PreparationErrorCode,
@@ -132,6 +133,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
   }
   let manifest: {
     version?: unknown
+    renderer?: unknown
     rebuilt?: unknown
     slideMedia?: unknown
     slideTransitions?: Record<number, import('../shared/pptx-transition.js').PptxSlideTransition>
@@ -147,7 +149,7 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
   } catch {
     throw new PreparationFailure('invalid_cache', 'Cannot read manifest', 'validate') // i18n-ok: worker/main error
   }
-  if (manifest.version !== PPTX_MANIFEST_VERSION || typeof manifest.rebuilt !== 'boolean' ||
+  if (!isCurrentPptxManifest(manifest) || typeof manifest.rebuilt !== 'boolean' ||
       !Array.isArray(manifest.slideMedia) ||
       !Array.isArray(manifest.fonts) || !manifest.fonts.every((font) => typeof font === 'string') ||
       !manifest.pageNotes || typeof manifest.pageNotes !== 'object' || Array.isArray(manifest.pageNotes) ||

@@ -5,7 +5,7 @@ import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, rmdir }
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { t } from '../shared/i18n.js'
 import type { TransferFile } from './project-transfer.js'
-import { PPTX_MANIFEST_VERSION, PREPARED_CACHE_FOLDER, PREPARED_METADATA_FILE, PREPARED_METADATA_VERSION, PREPARED_VERSION_PREFIX } from '../shared/presentation-preparation.js'
+import { isCurrentPptxManifest, PREPARED_CACHE_FOLDER, PREPARED_METADATA_FILE, PREPARED_METADATA_VERSION, PREPARED_VERSION_PREFIX } from '../shared/presentation-preparation.js'
 import { configurePptxMediaRoots } from './pptx-media.js'
 
 export { PPTX_MANIFEST_VERSION } from '../shared/presentation-preparation.js'
@@ -34,7 +34,7 @@ function validPreparedRoot(root: string, sha1: string): boolean {
     const manifestPath = `${root}/${sha1}.media.json`
     if (!lstatSync(manifestPath).isFile()) return false
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-    if (manifest.version !== PPTX_MANIFEST_VERSION || typeof manifest.rebuilt !== 'boolean' ||
+    if (!isCurrentPptxManifest(manifest) || typeof manifest.rebuilt !== 'boolean' ||
         !Array.isArray(manifest.slideMedia) || !Array.isArray(manifest.fonts) ||
         !manifest.pageNotes || typeof manifest.pageNotes !== 'object' || Array.isArray(manifest.pageNotes) ||
         !Object.values(manifest.pageNotes).every((note) => typeof note === 'string')) return false
@@ -305,7 +305,7 @@ async function cacheMedia(root: string, sha1: string, needsManifest: boolean): P
     const manifestPath = join(root, `${sha1}.media.json`)
     if (!(await regularFile(manifestPath))) return null
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-    if (manifest.version !== PPTX_MANIFEST_VERSION || typeof manifest.rebuilt !== 'boolean' ||
+    if (!isCurrentPptxManifest(manifest) || typeof manifest.rebuilt !== 'boolean' ||
         !Array.isArray(manifest.slideMedia) || !Array.isArray(manifest.fonts) ||
         !manifest.fonts.every((font: unknown) => typeof font === 'string') ||
         !manifest.pageNotes || typeof manifest.pageNotes !== 'object' || Array.isArray(manifest.pageNotes) ||

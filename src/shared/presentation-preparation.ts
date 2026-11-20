@@ -4,10 +4,15 @@ import type { SlideBuildAnimation } from './types.js'
  * только типы, коды ошибок и имена файлов кэша — без Electron, fs и i18n,
  * чтобы worker не тянул состояние приложения.
  */
-import type { SlideMedia } from './types.js'
+import type { PlaylistEntry, SlideMedia } from './types.js'
 
 /** Версия OOXML-манифеста (pptx-media). Формат уже используется проектами. */
-export const PPTX_MANIFEST_VERSION = 11
+export const PPTX_MANIFEST_VERSION = 12
+
+export function isCurrentPptxManifest(manifest: { version?: unknown; renderer?: unknown }): boolean {
+  // v11 PowerPoint manifests already contain the embedded audio cues.
+  return manifest.version === PPTX_MANIFEST_VERSION || manifest.version === 11 && manifest.renderer === 'powerpoint'
+}
 
 /** Папка versioned-кэша внутри userData/pptx-cache. */
 export const PREPARED_CACHE_FOLDER = 'prepared'
@@ -19,6 +24,12 @@ export const PREPARED_VERSION_PREFIX = 'v-'
 
 export type PreparationPriority = 'foreground' | 'background'
 export type PresentationBackend = 'libreoffice' | 'powerpoint-static'
+export function isPresentationBackend(value: unknown): value is PresentationBackend {
+  return value === 'libreoffice' || value === 'powerpoint-static'
+}
+export function playlistPptxBackend(entry: PlaylistEntry): PresentationBackend {
+  return entry.filePath.toLowerCase().endsWith('.pptx') ? entry.pptxBackend ?? 'libreoffice' : 'libreoffice'
+}
 export type PreparationPhase = 'queued' | 'preparing' | 'ready' | 'error'
 
 export interface PreparationStatus {
@@ -27,6 +38,7 @@ export interface PreparationStatus {
 }
 
 export interface PreparationOptions {
+  backend?: PresentationBackend
   priority?: PreparationPriority
   forceLocalCache?: boolean
   cacheSourcePath?: string

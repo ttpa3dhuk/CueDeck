@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { copyFile, mkdir, rename, rm, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, join } from 'node:path'
 import { PowerpointExportError } from './powerpoint-error.js'
 import { exportPowerpointWindows, powerpointWindowsVersion } from './powerpoint-windows.js'
 export { PowerpointExportError } from './powerpoint-error.js'
@@ -54,7 +54,7 @@ export async function exportPowerpointStatic(stagedPath: string, outputDir: stri
   if (windows ? !await powerpointWindowsVersion() : process.platform !== 'darwin' || !existsSync(appPath)) throw new PowerpointExportError('Microsoft PowerPoint не установлен', false, true) // i18n-ok: worker/main error
   if (signal?.aborted) throw new PowerpointExportError('PowerPoint preparation cancelled')
   await mkdir(exchangeDir, { recursive: true })
-  const uniqueBase = `cuedeck-${basename(dirname(outputDir))}${windows ? `-${randomUUID()}` : ''}`
+  const uniqueBase = `cuedeck-${randomUUID()}`
   const uniquePath = join(exchangeDir, `${uniqueBase}.pptx`)
   await copyFile(stagedPath, uniquePath)
   if (signal?.aborted) { await rm(uniquePath, { force: true }); throw new PowerpointExportError('PowerPoint preparation cancelled') }
@@ -92,14 +92,19 @@ export async function exportPowerpointStatic(stagedPath: string, outputDir: stri
   // continue after its sender exits. The worker waits for a definite result.
   const exported = await command('/usr/bin/osascript', ['-e', script, basename(uniquePath), output])
   if (exported.code !== 0) throw new PowerpointExportError(`PowerPoint PDF: ${exported.stderr.trim() || exported.stdout.trim()}`, true)
-  const pdf = await stat(output).catch(() => null)
-  if (!pdf?.isFile() || pdf.size === 0) throw new PowerpointExportError('PowerPoint не создал PDF') // i18n-ok: worker/main error
-  if (signal?.aborted) throw new PowerpointExportError('PowerPoint preparation cancelled')
   const target = join(outputDir, `${outputSha}.pdf`)
   const pending = `${target}.partial`
-  await copyFile(output, pending)
-  await rename(pending, target)
-  await rm(uniquePath, { force: true })
-  await rm(output, { force: true })
-  return target
+  try {
+    const pdf = await stat(output).catch(() => null)
+    if (!pdf?.isFile() || pdf.size === 0) throw new PowerpointExportError('PowerPoint не создал PDF') // i18n-ok: worker/main error
+    if (signal?.aborted) throw new PowerpointExportError('PowerPoint preparation cancelled')
+    await copyFile(output, pending)
+    if (signal?.aborted) throw new PowerpointExportError('PowerPoint preparation cancelled')
+    await rename(pending, target)
+    return target
+  } finally {
+    await rm(pending, { force: true }).catch(() => undefined)
+    await rm(uniquePath, { force: true }).catch(() => undefined)
+    await rm(output, { force: true }).catch(() => undefined)
+  }
 }

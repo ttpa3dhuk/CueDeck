@@ -344,7 +344,7 @@ export interface PresenterApi {
     pathFor(file: File): string
   }
   playlist: {
-    prepare(id: string): Promise<void>
+    prepare(id: string): Promise<string | null | undefined>
     /** Reveal the original media; list items must name a path belonging to this entry. */
     revealSource(id: string, itemPath?: string): Promise<{ ok: boolean; error?: string }>
     add(): Promise<PlaylistEntry[]>
@@ -455,6 +455,7 @@ export interface PresenterApi {
     setBackend(backend: 'libreoffice' | 'powerpoint-static'): Promise<void>
     /** Сбросить кэш PDF этого PPTX и сконвертировать заново (после установки шрифтов). */
     rebuild(path: string): Promise<{ ok: boolean; remaining?: string[]; error?: string }>
+    rebuildEntries(backend: import('../shared/presentation-preparation.js').PresentationBackend, ids?: string[]): Promise<{ rebuilt: number; failed: number; error?: string }>
     cacheStats(): Promise<{ bytes: number; files: number; protectedBytes: number }>
     openCacheFolder(): Promise<{ ok: boolean; error?: string }>
     clearCache(): Promise<{ ok: boolean; cancelled?: boolean; clearedBytes?: number; remainingBytes?: number; error?: string }>

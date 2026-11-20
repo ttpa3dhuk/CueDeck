@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import {
+  isCurrentPptxManifest,
   PREPARED_CACHE_FOLDER,
   PREPARED_METADATA_FILE,
   PREPARED_METADATA_VERSION,
@@ -13,7 +14,6 @@ import {
   type PreparedPresentation,
   type SourceIdentity,
 } from '../shared/presentation-preparation.js'
-import { PPTX_MANIFEST_VERSION } from '../shared/presentation-preparation.js'
 
 /**
  * Versioned-кэш готовой подготовки. Один job пишет в приватный stage; main
@@ -226,7 +226,7 @@ export class PresentationCache {
     if (meta.hasManifest) {
       try {
         const manifest = JSON.parse(await readFile(join(root, `${sha1}.media.json`), 'utf8'))
-        if (manifest.version !== PPTX_MANIFEST_VERSION || typeof manifest.rebuilt !== 'boolean' ||
+        if (!isCurrentPptxManifest(manifest) || typeof manifest.rebuilt !== 'boolean' ||
             !Array.isArray(manifest.slideMedia) || !manifest.pageNotes ||
             typeof manifest.pageNotes !== 'object' || Array.isArray(manifest.pageNotes) ||
             !Object.values(manifest.pageNotes).every((note) => typeof note === 'string')) return null
@@ -273,7 +273,8 @@ export class PresentationCache {
     }
   }
 
-  async lookupByIdentity(filePath: string, identity: SourceIdentity, backend: 'libreoffice' | 'powerpoint-static' = 'libreoffice'): Promise<PreparedPresentation | null> {
+  async lookupByIdentity(filePath: string, identity: SourceIdentity, backend: 'libreoffice' | 'powerpoint-static' = 'libreoffice',
+    matchesVersion: (meta: PreparedCacheMetadata) => boolean = () => true): Promise<PreparedPresentation | null> {
     await this.ensureIndex()
     const key = `${resolve(filePath)}\0${identityKey(identity)}`
     let locator = this.byPath.get(key)
@@ -282,13 +283,15 @@ export class PresentationCache {
       locator = this.byPath.get(key)
     }
     if (!locator) return null
-    const valid = await this.validRoot(locator.sha1, locator.generation)
-    if (!valid || (valid.meta.backend ?? 'libreoffice') !== backend) {
-      this.byPath.delete(key)
-      return null
+    const candidates = [locator, ...(this.index?.entries ?? []).filter(entry =>
+      entry !== locator && `${resolve(entry.sourcePath)}\0${identityKey(entry.identity)}` === key)]
+    for (const candidate of candidates) {
+      const valid = await this.validRoot(candidate.sha1, candidate.generation)
+      if (!valid || (valid.meta.backend ?? 'libreoffice') !== backend || !matchesVersion(valid.meta)) continue
+      this.registerRoot(candidate.sha1, dirname(valid.pdfPath))
+      return this.resultOf(valid.meta, valid.pdfPath)
     }
-    this.registerRoot(locator.sha1, dirname(valid.pdfPath))
-    return this.resultOf(valid.meta, valid.pdfPath)
+    return null
   }
 
   async lookupBySha(sha1: string): Promise<PreparedPresentation | null> {

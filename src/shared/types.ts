@@ -316,6 +316,7 @@ export interface PlaylistFolder {
 }
 
 export interface PlaylistEntry {
+  pptxBackend?: import('./presentation-preparation.js').PresentationBackend
   /** Per-input audio switch, independent of the program mix mute. Missing = audible. */
   sourceMuted?: boolean
   folderId?: string

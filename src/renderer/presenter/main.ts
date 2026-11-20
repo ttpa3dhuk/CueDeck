@@ -1427,35 +1427,41 @@ function playlistContext(event: MouseEvent, entry: PlaylistEntry, node: HTMLLIEl
     button.onclick = () => { close(); run() }; target.append(button)
   }
   menu.setAttribute('role', 'menu')
-  const settingsButton = document.createElement('button')
-  settingsButton.textContent = `${t('Настройки')} ›`
-  settingsButton.setAttribute('role', 'menuitem')
-  settingsButton.setAttribute('aria-haspopup', 'menu')
-  settingsButton.setAttribute('aria-expanded', 'false')
-  menu.append(settingsButton)
-  const settings = document.createElement('div')
-  settings.className = 'playlist-context playlist-settings-submenu'
-  settings.setAttribute('role', 'menu')
-  settings.setAttribute('aria-label', t('Настройки'))
-  settings.hidden = true
-  menu.append(settings)
-  const toggleSettings = (open: boolean): void => {
-    settings.hidden = !open
-    settingsButton.setAttribute('aria-expanded', String(open))
-    if (open) {
-      settings.style.left = '100%'
-      settings.style.top = '0px'
-      const rect = settings.getBoundingClientRect()
-      if (rect.right > window.innerWidth - 8) settings.style.left = `${-settings.offsetWidth}px`
-      if (rect.bottom > window.innerHeight - 8) settings.style.top = `${window.innerHeight - 8 - rect.bottom}px`
+  const submenus = new Map<HTMLButtonElement, HTMLDivElement>()
+  const openSubmenu = (button?: HTMLButtonElement): void => {
+    for (const [trigger, panel] of submenus) {
+      panel.hidden = trigger !== button
+      trigger.setAttribute('aria-expanded', String(trigger === button))
+      if (panel.hidden) continue
+      panel.style.left = '100%'
+      panel.style.top = `${trigger.offsetTop}px`
+      const rect = panel.getBoundingClientRect()
+      if (rect.right > window.innerWidth - 8) panel.style.left = `${-panel.offsetWidth}px`
+      if (rect.bottom > window.innerHeight - 8) panel.style.top = `${trigger.offsetTop + window.innerHeight - 8 - rect.bottom}px`
     }
   }
-  settingsButton.onclick = (click) => {
-    click.stopPropagation()
-    toggleSettings(settings.hidden)
-    if (!settings.hidden) settings.querySelector<HTMLButtonElement>('button')?.focus()
+  const submenu = (label: string): HTMLDivElement => {
+    const button = document.createElement('button')
+    button.textContent = `${label} ›`
+    button.setAttribute('role', 'menuitem')
+    button.setAttribute('aria-haspopup', 'menu')
+    button.setAttribute('aria-expanded', 'false')
+    const panel = document.createElement('div')
+    panel.className = 'playlist-context playlist-settings-submenu'
+    panel.setAttribute('role', 'menu')
+    panel.setAttribute('aria-label', label)
+    panel.hidden = true
+    menu.append(button, panel)
+    submenus.set(button, panel)
+    button.onclick = (click) => {
+      click.stopPropagation()
+      openSubmenu(button)
+      if (!panel.hidden) panel.querySelector<HTMLButtonElement>('button')?.focus()
+    }
+    button.addEventListener('mouseenter', () => openSubmenu(button))
+    return panel
   }
-  settingsButton.addEventListener('mouseenter', () => toggleSettings(true))
+  const settings = submenu(t('Настройки'))
   action(t('Таймер материала…'), () => editSelectedDuration(selectedEntries()), settings)
   if (entry.kind === 'pdf' || entry.kind === 'pptx') action('FADE', () => editSlideFade(entry), settings)
   if (entry.kind === 'pptx') action(t('Шрифты'), () => {
@@ -1468,23 +1474,40 @@ function playlistContext(event: MouseEvent, entry: PlaylistEntry, node: HTMLLIEl
   if (entry.kind !== 'live' && entry.kind !== 'list') {
     action(revealSourceLabel(), () => { void revealSource(entry.id) })
   }
-  if (entry.kind === 'pptx') action(t('Пересобрать'), () => { void rebuildPresentation(entry.filePath) })
+  if (entry.kind === 'pptx' && /\.pptx$/i.test(entry.filePath)) {
+    const engines = submenu(t('Пересобрать с помощью'))
+    action('LibreOffice', () => { void rebuildPlaylistPptx('libreoffice', selectedEntries()) }, engines)
+    if (['darwin', 'win32'].includes(window.api.platform)) {
+      action('PowerPoint', () => { void rebuildPlaylistPptx('powerpoint-static', selectedEntries()) }, engines)
+    }
+  } else if (entry.kind === 'pptx') {
+    action(t('Пересобрать'), () => { void rebuildPresentation(entry.filePath) })
+  }
   for (const button of menu.querySelectorAll<HTMLButtonElement>(':scope > button')) {
-    if (button !== settingsButton) button.addEventListener('mouseenter', () => toggleSettings(false))
+    if (!submenus.has(button)) button.addEventListener('mouseenter', () => openSubmenu())
   }
   document.body.append(menu)
   menu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8))}px`
   menu.style.top = `${Math.max(8, Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8))}px`
   menu.addEventListener('keydown', (keyboard) => {
     keyboard.stopPropagation()
-    if (keyboard.key === 'ArrowRight' && document.activeElement === settingsButton) {
-      keyboard.preventDefault(); toggleSettings(true); settings.querySelector<HTMLButtonElement>('button')?.focus()
+    const trigger = document.activeElement as HTMLButtonElement
+    const panel = submenus.get(trigger)
+    if (keyboard.key === 'ArrowRight' && panel) {
+      keyboard.preventDefault()
+      openSubmenu(trigger)
+      panel.querySelector<HTMLButtonElement>('button')?.focus()
+      return
     }
-    if ((keyboard.key === 'ArrowLeft' || keyboard.key === 'Escape') && !settings.hidden) {
-      keyboard.preventDefault(); toggleSettings(false); settingsButton.focus(); return
+    const opened = [...submenus].find(([, panel]) => !panel.hidden)
+    if ((keyboard.key === 'ArrowLeft' || keyboard.key === 'Escape') && opened) {
+      keyboard.preventDefault()
+      openSubmenu()
+      opened[0].focus()
+      return
     }
     if (keyboard.key === 'Escape') { close(); node.focus() }
-    const scope = settings.contains(document.activeElement) ? settings : menu
+    const scope = opened?.[1].contains(document.activeElement) ? opened[1] : menu
     const buttons = [...scope.querySelectorAll<HTMLButtonElement>(':scope > button')]
     if (keyboard.key === 'ArrowDown' || keyboard.key === 'ArrowUp') {
       keyboard.preventDefault()
@@ -1565,7 +1588,9 @@ function createPlaylistItem(entry: PlaylistEntry): HTMLLIElement {
   preparation.addEventListener('click', (event) => {
     event.stopPropagation()
     if (getState().preparations?.[fresh().filePath]?.phase === 'error') {
-      void window.api.playlist.prepare(entry.id).catch((error) => showBanner(String(error), 6000))
+      void window.api.playlist.prepare(entry.id).then((error) => {
+        if (error) showBanner(t('Ошибка: {error}', { error }), 6000)
+      }).catch((error) => showBanner(String(error), 6000))
     }
   })
   preparation.addEventListener('dblclick', (event) => event.stopPropagation())
@@ -1972,6 +1997,7 @@ function renderPlaylist(state: AppState): void {
     })
   }
   const entries = state.playlist
+  $<HTMLButtonElement>('pptx-rebuild-all').disabled = rebuildingAllPptx || !entries.some(entry => entry.kind === 'pptx' && /\.pptx$/i.test(entry.filePath))
   playlistEmpty.classList.toggle('hidden', entries.length > 0)
 
   const wantedIds = new Set(entries.map((e) => e.id))
@@ -2072,6 +2098,31 @@ async function rebuildPresentation(path: string): Promise<void> {
     else showBanner(t('Презентация пересобрана. Выбери материал заново, чтобы увидеть изменения'), 8000)
   } catch (error) {
     showBanner(t('Ошибка: {error}', { error: String(error) }), 8000)
+  }
+}
+
+let rebuildingAllPptx = false
+async function rebuildPlaylistPptx(backend: import('../../shared/presentation-preparation.js').PresentationBackend, ids?: string[]): Promise<void> {
+  const button = $<HTMLButtonElement>('pptx-rebuild-all')
+  if (ids === undefined) {
+    rebuildingAllPptx = true
+    button.disabled = true
+  }
+  showBanner(t('Пересобираю…'), 60_000)
+  try {
+    const result = await window.api.pptx.rebuildEntries(backend, ids)
+    if (result.error) {
+      showBanner(t('Пересобрано: {n}. Ошибок: {failed}. {error}', { n: result.rebuilt, failed: result.failed, error: result.error }), 8000)
+    } else if (result.rebuilt) {
+      showBanner(t('Пересобрано: {n}. Выбери материал заново, чтобы увидеть изменения.', { n: result.rebuilt }), 7000)
+    }
+  } catch (error) {
+    showBanner(t('Ошибка: {error}', { error: String(error) }), 8000)
+  } finally {
+    if (ids === undefined) {
+      rebuildingAllPptx = false
+      button.disabled = !getState().playlist.some(entry => entry.kind === 'pptx' && /\.pptx$/i.test(entry.filePath))
+    }
   }
 }
 
@@ -5625,6 +5676,10 @@ function openSettings(section: SettingsSection = 'screens'): void {
         showBanner(t('Не удалось выбрать импорт PPTX: {error}', { error: String(error) }), 7000)
       }
       void renderLoSection()
+    })
+    $('pptx-rebuild-all').addEventListener('click', () => {
+      const backend = $<HTMLSelectElement>('pptx-backend').value === 'powerpoint-static' ? 'powerpoint-static' : 'libreoffice'
+      void rebuildPlaylistPptx(backend)
     })
     $('lo-settings-recheck').addEventListener('click', async () => {
       await recheckLibreOffice()

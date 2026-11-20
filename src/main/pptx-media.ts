@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { deflateRawSync, inflateRawSync } from 'node:zlib'
 import { join, posix } from 'node:path'
-import { PPTX_MANIFEST_VERSION } from '../shared/presentation-preparation.js'
+import { isCurrentPptxManifest, PPTX_MANIFEST_VERSION } from '../shared/presentation-preparation.js'
 import type { SlideAudioCue, SlideForegroundActor, SlideForegroundMotion, SlideInteractiveLayer, SlideMedia, SlideTrigger, SlideVideoLink } from '../shared/types.js'
 import { requestedFonts } from './pptx-fonts.js'
 import { isAnimatedGif } from '../shared/gif.js'
@@ -42,7 +42,7 @@ const STRIP_EXTS = new Set([...PLAYABLE_EXTS, 'avi', 'wmv', 'mpg', 'mpeg', 'mkv'
 
 const MANIFEST_VERSION = PPTX_MANIFEST_VERSION
 /** Older PDFs remain reusable only when no changed chart/field/GIF pixels are found. */
-const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10])
+const COMPATIBLE_PDF_VERSIONS = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
 
 const SLIDE_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'
@@ -664,6 +664,12 @@ function inlineAudioCues(slideXml: string, shapes: Map<string, string>, rels: Ma
     }
   }
   return { cues, clicks }
+}
+
+function slideAudioShapes(contents: string): Map<string, string> {
+  const ungrouped = topLevelBlocks(contents, 'p:grpSp').reduce((out, group) => out.replace(group, ''), contents)
+  return new Map(SHAPE_TAGS.flatMap(tag => topLevelBlocks(ungrouped, tag)).map(shape =>
+    [attrsOf(shape.match(/<p:cNvPr\b[^>]*>/)?.[0] ?? '').id, shape]))
 }
 
 interface FoundVideo {
@@ -1432,6 +1438,58 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
 
   const foregroundPages: NonNullable<TransformResult['foregroundPages']> = []
   const audioEntries = new Set<string>()
+  const collectAudio = (path: string, xml: string, shapes: Map<string, string>, rels: Map<string, string>, shapeId?: string, menuTrigger?: string) => {
+    const { cues, clicks } = inlineAudioCues(xml, shapes, parseRels(text(relsPathOf(path)) ?? ''), menuTrigger)
+    const audio = cues.filter(entry => byName.has(entry.mediaEntry))
+    const linked = shapeSlideLinks(shapes.values(), rels, path, pres.slideW, pres.slideH)
+    const linkedShapes = new Set(linked.map(link => link.shape))
+    const clickActions = clicks.flatMap(({ shape, commands }) => {
+      if (shape === menuTrigger || linkedShapes.has(shape)) return []
+      const element = shapes.get(shape)
+      const rect = element && hotspotRect(element, pres.slideW, pres.slideH)
+      if (!rect) return []
+      const restartVideo = commands.some(command => command.shape === shapeId && command.delayMs === 0)
+      const hasSound = audio.some(({ cue }) => cue.trigger === 'click' && cue.shape === shape)
+      if (!restartVideo && !hasSound) return []
+      const label = decodeXml(attrsOf(element.match(/<p:cNvPr\b[^>]*>/)?.[0] ?? '').name || shape)
+      return [{ shape, rect, label, ...(restartVideo ? { restartVideo } : {}) }]
+    })
+    for (const entry of audio) audioEntries.add(entry.mediaEntry)
+    return { audio: audio.map(entry => entry.cue), clickActions, linked }
+  }
+  if (renderer === 'libreoffice') {
+    for (const [index, path] of pres.slidePaths.entries()) {
+      const page = firstPage[index]
+      const xml = text(path) ?? ''
+      if (!page || !/<a:audioFile\b/.test(xml)) continue
+      const tree = findBalanced(xml, 'p:spTree')
+      if (!tree) continue
+      const shapes = slideAudioShapes(xml.slice(tree.start, tree.end))
+      const steps = stepsBySlide.get(index) ?? []
+      const rels = parseRels(text(relsPathOf(path)) ?? '', SLIDE_REL_TYPE)
+      const { audio, clickActions, linked } = collectAudio(path, xml, shapes, rels)
+      for (let step = 0; step <= steps.length; step++) {
+        const hidden = new Set(steps.slice(step).flat().filter(target => target.whole).map(target => target.spid))
+        const cues = audio.filter(cue => cue.trigger === 'click' ? !hidden.has(cue.shape) : step === 0)
+        if (!cues.length) continue
+        const slide = page + step
+        const actions = clickActions.filter(action => !hidden.has(action.shape))
+        const video = slideMedia.find(item => item.slide === slide && !item.kind)
+        if (video) {
+          video.audio = cues
+          video.clickActions = actions
+        } else {
+          slideMedia.push({ kind: 'audio', slide, file: cues[0].file, rect: { x: 0, y: 0, w: 1, h: 1 }, audio: cues, clickActions: actions })
+        }
+        const links = slideLinks[slide] ?? []
+        for (const link of links) {
+          const match = linked.find(item =>
+            pageByPath.get(item.path) === link.slide && item.rect.x === link.rect.x && item.rect.y === link.rect.y)
+          if (match && cues.some(cue => cue.trigger === 'click' && cue.shape === match.shape)) link.triggerShape = match.shape
+        }
+      }
+    }
+  }
   if (renderer === 'powerpoint') {
     const scenes = new Map(videos.flatMap((video, index) => {
       if (!video.shapeId || video.kind === 'gif' ||
@@ -1477,24 +1535,6 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
         }),
       }
     }
-    const collectAudio = (path: string, xml: string, shapes: Map<string, string>, rels: Map<string, string>, shapeId?: string, menuTrigger?: string) => {
-      const { cues, clicks } = inlineAudioCues(xml, shapes, parseRels(text(relsPathOf(path)) ?? ''), menuTrigger)
-      const audio = cues.filter(entry => byName.has(entry.mediaEntry))
-      const linked = new Set(shapeSlideLinks(shapes.values(), rels, path, pres.slideW, pres.slideH).map(link => link.shape))
-      const clickActions = clicks.flatMap(({ shape, commands }) => {
-        if (shape === menuTrigger || linked.has(shape)) return []
-        const element = shapes.get(shape)
-        const rect = element && hotspotRect(element, pres.slideW, pres.slideH)
-        if (!rect) return []
-        const restartVideo = commands.some(command => command.shape === shapeId && command.delayMs === 0)
-        const hasSound = audio.some(({ cue }) => cue.trigger === 'click' && cue.shape === shape)
-        if (!restartVideo && !hasSound) return []
-        const label = decodeXml(attrsOf(element.match(/<p:cNvPr\b[^>]*>/)?.[0] ?? '').name || shape)
-        return [{ shape, rect, label, ...(restartVideo ? { restartVideo } : {}) }]
-      })
-      for (const entry of audio) audioEntries.add(entry.mediaEntry)
-      return { audio: audio.map(entry => entry.cue), clickActions }
-    }
     const file = 'video-foreground.pdf'
     for (const [index, path] of pres.slidePaths.entries()) {
       const page = firstPage[index]
@@ -1503,13 +1543,10 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
       const tree = findBalanced(xml, 'p:spTree')
       if (!tree) continue
       const contents = xml.slice(tree.start, tree.end)
-      const ungrouped = topLevelBlocks(contents, 'p:grpSp').reduce((out, group) => out.replace(group, ''), contents)
-      const shapes = new Map(SHAPE_TAGS.flatMap(tag => topLevelBlocks(ungrouped, tag)).map(shape =>
-        [attrsOf(shape.match(/<p:cNvPr\b[^>]*>/)?.[0] ?? '').id, shape] as const))
+      const shapes = slideAudioShapes(contents)
       const rels = parseRels(text(relsPathOf(path)) ?? '', SLIDE_REL_TYPE)
       const video = videos.find(item => item.slideIdx === index && !item.kind)
-      const { audio, clickActions } = collectAudio(path, xml, shapes, rels, video?.shapeId)
-      const linked = shapeSlideLinks(shapes.values(), rels, path, pres.slideW, pres.slideH)
+      const { audio, clickActions, linked } = collectAudio(path, xml, shapes, rels, video?.shapeId)
       const ordered = [...shapes].sort((a, b) => contents.indexOf(a[1]) - contents.indexOf(b[1]))
         .filter(([, shape]) => !/<a:audioFile\b/.test(shape))
       const targets = new Map<string, { rect: SlideMedia['rect']; initiallyHidden: boolean }>()
@@ -1639,7 +1676,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
   }
 
   const requiresFreshPdf = compatibleSlides.size > 0 || gifs.length > 0
-  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0 && compatibleSlides.size === 0) return { zip: null, slideMedia, slideTransitions, slideNumbering, slideBuilds, slideLinks, slideKiosk, nativeFrames, audioEntries, videos, pageNotes, fonts, requiresFreshPdf }
+  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0 && compatibleSlides.size === 0) return { zip: null, slideMedia, slideTransitions, slideNumbering, slideBuilds, slideLinks, slideKiosk, nativeFrames, foregroundPages, audioEntries, videos, pageNotes, fonts, requiresFreshPdf }
 
   const replace = new Map(compatibleSlides)
   const add: { name: string; data: Buffer }[] = []
@@ -1844,7 +1881,7 @@ async function readManifest(
     if ((parsed.renderer ?? 'libreoffice') !== renderer) return { current: null, pdfValid: false }
     if (!Array.isArray(parsed.slideMedia)) return { current: null, pdfValid: false }
     const current =
-      parsed.version === MANIFEST_VERSION &&
+      isCurrentPptxManifest(parsed) &&
       parsed.pageNotes &&
       typeof parsed.pageNotes === 'object' &&
       Array.isArray(parsed.fonts)

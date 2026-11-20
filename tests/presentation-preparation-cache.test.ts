@@ -93,6 +93,15 @@ it('cleans only marked abandoned stages and leaves an unknown neighboring folder
 })
 
 describe('versioned presentation cache integration', () => {
+  it.each(['libreoffice', 'powerpoint'] as const)('checks audio compatibility of v11 %s caches', async (renderer) => {
+    const root = localPptxCacheDir()
+    const prepared = await publish(root, 10)
+    await writeFile(join(prepared.cacheRoot, `${sha}.media.json`), JSON.stringify({ ...MANIFEST, version: 11, renderer }))
+    const cached = await new PresentationCache({ cacheRoot: root }).lookupBySha(sha)
+    if (renderer === 'libreoffice') expect(cached).toBeNull()
+    else expect(cached?.pdfPath).toBe(prepared.pdfPath)
+  })
+
   it('registers a published root for existing readers and keeps old generations intact', async () => {
     const first = await publish(localPptxCacheDir(), 10, '%PDF old root')
     expect(pptxReadCacheDir(sha)).toBe(first.cacheRoot)

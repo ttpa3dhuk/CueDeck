@@ -137,7 +137,8 @@ import { cachedPdfPathFor, findSoffice, LibreOfficeMissingError, recheckSoffice,
 import { beginProjectTransfer, endProjectTransfer, isProjectTransferRunning, transferProject } from './project-transfer.js'
 import { runPptxWork } from './pptx-work.js'
 import { presentationNotesPath } from './presentation-notes-path.js'
-import { preparePresentation, cancelPresentationPreparations, cancelPresentationPreparation, onPreparationStatus, getPptxBackend, setPptxBackend } from './presentation-preparation.js'
+import { preparePresentation, PreparationError, cancelPresentationPreparations, cancelPresentationPreparation, onPreparationStatus, getPptxBackend, setPptxBackend } from './presentation-preparation.js'
+import { isPresentationBackend, playlistPptxBackend, type PresentationBackend } from '../shared/presentation-preparation.js'
 import { PreparationUiState } from './preparation-ui-state.js'
 import type { ProjectTransferStatus } from '../shared/types.js'
 import { clearLocalCache, exportProjectCache, localCacheStats, localPptxCacheDir } from './project-cache.js'
@@ -274,7 +275,7 @@ function resetPreparation(): void {
   preparationUi.reset()
 }
 
-async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; cacheSourcePath?: string; cacheProjectPath?: string | null; reportFontIssues?: boolean } = {}): Promise<InspectedFile> {
+async function inspectFile(filePath: string, opts: { playlistId?: string | null; backend?: PresentationBackend; forceLocalCache?: boolean; cacheSourcePath?: string; cacheProjectPath?: string | null; reportFontIssues?: boolean } = {}): Promise<InspectedFile> {
   if (store.get().testScreen.automatic) store.patch({ testScreen: { ...store.get().testScreen, automatic: false } })
   const kind = kindOf(filePath)
   if (!kind) throw new Error(t('Неподдерживаемый формат файла'))
@@ -302,8 +303,10 @@ async function inspectFile(filePath: string, opts: { forceLocalCache?: boolean; 
     sha1 = inspected.sha1
     totalSlides = inspected.totalSlides
   } else if (kind === 'pptx') {
+    const entry = store.get().playlist.find(item => item.id === opts.playlistId && item.filePath === filePath)
     const prepared = await preparationUi.prepare(filePath, {
       ...opts, priority: 'foreground',
+      backend: opts.backend ?? (entry ? playlistPptxBackend(entry) : undefined),
       cacheProjectPath: opts.cacheProjectPath === undefined ? store.get().projectPath : opts.cacheProjectPath,
     })
     sha1 = prepared.sha1
@@ -503,7 +506,7 @@ async function openFile(
   if (!opts.fromList) stopListPlayback()
   const previousFramePath = store.get().fileKind === 'video' ? store.get().pdfPath : null
   try {
-    const info = await inspectFile(filePath)
+    const info = await inspectFile(filePath, { playlistId: opts.playlistId })
     if (generation !== programOpenGeneration) return { ok: false, cancelled: true }
     if (opts.expectedProgram && autoVideoIdentity(store.get()) !== opts.expectedProgram) return { ok: false, cancelled: true }
     if (opts.expectedProgram && !autoVideoStillTargets(store.get(), opts.playlistId, filePath)) return { ok: false, cancelled: true }
@@ -601,7 +604,7 @@ async function loadPreview(
   pendingDeckLoads++
   const previousFramePath = store.get().preview.kind === 'video' ? store.get().preview.path : null
   try {
-    const info = await inspectFile(filePath)
+    const info = await inspectFile(filePath, { playlistId: opts.playlistId })
     if (generation !== previewOpenGeneration) return { ok: false, cancelled: true }
     if (opts.playlistId && !store.get().playlist.some(e => e.id === opts.playlistId)) return { ok: false, cancelled: true }
     const playlistId = opts.playlistId ?? null
@@ -950,7 +953,13 @@ export function registerIpcHandlers(): void {
     if (typeof id !== 'string') return
     const entry = store.get().playlist.find(e => e.id === id && e.kind === 'pptx')
     if (!entry) return
-    await preparationUi.prepare(entry.filePath, { priority: 'background', forceLocalCache: true, cacheProjectPath: store.get().projectPath })
+    try {
+      await preparationUi.prepare(entry.filePath, { backend: playlistPptxBackend(entry), priority: 'background', forceLocalCache: true, cacheProjectPath: store.get().projectPath })
+      return null
+    } catch (error) {
+      if (error instanceof PreparationError && (error.code === 'cancelled' || error.code === 'superseded')) return null
+      return openErrorMessage(error, entry.filePath)
+    }
   })
   initSessionLifecycle(async () => {
     const state = store.get()
@@ -1886,6 +1895,7 @@ export function registerIpcHandlers(): void {
         displayName: '',
         speakerName: '',
         durationMs: defaultDur,
+        ...(kind === 'pptx' && extOf(p) === 'pptx' ? { pptxBackend: getPptxBackend() } : {}),
         ...(kind === 'live' ? { liveFit: DEFAULT_LIVE_FIT } : {}),
       })
     }
@@ -2371,10 +2381,54 @@ export function registerIpcHandlers(): void {
     return new Uint8Array(await readFile(path))
   })
   ipcMain.handle('pptx:backend', () => getPptxBackend())
-  ipcMain.handle('pptx:set-backend', (_event, backend: unknown) => {
-    if (backend !== 'libreoffice' && backend !== 'powerpoint-static') throw new Error('Invalid PPTX backend')
+  ipcMain.handle('pptx:set-backend', (event, backend: unknown) => {
+    requireOperator(event)
+    if (!isPresentationBackend(backend)) throw new Error('Invalid PPTX backend')
     if (backend === 'powerpoint-static' && !['darwin', 'win32'].includes(process.platform)) throw new Error('PowerPoint is unavailable on this platform')
     setPptxBackend(backend)
+  })
+  const pptxRebuildRequests = new Map<string, symbol>()
+  ipcMain.handle('pptx:rebuild-entries', async (event, backend: unknown, ids?: unknown) => {
+    requireOperator(event)
+    if (!isPresentationBackend(backend) || (ids !== undefined && (!Array.isArray(ids) || ids.some(id => typeof id !== 'string'))))
+      throw new Error('Invalid PPTX rebuild request')
+    if (backend === 'powerpoint-static' && !['darwin', 'win32'].includes(process.platform)) throw new Error('PowerPoint is unavailable on this platform')
+    if (isProjectTransferRunning()) return { rebuilt: 0, failed: 0, error: t('Дождись окончания сборки проекта перед пересборкой презентации') }
+    const selected = ids === undefined ? null : new Set(ids)
+    const { playlist, projectPath } = store.get()
+    const byPath = new Map<string, Set<string>>()
+    const request = Symbol()
+    for (const entry of playlist) {
+      if (entry.kind !== 'pptx' || extOf(entry.filePath) !== 'pptx' || (selected && !selected.has(entry.id))) continue
+      let group = byPath.get(entry.filePath)
+      if (!group) byPath.set(entry.filePath, group = new Set())
+      group.add(entry.id)
+      pptxRebuildRequests.set(entry.id, request)
+    }
+    let rebuilt = 0
+    let failed = 0
+    let error: string | undefined
+    await Promise.all([...byPath].map(async ([filePath, group]) => {
+      const stillCurrent = (entry: PlaylistEntry): boolean =>
+        group.has(entry.id) && entry.filePath === filePath && pptxRebuildRequests.get(entry.id) === request
+      try {
+        await preparationUi.prepare(filePath, { backend, priority: 'background', forceLocalCache: true, cacheProjectPath: projectPath })
+        const current = store.get().playlist
+        const matching = current.filter(stillCurrent)
+        if (!matching.length) return
+        rebuilt += matching.length
+        store.patch({ playlist: current.map(entry => stillCurrent(entry) ? { ...entry, pptxBackend: backend } : entry) })
+        persistPlaylist()
+      } catch (cause) {
+        const count = store.get().playlist.filter(stillCurrent).length
+        if (!count || (cause instanceof PreparationError && (cause.code === 'cancelled' || cause.code === 'superseded'))) return
+        failed += count
+        error ??= `${basename(filePath)} — ${openErrorMessage(cause, filePath)}`
+      } finally {
+        for (const id of group) if (pptxRebuildRequests.get(id) === request) pptxRebuildRequests.delete(id)
+      }
+    }))
+    return { rebuilt, failed, error }
   })
   ipcMain.handle('soffice:check', async () => {
     return Boolean(await findSoffice())
@@ -2434,7 +2488,8 @@ export function registerIpcHandlers(): void {
       if (isProjectTransferRunning()) return { ok: false, error: t('Дождись окончания сборки проекта перед пересборкой презентации') }
       if (kindOf(filePath) !== 'pptx') return { ok: false, error: t('Это не PPTX') }
       // Rebuild into a new generation. Open decks keep their old files intact.
-      await inspectFile(filePath, { forceLocalCache: true })
+      const entry = store.get().playlist.find(item => item.kind === 'pptx' && item.filePath === filePath)
+      await preparationUi.prepare(filePath, { backend: entry ? playlistPptxBackend(entry) : undefined, priority: 'foreground', forceLocalCache: true, cacheProjectPath: store.get().projectPath })
       return { ok: true, remaining: store.get().fontIssues[filePath] ?? [] }
     } catch (err) {
       return { ok: false, error: (err as Error).message }
@@ -2743,10 +2798,16 @@ export function registerIpcHandlers(): void {
         progress,
         prepare: async (source, target, directory) => {
           if (kindOf(source) !== 'pptx') return []
-          const info = await inspectFile(target, {
-            cacheSourcePath: source, cacheProjectPath: snapshot.projectPath, reportFontIssues: false,
-          })
-          return exportProjectCache(info.sha1, source, directory)
+          const backends = new Set(snapshot.playlist.filter(entry => entry.filePath === source).map(playlistPptxBackend))
+          if (!backends.size) backends.add('libreoffice')
+          const files = []
+          for (const backend of backends) {
+            const info = await inspectFile(target, {
+              backend, cacheSourcePath: source, cacheProjectPath: snapshot.projectPath, reportFontIssues: false,
+            })
+            files.push(...await exportProjectCache(info.sha1, source, directory))
+          }
+          return files
         },
       })
       log.info(`project:consolidate verified → ${result.path}`)

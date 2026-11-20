@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   type PreparationOptions,
+  type PresentationBackend,
   type PreparationStatus,
   type PreparedPresentation,
 } from '../shared/presentation-preparation.js'
@@ -180,12 +181,10 @@ interface Runtime {
 }
 
 let runtime: Runtime | null = null
-let pptxBackend: 'libreoffice' | 'powerpoint-static' = 'libreoffice'
+let pptxBackend: PresentationBackend = 'libreoffice'
 
-export function getPptxBackend(): 'libreoffice' | 'powerpoint-static' { return pptxBackend }
-export function setPptxBackend(backend: 'libreoffice' | 'powerpoint-static'): void {
-  if (backend === pptxBackend) return
-  runtime?.queue.cancelAll()
+export function getPptxBackend(): PresentationBackend { return pptxBackend }
+export function setPptxBackend(backend: PresentationBackend): void {
   pptxBackend = backend
 }
 const statusListeners = new Set<(path: string, status: PreparationStatus) => void>()
@@ -228,7 +227,7 @@ function createRuntime(): Runtime {
     cache,
     createWorker: () => new ElectronWorkerSession(),
     sofficePath: () => findSoffice(),
-    backend: async (filePath) => pptxBackend === 'powerpoint-static' && filePath.toLowerCase().endsWith('.pptx')
+    backend: async (filePath, preferred) => (preferred ?? pptxBackend) === 'powerpoint-static' && filePath.toLowerCase().endsWith('.pptx')
       ? { backend: 'powerpoint-static', version: await powerpointVersion() ?? 'missing' }
       : { backend: 'libreoffice', version: '' },
     language: () => getLang(),

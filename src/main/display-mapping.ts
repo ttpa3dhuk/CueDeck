@@ -2,6 +2,7 @@ import { timerFont } from '../shared/timer-font.js'
 import { DEFAULT_TIMER_ADJUSTMENTS, timerAdjustments } from '../shared/timer-controls.js'
 import { sanitizeSlideFadeMs } from '../shared/slide-transition.js'
 import { sanitizeStoredVideoRange } from '../shared/video-range.js'
+import { isPresentationBackend } from '../shared/presentation-preparation.js'
 import { sanitizeSpeakerToolbarScale } from '../shared/prompter-toolbar.js'
 import { DEFAULT_TAKE_FADE_MS, sanitizeTakeFadeMs } from '../shared/take-transition.js'
 import Store from 'electron-store'
@@ -408,6 +409,7 @@ export function getPlaylist(): PlaylistEntry[] {
     ...(v.liveFit ? { liveFit: v.liveFit as PlaylistEntry['liveFit'] } : {}),
       ...(v.loop ? { loop: true } : {}),
       ...(typeof v.sourceMuted === 'boolean' ? { sourceMuted: v.sourceMuted } : {}),
+      ...(v.kind === 'pptx' && isPresentationBackend(v.pptxBackend) ? { pptxBackend: v.pptxBackend } : {}),
       ...(typeof v.slideFadeMs === 'number' ? { slideFadeMs: sanitizeSlideFadeMs(v.slideFadeMs) } : {}),
       ...(Array.isArray(v.items) ? { items: v.items as PlaylistEntry['items'] } : {}),
       ...(typeof v.photoSec === 'number' ? { photoSec: v.photoSec } : {}),
