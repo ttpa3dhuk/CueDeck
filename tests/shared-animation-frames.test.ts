@@ -50,3 +50,20 @@ it('renders one raster and one composition for three consumers, then reacquires 
   expect(await composeFrame(asset, scene)).toEqual(results[0])
   expect(mock.region).toHaveBeenCalledTimes(2)
 })
+
+it('retires animation documents when a rebuilt deck has the same SHA but a new root', async () => {
+  const animationBytes = vi.fn(async () => new Uint8Array([1]))
+  vi.stubGlobal('window', { pdfOwner: { animationBytes } })
+  const asset = { sha: 'same-source', file: 'layers.pdf' }
+  clearAnimations(asset.sha, '/cache/v-1/deck.pdf')
+  await animationFrame(asset)
+  clearAnimations(asset.sha, '/cache/v-1/deck.pdf')
+  await animationFrame(asset)
+  expect(animationBytes).toHaveBeenCalledTimes(1)
+
+  const disposed = mock.dispose.mock.calls.length
+  clearAnimations(asset.sha, '/cache/v-2/deck.pdf')
+  await animationFrame(asset)
+  expect(animationBytes).toHaveBeenCalledTimes(2)
+  expect(mock.dispose.mock.calls.length).toBe(disposed + 1)
+})

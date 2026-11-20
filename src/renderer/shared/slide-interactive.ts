@@ -8,7 +8,9 @@ const fullSlide = { x: 0, y: 0, w: 1, h: 1 }
 
 export class SlideInteractive {
   readonly layer = document.createElement('canvas')
-  private request?: { key: string; abort: AbortController; base?: HTMLCanvasElement; layers: HTMLCanvasElement[]; status?: 'ready' | 'failed' }
+  private request?: { key: string; abort: AbortController; base?: HTMLCanvasElement; layers: HTMLCanvasElement[];
+    status?: 'ready' | 'failed'; lastFrame?: number; lastTriggerState?: AppState['slideTriggerState'];
+    lastEnteredAt?: number; moving?: boolean }
   private raf?: number
 
   constructor(private reference: HTMLCanvasElement, private refreshed: () => void) {
@@ -53,11 +55,22 @@ export class SlideInteractive {
     if (!request.base || request.layers.length !== scene.layers.length) return
     const { width: w, height: h } = request.base
     const items = [sprite(request.base)]
-    const now = Math.floor(Date.now() / (1000/60)) * (1000/60)
+    // Two low-angle repeating objects need only 30 distinct frames per second;
+    // quantizing all windows to the same clock lets the shared compositor reuse
+    // one encoded frame across operator, speaker and audience.
+    const fps = scene.autoEffects?.length && !scene.triggers.length ? 30 : 60
+    const now = Math.floor(Date.now() / (1000 / fps)) * (1000 / fps)
+    if (request.lastTriggerState === state.slideTriggerState && request.lastEnteredAt === state.slideEnteredAt &&
+        (request.lastFrame === now || request.moving === false)) {
+      placeSlideOverlay(this.layer, this.reference, fullSlide)
+      if (request.moving) this.scheduleRefresh(request)
+      return
+    }
     let moving = false
     const opacity: Record<string, number> = {}
     scene.layers.forEach((layer, index) => {
-      const { effect: active, elapsed, value, playing } = slideActorAt(layer, state.slideTriggerState, now)
+      const { effect: active, elapsed, value, playing } = slideActorAt(layer, state.slideTriggerState, now,
+        scene.autoEffects, state.slideEnteredAt)
       moving ||= playing
       if (layer.shape) opacity[layer.shape] = Math.round(value.opacity * 1000) / 1000
       if (!value.opacity) return
@@ -69,23 +82,39 @@ export class SlideInteractive {
           const next = active.rotations.findIndex(point => point.timeMs > local)
           if (next > 0) {
             const a = active.rotations[next - 1], b = active.rotations[next]
-            const { x, y } = layer.rect
-            const cx = (x + layer.rect.w / 2) * w, cy = (y + layer.rect.h / 2) * h
+            const cx = (layer.pivot?.x ?? layer.rect.x + layer.rect.w / 2) * w
+            const cy = (layer.pivot?.y ?? layer.rect.y + layer.rect.h / 2) * h
             matrix.translateSelf(cx, cy)
             matrix.rotateSelf(interpolate(a.degrees, b.degrees, (local - a.timeMs) / (b.timeMs - a.timeMs)))
+            matrix.scaleSelf(value.scale)
             matrix.translateSelf(-cx, -cy)
           }
+        } else if (value.scale !== 1) {
+          const cx = (layer.pivot?.x ?? layer.rect.x + layer.rect.w / 2) * w
+          const cy = (layer.pivot?.y ?? layer.rect.y + layer.rect.h / 2) * h
+          matrix.translateSelf(cx, cy)
+          matrix.scaleSelf(value.scale)
+          matrix.translateSelf(-cx, -cy)
         }
       }
       const { x, y, w: width, h: height } = layer.rect
       items.push(sprite(request.layers[index],value.opacity,[matrix.a,matrix.b,matrix.c,matrix.d,matrix.e,matrix.f],[x*w,y*h,width*w,height*h]))
     })
     paintComposition(this.layer,w,h,items)
+    request.lastFrame = now
+    request.lastTriggerState = state.slideTriggerState
+    request.lastEnteredAt = state.slideEnteredAt
+    request.moving = moving
     this.layer.dataset.interactive = moving ? 'playing' : 'ready'
     this.layer.dataset.actors = JSON.stringify(opacity)
     placeSlideOverlay(this.layer, this.reference, fullSlide)
     this.layer.classList.remove('hidden')
-    if (moving && this.raf === undefined) this.raf = requestAnimationFrame(() => {
+    if (moving) this.scheduleRefresh(request)
+  }
+
+  private scheduleRefresh(request: NonNullable<SlideInteractive['request']>): void {
+    if (this.raf !== undefined) return
+    this.raf = requestAnimationFrame(() => {
       this.raf = undefined
       if (this.request === request) this.refreshed()
     })

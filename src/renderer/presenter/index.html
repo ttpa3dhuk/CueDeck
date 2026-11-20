@@ -253,9 +253,9 @@
             </div>
             <span id="video-time" class="video-time">00:00 / 00:00</span>
             <button id="video-loop-btn" class="loop-btn" title="Зациклить ЭТОТ ролик: доиграл — начинается заново. Настройка запоминается у записи плейлиста и уезжает в проект"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button>
-            <button id="video-mute" title="Звук зала вкл/выкл">🔊</button>
           </div>
           <div id="current-meter" class="audio-meter op-only hidden" title="Уровень звука, приходящего с внешнего входа"><i></i></div>
+          <button id="video-mute" class="program-audio-mute" type="button" title="Выключить звук эфира" aria-label="Выключить звук эфира" aria-pressed="false">🔊</button>
         </section>
         <section id="output-monitors" class="output-monitors op-only hidden">
           <div id="monitor-speaker" class="monitor hidden" title="Живой снимок экрана суфлёра: таймер, заметки, сообщение спикеру">
@@ -499,7 +499,7 @@
             <tr class="help-section"><td colspan="2">Видео</td></tr>
             <tr><td><kbd>Space</kbd></td><td>Play / Pause</td></tr>
             <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Перемотка ±5 сек</td></tr>
-            <tr><td><kbd>M</kbd></td><td>Звук зала вкл / выкл</td></tr>
+            <tr><td><kbd>M</kbd></td><td>Звук эфира вкл / выкл</td></tr>
             <tr class="help-section"><td colspan="2">Экраны</td></tr>
             <tr><td><kbd>B</kbd> <kbd>.</kbd></td><td>Blackout — затемнить проектор</td></tr>
             <tr><td><kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>D</kbd></td><td>Вернуться к оператору</td></tr>

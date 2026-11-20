@@ -111,5 +111,6 @@ body:has(> .test-screen-view:not([hidden])) #audience-timer { z-index: 101; }
   pointer-events: none;
   z-index: 5;
 }
+.slide-visited-links { position: absolute; pointer-events: none; z-index: 6; }
 
 .slide-video-wait-foreground { visibility: hidden !important; }

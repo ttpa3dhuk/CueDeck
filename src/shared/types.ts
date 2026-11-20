@@ -209,6 +209,8 @@ export interface SlideVideoLink {
   rect: SlideMediaRect
   slide: number
   triggerShape?: string
+  /** A linked shape whose own click effect hides it for the rest of this show. */
+  hideAfterVisit?: { shape: string; page: number }
 }
 
 export interface SlideForegroundStep {
@@ -217,6 +219,8 @@ export interface SlideForegroundStep {
   from: { x: number; y: number; opacity: number }
   to: { x: number; y: number; opacity: number }
   rotations?: Array<{ timeMs: number; degrees: number }>
+  opacityFrames?: Array<{ timeMs: number; value: number }>
+  scaleFrames?: Array<{ timeMs: number; value: number }>
 }
 
 export interface SlideForegroundActor extends SlideForegroundStep {
@@ -247,6 +251,8 @@ export interface SlideInteractiveScene {
   firstPage: number
   layers: SlideInteractiveLayer[]
   triggers: SlideTrigger[]
+  /** Main-sequence effects that begin when this page enters program. */
+  autoEffects?: Array<SlideForegroundStep & { shape: string }>
 }
 
 export interface SlideInteractiveLayer {
@@ -254,6 +260,7 @@ export interface SlideInteractiveLayer {
   rect: SlideMediaRect
   shape?: string
   initiallyHidden?: boolean
+  pivot?: { x: number; y: number }
 }
 
 export interface SlideTrigger {
@@ -276,7 +283,7 @@ export type SlideAudioCue = {
   volume: number
   loop: boolean
   delayMs?: number
-} & ({ trigger: 'enter' | 'menu' } | { trigger: 'click'; shape: string })
+} & ({ trigger: 'enter' | 'menu' } | { trigger: 'click'; shape: string } | { trigger: 'advance'; step: number })
 
 export interface SlideMedia {
   audio?: SlideAudioCue[]
@@ -423,7 +430,12 @@ export interface AppState {
   slideMenuOpen?: boolean
   slideMenuOpenedAt?: number
   slideTriggerState?: SlideTriggerState
+  slideEnteredAt?: number
   slideAudioClick?: { id: string; sha: string; slide: number; takeId?: string; at: number; cues: SlideAudioCue[] }
+  /** Number of audio-only main-sequence clicks consumed on the current PPTX page. */
+  slideAdvanceStep?: number
+  /** Linked board cells already visited during the current program take. */
+  slideVisitedLinks?: Record<number, string[]>
   /** Off-air staging deck (operator only). `take` promotes it to program. */
   preview: DeckState
   blackout: boolean

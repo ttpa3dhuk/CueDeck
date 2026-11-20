@@ -1559,7 +1559,7 @@ body[data-role="operator"] [data-frame-player]:focus-within {
   color: var(--text);
   white-space: nowrap;
 }
-.video-controls.muted #video-mute,
+.program-audio-mute[aria-pressed="true"],
 .source-mute[aria-pressed="true"] {
   background: var(--danger);
   border-color: var(--danger);
@@ -3119,6 +3119,17 @@ body[data-role="speaker"] .timer { font-family: var(--speaker-timer-font, system
 .settings-section[data-section="ui"] .windowed-label { font: inherit; min-height: 24px; }
 .settings-section[data-section="ui"] input[type="radio"] { width: 14px; height: 14px; margin: 0; }
 
+body[data-role="operator"] #program-playback > .program-audio-mute {
+  flex: none;
+  min-width: 32px;
+  height: 26px;
+  padding: 2px 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+body[data-role="operator"] #current-meter.hidden + .program-audio-mute {
+  margin-left: auto;
+}
 body[data-role="operator"] #program-playback > #current-meter {
   position: relative;
   right: auto;
@@ -3211,6 +3222,7 @@ body[data-role="operator"] #program-playback > #current-meter {
 }
 
 .current-slide .slide-video-foreground { pointer-events: none; }
+.current-slide .slide-visited-links { position: absolute; pointer-events: none; z-index: 5; }
 .current-slide .slide-video-menu-button { cursor: pointer; z-index: 4; }
 body[data-theme] .current-slide .slide-video-menu-button:is(:hover, :active) { background: transparent; }
 

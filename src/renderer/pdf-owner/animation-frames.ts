@@ -10,15 +10,18 @@ const frames = new Map<string, Uint8Array>()
 const pending = new Map<string, Promise<Uint8Array>>()
 let generation = 0
 let current = '',
+  currentRevision = '',
   resident = 0
 export const animationStats = { rendered: 0, reused: 0, joined: 0, composed: 0, compositionHits: 0 }
 
-export function clearAnimations(keep?: string | null) {
-  if (keep && current === keep) return
+export function clearAnimations(keep?: string | null, revision?: string | null) {
+  const nextRevision = revision ?? ''
+  if (keep && current === keep && currentRevision === nextRevision) return
   generation++
   for (const doc of documents.values()) void doc.then((loader) => loader.dispose()).catch(() => {})
   clearCompositions()
-  current = ''
+  current = keep ?? ''
+  currentRevision = nextRevision
   documents.clear()
   pending.clear()
   frames.clear()
@@ -27,16 +30,17 @@ export function clearAnimations(keep?: string | null) {
 
 export async function animationFrame(asset: AnimationAsset, region?: AnimationRegion) {
   if (current !== asset.sha) {
-    clearAnimations()
-    current = asset.sha
+    clearAnimations(asset.sha)
   }
+  const revision = generation
   let doc = documents.get(asset.file)
   if (!doc) {
     const load = async () => {
       const bytes = await window.pdfOwner.animationBytes(asset.file, asset.sha)
-      if (!bytes || current !== asset.sha) throw new Error('Animation asset retired')
+      if (!bytes || revision !== generation) throw new Error('Animation asset retired')
       const loader = new PdfLoader()
       if (!(await loader.loadDocument(bytes))) throw new Error('Animation PDF unavailable')
+      if (revision !== generation) { await loader.dispose(); throw new Error('Animation asset retired') }
       return loader
     }
     doc = load()
@@ -46,6 +50,7 @@ export async function animationFrame(asset: AnimationAsset, region?: AnimationRe
     })
   }
   const loader = await doc
+  if (revision !== generation) throw new Error('Animation asset retired')
   if (!region) {
     const page = await loader.getDocument()!.getPage(1)
     const { width, height } = page.getViewport({ scale: 1 })

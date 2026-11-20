@@ -69,3 +69,34 @@ it.each([
     id: 'variant', scope: 'slide', durationMs: 950, slideEffect: effect,
   })
 })
+
+it('uses the authored Lotto comb, doors Choice and circle transitions instead of their fallbacks', () => {
+  const comb = pptxSlideTransition('<p:transition spd="slow"><p:comb/></p:transition>')
+  const doors = pptxSlideTransition('<mc:AlternateContent><mc:Choice Requires="p14"><p:transition spd="slow" p14:dur="1400"><p14:doors dir="vert"/></p:transition></mc:Choice><mc:Fallback><p:transition spd="slow"><p:fade/></p:transition></mc:Fallback></mc:AlternateContent>')
+  const circle = pptxSlideTransition('<mc:AlternateContent><mc:Choice Requires="p14"><p:transition spd="slow" p14:dur="800"><p:circle/></p:transition></mc:Choice><mc:Fallback><p:transition spd="slow"><p:circle/></p:transition></mc:Fallback></mc:AlternateContent>')
+  expect(comb).toEqual({ kind: 'comb', direction: 'horz', durationMs: 1000 })
+  expect(doors).toEqual({ kind: 'doors', direction: 'vert', durationMs: 1400 })
+  expect(circle).toEqual({ kind: 'circle', durationMs: 800 })
+  expect(pptxFadeDuration('<mc:AlternateContent><mc:Choice Requires="p14"><p:transition p14:dur="1400"><p14:doors dir="vert"/></p:transition></mc:Choice><mc:Fallback><p:transition><p:fade/></p:transition></mc:Fallback></mc:AlternateContent>')).toBe(0)
+})
+
+it('falls back only when the Choice effect is unsupported and keeps authored directions', () => {
+  const unsupported = '<mc:AlternateContent><mc:Choice Requires="p14"><p:transition p14:dur="900"><p14:unknown/></p:transition></mc:Choice><mc:Fallback><p:transition spd="fast"><p:fade/></p:transition></mc:Fallback></mc:AlternateContent>'
+  expect(pptxSlideTransition(unsupported)).toEqual({ kind: 'fade', durationMs: 400 })
+  expect(pptxFadeDuration(unsupported)).toBe(400)
+  expect(pptxSlideTransition('<p:transition p14:dur="720"><p:comb dir="vert"/></p:transition>')).toEqual({ kind: 'comb', direction: 'vert', durationMs: 720 })
+  expect(pptxSlideTransition('<p:transition spd="fast"><p:circle/></p:transition>')).toEqual({ kind: 'circle', durationMs: 350 })
+  expect(pptxSlideTransition('<p:transition><p14:doors/></p:transition>')).toEqual({ kind: 'doors', direction: 'horz', durationMs: 650 })
+})
+
+it.each([
+  { kind: 'comb', direction: 'horz', durationMs: 1000 },
+  { kind: 'doors', direction: 'vert', durationMs: 1400 },
+  { kind: 'circle', durationMs: 800 },
+] as const)('carries $kind through the slide navigation patch', effect => {
+  const state = { fileKind: 'pptx', currentSlide: 1, totalSlides: 2, playlist: [], currentPlaylistId: null,
+    slideMedia: [], slideTransitions: { 1: 0, 2: effect }, video: { muted: true } } as unknown as AppState
+  expect(slideNavigationPatch(state, 2, 'lotto')?.takeTransition).toEqual({
+    id: 'lotto', scope: 'slide', durationMs: effect.durationMs, slideEffect: effect,
+  })
+})

@@ -1,4 +1,5 @@
 import { validSlideAudioCue } from '../shared/slide-video.js'
+import { linkBackdropPageCount, LINK_BACKDROPS_PDF } from '../shared/slide-link-backdrop.js'
 import { app } from 'electron'
 import { existsSync, readdirSync, lstatSync, readFileSync } from 'node:fs'
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, rmdir } from 'node:fs/promises'
@@ -38,6 +39,7 @@ function validPreparedRoot(root: string, sha1: string): boolean {
         !Array.isArray(manifest.slideMedia) || !Array.isArray(manifest.fonts) ||
         !manifest.pageNotes || typeof manifest.pageNotes !== 'object' || Array.isArray(manifest.pageNotes) ||
         !Object.values(manifest.pageNotes).every((note) => typeof note === 'string')) return false
+    if (linkBackdropPageCount(manifest.slideLinks) && !lstatSync(join(root, `${sha1}.media`, LINK_BACKDROPS_PDF)).isFile()) return false
     if (manifest.slideMedia.length && !lstatSync(`${root}/${sha1}.media`).isDirectory()) return false
     for (const media of manifest.slideMedia) {
       if (!media || typeof media.file !== 'string' || !media.file || /[/\\\0]/.test(media.file) ||
@@ -311,6 +313,10 @@ async function cacheMedia(root: string, sha1: string, needsManifest: boolean): P
         !manifest.pageNotes || typeof manifest.pageNotes !== 'object' || Array.isArray(manifest.pageNotes) ||
         !Object.values(manifest.pageNotes).every((note) => typeof note === 'string')) return null
     const files = new Set<string>()
+    if (linkBackdropPageCount(manifest.slideLinks)) {
+      if (!await regularFile(join(root, `${sha1}.media`, LINK_BACKDROPS_PDF))) return null
+      files.add(LINK_BACKDROPS_PDF)
+    }
     if (manifest.slideMedia.length && !(await lstat(join(root, `${sha1}.media`))).isDirectory()) return null
     for (const media of manifest.slideMedia) {
       if (!media || typeof media.file !== 'string' || !media.file ||

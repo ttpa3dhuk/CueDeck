@@ -7,11 +7,11 @@ import type { SlideBuildAnimation } from './types.js'
 import type { PlaylistEntry, SlideMedia } from './types.js'
 
 /** Версия OOXML-манифеста (pptx-media). Формат уже используется проектами. */
-export const PPTX_MANIFEST_VERSION = 12
+export const PPTX_MANIFEST_VERSION = 14
 
 export function isCurrentPptxManifest(manifest: { version?: unknown; renderer?: unknown }): boolean {
-  // v11 PowerPoint manifests already contain the embedded audio cues.
-  return manifest.version === PPTX_MANIFEST_VERSION || manifest.version === 11 && manifest.renderer === 'powerpoint'
+  // Older manifests can omit authored motion, transitions and audio cues.
+  return manifest.version === PPTX_MANIFEST_VERSION
 }
 
 /** Папка versioned-кэша внутри userData/pptx-cache. */

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, it, vi } from 'vitest'
 import ts from 'typescript'
+import { shouldReloadProgramDocument } from '../src/renderer/shared/program-document-reload'
 
 // Execute the production handlers with a native-video double. This catches the
 // empty-path branch and stale path identity without booting Electron's UI.
@@ -13,7 +14,7 @@ function harness() {
   const d: Record<string, any> = {
     currentVideo: video, releaseProgramVideo: vi.fn(), disposeCurrentImage: vi.fn(),
     takeFade: { begin: vi.fn(), cancel: vi.fn(), reveal: vi.fn().mockResolvedValue(undefined), clearNative: vi.fn() }, isOperator: true,
-    clearDocument: vi.fn(async () => {}),
+    clearDocument: vi.fn(async () => {}), shouldReloadProgramDocument,
     showBanner: vi.fn(), t: (x: string) => x, applyState: vi.fn(), applyProgramLive: vi.fn(),
     applyPreviewLive: vi.fn(), attachMeters: vi.fn(), handlePreviewChange: vi.fn(async () => {}),
     loadCurrentFile: vi.fn(async () => {}), renderCurrent: vi.fn(async () => {}),

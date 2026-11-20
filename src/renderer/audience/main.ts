@@ -1,4 +1,6 @@
 import { SlideInteractive } from '../shared/slide-interactive'
+import { SlideVisitedLinks, visitedLinkCrops } from '../shared/slide-visited-links'
+import { shouldReloadProgramDocument } from '../shared/program-document-reload'
 import { SlideAudio } from '../shared/slide-audio'
 import { SlideVideoForeground } from '../shared/slide-video-foreground'
 import { rejectAudioOnlyVideo } from '../shared/video-content'
@@ -47,12 +49,13 @@ let mediaOverlay = document.getElementById('media-overlay') as HTMLVideoElement
 const videoForeground = new SlideVideoForeground(canvas, mediaOverlay, false, () => updateMediaOverlay(getState()))
 const slideAudio = new SlideAudio()
 const slideInteractive = new SlideInteractive(canvas, () => updateMediaOverlay(getState()))
+const slideVisitedLinks = new SlideVisitedLinks(canvas, () => updateMediaOverlay(getState()))
 const blackout = document.getElementById('blackout') as HTMLDivElement
 const kvImage = document.getElementById('keyvisual') as HTMLImageElement
 const kvVideo = document.getElementById('keyvisual-video') as HTMLVideoElement
 const slideImageUnder = document.getElementById('slide-image-under') as HTMLImageElement
 
-const takeFade = new TakeFade(document.body, () => [slideImageUnder, canvas, slideImage, slideVideo, programVideoCanvas(slideVideo), liveVideo, mediaOverlay, programVideoCanvas(mediaOverlay), videoForeground.layer, slideInteractive.layer, ...slideGifs.elements()], retainAudienceVideo)
+const takeFade = new TakeFade(document.body, () => [slideImageUnder, canvas, slideImage, slideVideo, programVideoCanvas(slideVideo), liveVideo, mediaOverlay, programVideoCanvas(mediaOverlay), videoForeground.layer, slideInteractive.layer, slideVisitedLinks.layer, ...slideGifs.elements()], retainAudienceVideo)
 
 function retainAudienceVideo(video: HTMLVideoElement): HTMLVideoElement | null {
   if (video !== slideVideo && video !== mediaOverlay || slideAudio.output.has(video)) return null
@@ -100,7 +103,8 @@ function programFrameReady(): boolean {
   if (s.fileKind === 'live') return liveVideo.readyState >= 2
   if (s.fileKind === 'image') return slideImage.complete && slideImage.naturalWidth > 0
   if (!docLoaded || slidePaint.pending || lastRenderedSlide !== s.currentSlide) return false
-  if (!slideGifs.ready() || s.slideMedia.some(media => media.slide === s.currentSlide && media.interactive) && !slideInteractive.settled()) return false
+  if (!slideGifs.ready() || s.slideMedia.some(media => media.slide === s.currentSlide && media.interactive) && !slideInteractive.settled() ||
+    visitedLinkCrops(s, s.currentSlide).length > 0 && !slideVisitedLinks.settled()) return false
   const media = slideMediaAt(s.fileKind, s.slideMedia, s.currentSlide)
   if (!media || !s.pdfSha1) return true
   const expected = slideVideoSrc('program', media.file, s.pdfSha1)
@@ -237,6 +241,7 @@ function updateMediaOverlay(state: AppState): void {
     docLoaded && !slidePaint.pending && lastRenderedSlide === state.currentSlide)
   if (state.fileKind === 'pptx' && (!docLoaded || slidePaint.pending || lastRenderedSlide !== state.currentSlide)) {
     slideInteractive.clear()
+    slideVisitedLinks.clear()
     slideAudio.clear()
     videoForeground.clear()
     mediaOverlay.muted = true
@@ -245,6 +250,7 @@ function updateMediaOverlay(state: AppState): void {
   }
   const interactive = state.fileKind === 'pptx' ? state.slideMedia.find(media => media.slide === state.currentSlide && media.interactive)?.interactive : undefined
   slideInteractive.update(interactive, state)
+  slideVisitedLinks.update(state)
   const soundMedia = state.fileKind === 'pptx' ? state.slideMedia.find(media => media.slide === state.currentSlide && media.audio?.length) : undefined
   slideAudio.update(soundMedia, state, 'audience')
   const m = slideMediaAt(state.fileKind, state.slideMedia, state.currentSlide)
@@ -432,7 +438,7 @@ function applyOverlay(state: AppState): void {
   }
 }
 
-async function applyState(state: AppState): Promise<void> {
+async function applyState(state: AppState, patch: Partial<AppState> | null): Promise<void> {
   await refreshKeyVisual(state)
   applyOverlay(state)
   applyLive(state)
@@ -451,7 +457,7 @@ async function applyState(state: AppState): Promise<void> {
       slideImage.removeAttribute('src')
       canvas.classList.add('hidden')
     }
-  } else if (state.pdfPath !== lastFilePath) {
+  } else if (shouldReloadProgramDocument(lastFilePath, state, patch)) {
     lastFilePath = state.pdfPath
     await loadFile()
   } else if (state.fileKind === 'video') {
@@ -491,7 +497,7 @@ async function bootstrap(): Promise<void> {
       takeFade.cancel()
     }
     const contentChanged = patch && (Object.hasOwn(patch, 'takeTransition') || Object.hasOwn(patch, 'pdfPath'))
-    applyState(state).then(() => {
+    applyState(state, patch).then(() => {
       if (contentChanged) void takeFade.reveal(state.takeTransition, programFrameReady).then(() => updateMediaOverlay(getState()))
     }).catch((err) => window.api.diag.log('error', 'applyState упал', String(err?.stack ?? err)))
   })

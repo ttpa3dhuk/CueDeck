@@ -1,7 +1,26 @@
 import type { SlideForegroundStep, SlideInteractiveLayer, SlideTrigger, SlideTriggerState } from './types'
 
-export function slideActorAt(layer: SlideInteractiveLayer, state: SlideTriggerState | undefined, now: number) {
-  const chain = layer.shape ? state?.actors[layer.shape] ?? [] : []
+export function sampleAnimationFrames(points: Array<{ timeMs: number; value: number }> | undefined,
+  elapsed: number, fallback: number): number {
+  if (!points?.length) return fallback
+  if (elapsed <= points[0].timeMs) return points[0].value
+  for (let i = 1; i < points.length; i++) {
+    const left = points[i - 1], right = points[i]
+    if (elapsed <= right.timeMs) {
+      const span = right.timeMs - left.timeMs
+      return span > 0 ? left.value + (right.value - left.value) * (elapsed - left.timeMs) / span : right.value
+    }
+  }
+  return points.at(-1)!.value
+}
+
+export function slideActorAt(layer: SlideInteractiveLayer, state: SlideTriggerState | undefined, now: number,
+  autoEffects: Array<SlideForegroundStep & { shape: string }> = [], enteredAt?: number) {
+  const triggered = layer.shape ? state?.actors[layer.shape] ?? [] : []
+  const automatic = enteredAt !== undefined && layer.shape
+    ? autoEffects.filter(effect => effect.shape === layer.shape).map(({ shape: _shape, ...effect }) =>
+      ({ ...effect, startMs: enteredAt + effect.startMs })) : []
+  const chain = triggered.length ? triggered : automatic
   let effect: SlideForegroundStep | undefined
   let pending = false
   for (const step of chain) {
@@ -13,8 +32,10 @@ export function slideActorAt(layer: SlideInteractiveLayer, state: SlideTriggerSt
   const value = effect ? {
     x: effect.from.x + (effect.to.x - effect.from.x) * progress,
     y: effect.from.y + (effect.to.y - effect.from.y) * progress,
-    opacity: effect.from.opacity + (effect.to.opacity - effect.from.opacity) * progress,
-  } : { x: 0, y: 0, opacity: layer.initiallyHidden ? 0 : 1 }
+    opacity: sampleAnimationFrames(effect.opacityFrames, elapsed,
+      effect.from.opacity + (effect.to.opacity - effect.from.opacity) * progress),
+    scale: sampleAnimationFrames(effect.scaleFrames, elapsed, 1),
+  } : { x: 0, y: 0, opacity: layer.initiallyHidden ? 0 : 1, scale: 1 }
   return { effect, elapsed, value, playing: pending || Boolean(effect && (progress < 1 || effect.rotations?.length)) }
 }
 

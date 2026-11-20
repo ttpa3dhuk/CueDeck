@@ -1,4 +1,5 @@
 import { validSlideAudioCue } from '../shared/slide-video.js'
+import { linkBackdropPageCount, LINK_BACKDROPS_PDF } from '../shared/slide-link-backdrop.js'
 import type { SlideBuildAnimation } from '../shared/types.js'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
@@ -230,6 +231,8 @@ export class PresentationCache {
             !Array.isArray(manifest.slideMedia) || !manifest.pageNotes ||
             typeof manifest.pageNotes !== 'object' || Array.isArray(manifest.pageNotes) ||
             !Object.values(manifest.pageNotes).every((note) => typeof note === 'string')) return null
+        if (linkBackdropPageCount(manifest.slideLinks) &&
+            !(await stat(join(root, `${sha1}.media`, LINK_BACKDROPS_PDF)).catch(() => null))?.isFile()) return null
         // An older prepared root may contain the source links only in its manifest.
         if (!meta.slideNumbering && manifest.slideNumbering) meta.slideNumbering = manifest.slideNumbering
         if (manifest.slideLinks && !meta.slideLinks) meta.slideLinks = manifest.slideLinks

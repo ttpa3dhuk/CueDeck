@@ -7,6 +7,15 @@ import { StateStore } from '../src/main/state'
 import { sanitizeSlideFadeMs, slideNavigationPatch, slideVideoLinkPatch } from '../src/shared/slide-transition'
 import { loadProjectFile, saveProjectFile } from '../src/main/project'
 
+it('resets an audio-only PPTX click when leaving its page', () => {
+  const store = new StateStore()
+  store.patch({ fileKind: 'pptx', currentSlide: 3, totalSlides: 4, slideAdvanceStep: 1 })
+  store.patch({ currentSlide: 4 })
+  expect(store.get().slideAdvanceStep).toBeUndefined()
+  store.patch({ currentSlide: 3 })
+  expect(store.get().slideAdvanceStep).toBeUndefined()
+})
+
 describe('per-presentation slide fade', () => {
   it('keeps cuts by default and bounds enabled durations', () => {
     expect([undefined, null, 0, -1, Infinity, '300'].map(sanitizeSlideFadeMs)).toEqual([0, 0, 0, 0, 0, 0])

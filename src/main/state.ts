@@ -226,6 +226,12 @@ export class StateStore {
       partial = { ...partial, slideMenuOpen: false, slideMenuOpenedAt: undefined }
     if (slideChanged && this.state.slideTriggerState)
       partial = { ...partial, slideTriggerState: undefined }
+    if (slideChanged && (partial.fileKind ?? this.state.fileKind) === 'pptx' && partial.slideEnteredAt === undefined)
+      partial = { ...partial, slideEnteredAt: Date.now() }
+    if (slideChanged && this.state.slideAdvanceStep !== undefined)
+      partial = { ...partial, slideAdvanceStep: undefined }
+    if (Object.hasOwn(partial, 'slideMedia') && this.state.slideVisitedLinks !== undefined && partial.slideVisitedLinks === undefined)
+      partial = { ...partial, slideVisitedLinks: undefined }
 
     // Legacy remote/profile fields mirror the hall timer after the controls moved there.
     if (partial.audienceTimer) {

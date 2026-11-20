@@ -1,3 +1,4 @@
+import { activeLinkBackdrop } from '../shared/slide-link-backdrop.js'
 import { slidePosition } from '../shared/slide-numbering'
 import { readDeckFile } from './pdf-source.js'
 import { sharedPdfEnabled, sharedPdfFile } from './shared-pdf.js'
@@ -9,9 +10,10 @@ import { timerFont } from '../shared/timer-font.js'
 import { timerAdjustments } from '../shared/timer-controls.js'
 import { materialTakeTimer, sanitizeMaterialSettings, validMaterialDuration } from '../shared/material-settings.js'
 import { setMaterialSettings } from './display-mapping.js'
-import { initialSlideVideo } from '../shared/slide-video.js'
+import { initialSlideVideo, slideAudioAdvancePatch } from '../shared/slide-video.js'
 import { startSlideTrigger } from '../shared/slide-triggers.js'
 import { slideNavigationPatch, slideVideoLinkPatch, sanitizeSlideFadeMs } from '../shared/slide-transition.js'
+import { isVisitedLink, recordLinkedVisit } from '../shared/slide-visited-links.js'
 import { clearSessionDecks, restoreSessionDecks } from './session-restore.js'
 import { assertSessionIdle, waitForSessionRestore, beginSessionRestore, finishSessionRestore, beginEmptyProject, finishEmptyProject, configureStartup, flushSessionCheckpoint, initSessionLifecycle, shouldRestoreAtStartup } from './session-lifecycle.js'
 import { recoveryTakeFrame } from '../shared/recovery-take.js'
@@ -209,6 +211,8 @@ export function mimeOf(path: string): string {
     mp4: 'video/mp4',
     m4v: 'video/mp4',
     mp3: 'audio/mpeg',
+    m4a: 'audio/mp4',
+    wav: 'audio/wav',
     mov: 'video/quicktime',
     webm: 'video/webm',
   }
@@ -676,6 +680,11 @@ async function programNext(): Promise<void> {
     return
   }
   const state = store.get()
+  const advance = slideAudioAdvancePatch(state, randomUUID())
+  if (advance) {
+    store.patch(advance)
+    return
+  }
   if (state.fileKind === 'pptx' && state.slideKiosk) return
   const { currentSlide, totalSlides, autoAdvance, playlist, currentPlaylistId } = state
 
@@ -1351,6 +1360,7 @@ export function registerIpcHandlers(): void {
       notes: p.notes,
       currentPlaylistId: p.playlistId,
       slideMedia: p.slideMedia,
+      slideVisitedLinks: undefined,
       slideTransitions: p.slideTransitions ?? {},
       slideNumbering: p.slideNumbering,
       slideBuilds: p.slideBuilds ?? {},
@@ -2356,15 +2366,20 @@ export function registerIpcHandlers(): void {
     if (state.fileKind !== 'pptx' || state.pdfSha1 !== sha || state.currentSlide !== from ||
         state.slideMedia.some(media => media.slide === from && media.foreground) ||
         !state.slideLinks?.[from]?.some(link => link.slide === target)) return
+    const link = state.slideLinks[from].find(link => link.slide === target &&
+      (link.hideAfterVisit ? link.hideAfterVisit.shape === shape : link.triggerShape === shape))
+    if (!link) return
+    if (isVisitedLink(state, from, link)) return
     const patch = slideNavigationPatch(state, target, randomUUID())
     if (!patch) return
-    const trigger = state.slideLinks[from].find(link => link.slide === target && link.triggerShape === shape)?.triggerShape
-    store.patch({ ...patch, slideAudioClick: shapeAudio(state, from, trigger, patch.takeTransition?.id) })
+    const visited = recordLinkedVisit(state, from, link) ?? {}
+    store.patch({ ...patch, ...visited, slideAudioClick: shapeAudio(state, from, link.triggerShape, patch.takeTransition?.id) })
   })
   ipcMain.handle('pptx:read-animation', async (_event, file: unknown, sha: unknown) => {
     const state=store.get()
     if(typeof file!=='string' || typeof sha!=='string' || sha!==state.pdfSha1 || /[/\\\0]/.test(file) || !file.endsWith('.pdf') ||
-      !(Object.values(state.slideBuilds??{}).some(build=>build.framesFile===file) ||
+      !(activeLinkBackdrop(file, state.slideLinks?.[state.currentSlide]) ||
+        Object.values(state.slideBuilds??{}).some(build=>build.framesFile===file) ||
         state.slideMedia.some(media => media.foreground?.file === file || media.interactive?.file === file))) return null
     const path=join(mediaDirFor(sha),file), info=await stat(path).catch(()=>null)
     if(!info?.isFile() || info.size>24*1024*1024) return null

@@ -1,6 +1,9 @@
 import { slidePosition, pageForSlideLabel } from '../../shared/slide-numbering'
 import { SlideInteractive } from '../shared/slide-interactive'
 import { SlideLinkButtons } from '../shared/slide-link-buttons'
+import { SlideVisitedLinks, visitedLinkCrops } from '../shared/slide-visited-links'
+import { shouldReloadPreviewDocument, shouldReloadProgramDocument } from '../shared/program-document-reload'
+import { isVisitedLink } from '../../shared/slide-visited-links'
 import { SlideAudio } from '../shared/slide-audio'
 import { SlideVideoForeground } from '../shared/slide-video-foreground'
 import { rejectAudioOnlyVideo } from '../shared/video-content'
@@ -233,6 +236,7 @@ const isOperator = role === 'operator'
 const videoForeground = new SlideVideoForeground(currentCanvas, mediaOverlay, isOperator, () => updateMediaOverlay(getState()))
 const slideAudio = new SlideAudio()
 const slideInteractive = new SlideInteractive(currentCanvas, () => updateMediaOverlay(getState()))
+const slideVisitedLinks = new SlideVisitedLinks(currentCanvas, () => updateMediaOverlay(getState()))
 const slideLinks = new SlideLinkButtons(currentCanvas, 'slide-video-menu-button slide-pptx-link')
 const previewCanvas = isOperator ? $<HTMLCanvasElement>('preview-canvas') : null
 const previewGifs = previewCanvas ? new SlideGifs(previewCanvas, 'preview') : null
@@ -272,6 +276,8 @@ let previewDocLoaded = false
 let previewLastRenderedSlide = -1
 let previewImageBlobUrl: string | null = null
 let prevPreviewPath: string | null = null
+let prevPreviewSha1: string | null = null
+let previewLoadGeneration = 0
 
 function clearCanvas(canvas: HTMLCanvasElement): void {
   const ctx = canvas.getContext('2d')
@@ -340,6 +346,7 @@ function updateMediaOverlay(state: AppState): void {
   if (state.fileKind === 'pptx' && (!docLoaded || slidePaint.pending || lastRenderedSlide !== state.currentSlide)) {
     slideLinks.update([])
     slideInteractive.clear()
+    slideVisitedLinks.clear()
     slideAudio.clear()
     videoForeground.clear()
     mediaOverlay.muted = true
@@ -348,11 +355,12 @@ function updateMediaOverlay(state: AppState): void {
   }
   const interactive = state.fileKind === 'pptx' ? state.slideMedia.find(media => media.slide === state.currentSlide && media.interactive)?.interactive : undefined
   slideInteractive.update(interactive, state)
+  slideVisitedLinks.update(state)
   if (isOperator) {
     const { pdfSha1, currentSlide } = state
     const canClick = docLoaded && !slidePaint.pending && lastRenderedSlide === currentSlide && state.fileKind === 'pptx' && pdfSha1 &&
       !state.slideMedia.some(media => media.slide === currentSlide && media.foreground)
-    const links = canClick ? state.slideLinks?.[currentSlide] ?? [] : []
+    const links = canClick ? (state.slideLinks?.[currentSlide] ?? []).filter(link => !isVisitedLink(state, currentSlide, link)) : []
     const actions = canClick ? state.slideMedia.filter(media => media.slide === currentSlide).flatMap(media => media.clickActions ?? []) : []
     slideLinks.update([
       ...(canClick && slideInteractive.ready() ? interactive?.triggers ?? [] : []).map(trigger => ({
@@ -368,7 +376,7 @@ function updateMediaOverlay(state: AppState): void {
       ...links.map(link => ({
         rect: link.rect,
         label: link.label || t('Перейти к слайду {n}', { n: link.slide }),
-        click: () => { void window.api.pptx.followSlideLink(pdfSha1!, currentSlide, link.slide, link.triggerShape) },
+        click: () => { void window.api.pptx.followSlideLink(pdfSha1!, currentSlide, link.slide, link.hideAfterVisit?.shape ?? link.triggerShape) },
       })),
     ])
   }
@@ -941,18 +949,20 @@ function updateVideoUI(state: AppState): void {
   const isVideo = programHasVideo(state)
   if (videoControls) videoControls.classList.toggle('hidden', !isVideo)
   if (role !== 'operator') return
-  paintVideoTimecode('program', state)
-  if (!isVideo) return
-
   const v = state.video
-  if (videoPlayBtn) videoPlayBtn.textContent = v.playing ? '⏸' : '▶'
-  // Индикатор-кнопка LOOP: нажата = залита, отжата = полупрозрачная.
-  document.getElementById('video-loop-btn')?.classList.toggle('on', state.videoLoop)
   if (videoMuteBtn) {
     videoMuteBtn.textContent = v.muted ? '🔇' : '🔊'
     videoMuteBtn.setAttribute('aria-pressed', String(v.muted))
-    videoControls?.classList.toggle('muted', v.muted)
+    const label = v.muted ? t('Включить звук эфира') : t('Выключить звук эфира')
+    videoMuteBtn.title = label
+    videoMuteBtn.setAttribute('aria-label', label)
   }
+  paintVideoTimecode('program', state)
+  if (!isVideo) return
+
+  if (videoPlayBtn) videoPlayBtn.textContent = v.playing ? '⏸' : '▶'
+  // Индикатор-кнопка LOOP: нажата = залита, отжата = полупрозрачная.
+  document.getElementById('video-loop-btn')?.classList.toggle('on', state.videoLoop)
   const pos = videoPosition(v)
   const dur = v.durationSec || 0
   if (videoScrub && document.activeElement !== videoScrub && !draggingScrub.program) {
@@ -1009,10 +1019,12 @@ function unloadPreviewVideo(): void {
 }
 
 async function loadPreviewFile(): Promise<void> {
-  previewLoader?.clearDocument()
   if (!previewLoader || !previewVideo || !previewCanvas || !previewImage || !previewPlaceholder) return
+  const generation = ++previewLoadGeneration
   previewLoader.clearDocument()
   const p = getState().preview
+  const stale = (): boolean => generation !== previewLoadGeneration ||
+    getState().preview.path !== p.path || getState().preview.sha1 !== p.sha1
   disposePreviewImage()
   previewDocLoaded = false
   previewLastRenderedSlide = -1
@@ -1055,6 +1067,7 @@ async function loadPreviewFile(): Promise<void> {
   unloadPreviewVideo()
 
   const data = await window.api.preview.read()
+  if (stale()) return
   if (!data) return
 
   if (p.kind === 'image') {
@@ -1072,6 +1085,7 @@ async function loadPreviewFile(): Promise<void> {
   previewImage.removeAttribute('src')
   previewCanvas.classList.remove('hidden')
   if (!await previewLoader.loadDocument(data.pdf ?? data.bytes)) return
+  if (stale()) return
   previewDocLoaded = true
   await window.api.preview.reportTotal(previewLoader.totalPages())
   await renderPreview()
@@ -1089,7 +1103,7 @@ async function renderPreview(): Promise<void> {
   const width = previewCanvas.parentElement!.clientWidth
   await previewLoader.renderPageTo(p.currentSlide, previewCanvas, width)
   const actual = getState().preview
-  if (actual.path === p.path && actual.currentSlide === p.currentSlide) {
+  if (actual.path === p.path && actual.sha1 === p.sha1 && actual.currentSlide === p.currentSlide) {
     previewCanvas.dataset.gifPage = `${p.sha1}:${p.currentSlide}`
     previewGifs?.update(p.kind, p.slideMedia, p.currentSlide, p.sha1, true)
   }
@@ -1164,9 +1178,10 @@ async function handlePreviewChange(state: AppState): Promise<void> {
   updatePreviewUI(state)
   const p = state.preview
   previewGifs?.update(p.kind, p.slideMedia, p.currentSlide, p.sha1,
-    previewDocLoaded && p.path === prevPreviewPath && previewCanvas?.dataset.gifPage === `${p.sha1}:${p.currentSlide}`)
-  if (p.path !== prevPreviewPath) {
+    previewDocLoaded && p.path === prevPreviewPath && p.sha1 === prevPreviewSha1 && previewCanvas?.dataset.gifPage === `${p.sha1}:${p.currentSlide}`)
+  if (shouldReloadPreviewDocument(prevPreviewPath, prevPreviewSha1, p)) {
     prevPreviewPath = p.path
+    prevPreviewSha1 = p.sha1
     previewLastRenderedSlide = -1
     await loadPreviewFile()
   } else if (p.kind === 'video') {
@@ -2618,7 +2633,7 @@ async function projectSave(saveAs: boolean = false): Promise<void> {
 }
 
 const takeFade = new TakeFade(currentCanvas.parentElement!, () => [
-  ...(currentImageUnder ? [currentImageUnder] : []), currentCanvas, currentImage, currentVideo, programVideoCanvas(currentVideo), currentLive, mediaOverlay, programVideoCanvas(mediaOverlay), videoForeground.layer, slideInteractive.layer, ...slideGifs.elements(),
+  ...(currentImageUnder ? [currentImageUnder] : []), currentCanvas, currentImage, currentVideo, programVideoCanvas(currentVideo), currentLive, mediaOverlay, programVideoCanvas(mediaOverlay), videoForeground.layer, slideInteractive.layer, slideVisitedLinks.layer, ...slideGifs.elements(),
 ], retainPresenterVideo)
 
 function retainPresenterVideo(video: HTMLVideoElement): HTMLVideoElement | null {
@@ -2676,7 +2691,8 @@ function programFrameReady(): boolean {
   if (s.fileKind === 'live') return currentLive.readyState >= 2
   if (s.fileKind === 'image') return currentImage.complete && currentImage.naturalWidth > 0
   if (!docLoaded || slidePaint.pending || lastRenderedSlide !== s.currentSlide) return false
-  if (!slideGifs.ready() || s.slideMedia.some(media => media.slide === s.currentSlide && media.interactive) && !slideInteractive.settled()) return false
+  if (!slideGifs.ready() || s.slideMedia.some(media => media.slide === s.currentSlide && media.interactive) && !slideInteractive.settled() ||
+    visitedLinkCrops(s, s.currentSlide).length > 0 && !slideVisitedLinks.settled()) return false
   const media = slideMediaAt(s.fileKind, s.slideMedia, s.currentSlide)
   if (!media || !s.pdfSha1) return true
   const expected = slideVideoSrc('program', media.file, s.pdfSha1)
@@ -2718,7 +2734,7 @@ async function handleStateChange(state: AppState, patch: Partial<AppState> | nul
       disposeCurrentImage()
       unloadCurrentVideo()
     }
-  } else if (state.pdfPath !== prevFilePath) {
+  } else if (shouldReloadProgramDocument(prevFilePath, state, patch)) {
     prevFilePath = state.pdfPath
     // Slide numbers belong to this document. Keeping the previous document's
     // number can suppress navigation back to that number in the new one.
@@ -3018,7 +3034,7 @@ const HOTKEY_ACTIONS: HotkeyAction[] = [
   { id: 'previewNext', label: t('Превью: следующий слайд'), def: 'BracketRight' },
   { id: 'previewPrev', label: t('Превью: предыдущий слайд'), def: 'BracketLeft' },
   { id: 'videoPlay', label: t('Видео: play / pause'), def: 'Space' },
-  { id: 'mute', label: t('Видео: звук вкл / выкл'), def: 'KeyM' },
+  { id: 'mute', label: t('Эфир: звук вкл / выкл'), def: 'KeyM' },
   { id: 'timerToggle', label: t('Таймер суфлёра: старт / пауза'), def: 'KeyT' },
   { id: 'timerReset', label: t('Таймер суфлёра: сброс'), def: 'KeyR' },
   { id: 'speakerTimerStart', label: t('Таймер суфлёра: старт'), def: '' },
@@ -3097,8 +3113,8 @@ function keyLabel(code: string): string {
 }
 function dispatchHotkey(action: string): void {
   const state = getState()
-  // Слайд-видео из PPTX: Space/M рулят роликом, но стрелки остаются листанием —
-  // спикер кликером идёт дальше, даже если ролик на слайде ещё крутится.
+  // Space управляет только видео; M глушит весь эфир, включая звук PPTX.
+  // Стрелки остаются листанием даже при видео на слайде.
   const hasVideo = programHasVideo(state)
   switch (action) {
     case 'take':
@@ -3111,7 +3127,7 @@ function dispatchHotkey(action: string): void {
     case 'previewNext': window.api.preview.next(); break
     case 'previewPrev': window.api.preview.prev(); break
     case 'videoPlay': hasVideo ? window.api.video.toggle() : window.api.nav.next(); break
-    case 'mute': if (hasVideo) window.api.video.toggleMuted(); break
+    case 'mute': window.api.video.toggleMuted(); break
     case 'speakerTimerStart': window.api.timer.start(); break
     case 'speakerTimerStop': window.api.timer.pause(); break
     case 'audienceTimerStart': window.api.audienceTimer.start(); break
@@ -6925,6 +6941,7 @@ async function bootstrap(): Promise<void> {
     updatePreviewUI(initial)
     if (initial.preview.path) {
       prevPreviewPath = initial.preview.path
+      prevPreviewSha1 = initial.preview.sha1
       await loadPreviewFile()
     }
   }

@@ -405,6 +405,8 @@ export const EN: Record<string, string> = {
   'Тиканье таймера': 'Timer tick',
   'Гонг таймера': 'Timer gong',
   'OMT: таймер': 'OMT: timer',
+  'Включить звук эфира': 'Unmute program audio',
+  'Выключить звук эфира': 'Mute program audio',
   'OMT: зал': 'OMT: program',
   'OMT: суфлёр': 'OMT: prompter',
 
@@ -571,7 +573,6 @@ export const EN: Record<string, string> = {
   'Зациклить ЭТОТ ролик: доиграл — начинается заново. Настройка запоминается у записи плейлиста и уезжает в проект': 'Loop THIS clip: when it ends, it starts again. The setting is stored with the playlist entry and saved in the project',
   'Зациклить этот ролик: доиграв, начинается заново. Настройка сохраняется у записи плейлиста': 'Loop this clip: when it ends, it starts again. The setting is stored with the playlist entry',
   'Цикл сохраняется у записи плейлиста — добавь ролик в плейлист, чтобы включить': 'Loop is stored with the playlist entry — add the clip to the playlist to turn it on',
-  'Звук зала вкл/выкл': 'Audience sound on/off',
   'Звук этого источника в эфире вкл/выкл': 'This input’s program audio on/off',
   'Ожидает подготовки': 'Queued',
   'Подготовка…': 'Preparing…',
@@ -714,7 +715,7 @@ export const EN: Record<string, string> = {
   'Сбросить таймер': 'Reset the timer',
   '+1 / +3 / +5 минут': '+1 / +3 / +5 minutes',
   '−1 / −3 / −5 минут': '−1 / −3 / −5 minutes',
-  'Звук зала вкл / выкл': 'Audience sound on / off',
+  'Звук эфира вкл / выкл': 'Program sound on / off',
   'Экраны': 'Screens',
   'Настройки экранов…': 'Screen settings…',
   'Режим работы': 'Operating mode',
@@ -810,7 +811,7 @@ export const EN: Record<string, string> = {
   'Эфир: следующий слайд': 'Program: next slide',
   'Эфир: предыдущий слайд': 'Program: previous slide',
   'Видео: play / pause': 'Video: play / pause',
-  'Видео: звук вкл / выкл': 'Video: sound on / off',
+  'Эфир: звук вкл / выкл': 'Program: sound on / off',
   'Нажми клавишу… (Esc — отмена)': 'Press a key… (Esc to cancel)',
 
   // ── Настройки → Интерфейс ──

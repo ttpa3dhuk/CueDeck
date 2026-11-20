@@ -27,6 +27,36 @@ afterAll(async () => {
   await rm(TEST_USER_DATA, { recursive: true, force: true })
 })
 
+it.each(['libreoffice', 'powerpoint'] as const)('imports a single 750 ms repeating rotation for %s without looping a finite spin', async renderer => {
+  const dir = await mkdtemp(join(tmpdir(), `cuedeck-one-wobble-${renderer}-`))
+  const picture = '<p:pic><p:nvPicPr><p:cNvPr id="5" name="Wobble"/></p:nvPicPr>' +
+    '<p:spPr><a:xfrm><a:off x="1219200" y="685800"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:pic>'
+  const rot = (by: number, duration: number, delay: number) => `<p:animRot by="${by}"><p:cBhvr>` +
+    `<p:cTn dur="${duration}"><p:stCondLst><p:cond delay="${delay}"/></p:stCondLst></p:cTn>` +
+    '<p:tgtEl><p:spTgt spid="5"/></p:tgtEl></p:cBhvr></p:animRot>'
+  const timing = (repeat: boolean) => '<p:timing><p:tnLst><p:seq><p:cTn id="2" nodeType="mainSeq"><p:childTnLst>' +
+    '<p:par><p:cTn id="3"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>' +
+    `<p:par><p:cTn id="4" presetClass="emph" nodeType="withEffect"${repeat ? ' repeatCount="indefinite"' : ''}>` +
+    `<p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>${rot(120000, 150, 0)}${rot(-120000, 600, 150)}` +
+    '</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>' +
+    '</p:childTnLst></p:cTn></p:seq></p:tnLst></p:timing>'
+  try {
+    for (const repeat of [true, false]) {
+      const deck = await buildDeck(dir, { ...NOTES_DECK,
+        'ppt/slides/slide1.xml': slideXml(picture).replace('</p:sld>', timing(repeat) + '</p:sld>'),
+      })
+      const result = await preparePptxMedia(deck, `one-wobble-${renderer}-${repeat}`, undefined, renderer)
+      const scene = result.slideMedia.find(media => media.slide === 1)?.interactive
+      if (repeat) {
+        expect(scene?.autoEffects).toEqual([expect.objectContaining({ shape: '5', durationMs: 750,
+          rotations: [{ timeMs: 0, degrees: 0 }, { timeMs: 150, degrees: 2 }, { timeMs: 750, degrees: 0 }] })])
+      } else expect(scene).toBeUndefined()
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 describe.skipIf(!existsSync(SAMPLE))('preparePptxMedia (реальный PPTX: видео + анимации)', () => {
   it('находит видео с прямоугольником плейсхолдера; страница — с учётом шагов', async () => {
     const prepared = await preparePptxMedia(SAMPLE, SHA1)
@@ -618,6 +648,32 @@ it('exports a foreground frame deck over looping video when the main deck needs 
   }
 })
 
+it('omits transition sound actions with their audio relationships in foreground frames', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'cuedeck-foreground-transition-sound-'))
+  const title = '<p:sp><p:nvSpPr><p:cNvPr id="7" name="Title"/></p:nvSpPr><p:spPr><a:xfrm><a:off x="6096000" y="3429000"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:sp>'
+  const timing = '<p:timing><p:video><p:cMediaNode><p:cTn repeatCount="indefinite"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn><p:tgtEl><p:spTgt spid="6"/></p:tgtEl></p:cMediaNode></p:video></p:timing>'
+  const transition = '<p:transition><p:fade/><p:sndAc><p:stSnd><p:snd r:embed="rIdSound"/></p:stSnd></p:sndAc></p:transition>'
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': `<p:sld ${NS}><p:cSld><p:spTree>${VIDEO_PIC}${title}</p:spTree></p:cSld>${transition}${timing}</p:sld>`,
+      'ppt/slides/_rels/slide1.xml.rels': slideRels(null, true).replace('</Relationships>',
+        `<Relationship Id="rIdSound" Type="${REL}/audio" Target="../media/sound.wav"/></Relationships>`),
+      'ppt/media/sound.wav': 'fake sound',
+    })
+    const prepared = await preparePptxMedia(deck, 'foreground-transition-sound', undefined, 'powerpoint')
+    const frames = prepared.nativeFrameSources!.find(source => source.file === 'video-foreground.pdf')!.sourcePath
+    const slide = execFileSync('unzip', ['-p', frames, 'ppt/slides/_cuedeck_frame_0.xml'], { encoding: 'utf8' })
+    const rels = execFileSync('unzip', ['-p', frames, 'ppt/slides/_rels/_cuedeck_frame_0.xml.rels'], { encoding: 'utf8' })
+    expect(slide).toContain('name="Title"')
+    expect(slide).toContain('<p:transition>')
+    expect(slide).not.toContain('<p:sndAc')
+    expect(rels).not.toContain('rIdSound')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 it('exports both foreground states for an object-triggered menu over video', async () => {
   const dir = join(tmpdir(), 'cuedeck-pptx-video-menu-test')
   const button = '<p:pic><p:nvPicPr><p:cNvPr id="7" name="Menu button"/></p:nvPicPr><p:spPr><a:xfrm><a:off x="6096000" y="3429000"/><a:ext cx="3048000" cy="1714500"/></a:xfrm></p:spPr></p:pic>'
@@ -714,6 +770,178 @@ it.each([true, false])('imports autoplay and shape-click audio with separate med
       expect(await readFile(join(mediaDirFor(sha), 'cue.mp3'))).toEqual(Buffer.from([255, 251, 144, 0]))
       expect(JSON.parse(await readFile(manifest, 'utf8')).version).toBe(PPTX_MANIFEST_VERSION)
     }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+it.each(['m4a', 'wav'])('imports %s sound-only main-sequence clicks and a transition sound once', async (extension) => {
+  const dir = join(tmpdir(), `cuedeck-pptx-sound-${extension}`)
+  const shape = '<p:pic><p:nvPicPr><p:cNvPr id="21"/><p:nvPr><a:audioFile r:link="rIdSound"/></p:nvPr></p:nvPicPr></p:pic>'
+  const target = '<p:tgtEl><p:spTgt spid="21"/></p:tgtEl>'
+  const soundGroup = `<p:par><p:cTn><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst><p:childTnLst><p:par><p:cTn presetClass="mediacall" nodeType="clickEffect"><p:stCondLst><p:cond delay="25"/></p:stCondLst><p:childTnLst><p:cmd cmd="playFrom(0.0)"><p:cBhvr>${target}</p:cBhvr></p:cmd></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>`
+  const timing = `<p:timing><p:tnLst><p:seq><p:cTn nodeType="mainSeq"><p:childTnLst>${soundGroup}</p:childTnLst></p:cTn></p:seq><p:audio><p:cMediaNode vol="80000"><p:cTn/>${target}</p:cMediaNode></p:audio></p:tnLst></p:timing>`
+  const transition = '<mc:AlternateContent><mc:Choice Requires="p14"><p:transition><p:fade/><p:sndAc><p:stSnd><p:snd r:embed="rIdChoice"/></p:stSnd></p:sndAc></p:transition></mc:Choice><mc:Fallback><p:transition><p:fade/><p:sndAc><p:stSnd><p:snd r:embed="rIdFallback"/></p:stSnd></p:sndAc></p:transition></mc:Fallback></mc:AlternateContent>'
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': slideXml(shape).replace('</p:sld>', transition + timing + '</p:sld>'),
+      'ppt/slides/_rels/slide1.xml.rels': slideRels(null).replace('</Relationships>',
+        `<Relationship Id="rIdSound" Type="${REL}/audio" Target="../media/cue.${extension}"/>` +
+        `<Relationship Id="rIdChoice" Type="${REL}/audio" Target="../media/transition.wav"/>` +
+        `<Relationship Id="rIdFallback" Type="${REL}/audio" Target="../media/transition.wav"/></Relationships>`),
+      [`ppt/media/cue.${extension}`]: Buffer.from([1, 2, 3]),
+      'ppt/media/transition.wav': Buffer.from([4, 5, 6]),
+    })
+    for (const renderer of ['libreoffice', 'powerpoint'] as const) {
+      const sha = `${renderer}-sound-${extension}`
+      const result = await preparePptxMedia(deck, sha, undefined, renderer)
+      expect(result.slideMedia.find(media => media.slide === 1)?.audio).toEqual([
+        { file: `cue.${extension}`, volume: .8, loop: false, trigger: 'advance', step: 1, delayMs: 25 },
+        { file: 'transition.wav', volume: 1, loop: false, trigger: 'enter', delayMs: 0 },
+      ])
+      expect(await readFile(join(mediaDirFor(sha), `cue.${extension}`))).toEqual(Buffer.from([1, 2, 3]))
+      expect(await readFile(join(mediaDirFor(sha), 'transition.wav'))).toEqual(Buffer.from([4, 5, 6]))
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+it('numbers only click groups after entry audio and includes withEffect audio in the same click', async () => {
+  const dir = join(tmpdir(), 'cuedeck-pptx-sound-click-order')
+  const shape = (id: number) => `<p:pic><p:nvPicPr><p:cNvPr id="${id}"/><p:nvPr><a:audioFile r:link="rId${id}"/></p:nvPr></p:nvPicPr></p:pic>`
+  const effect = (id: number, nodeType: string) => `<p:par><p:cTn presetClass="mediacall" nodeType="${nodeType}"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst><p:cmd cmd="playFrom(0.0)"><p:cBhvr><p:tgtEl><p:spTgt spid="${id}"/></p:tgtEl></p:cBhvr></p:cmd></p:childTnLst></p:cTn></p:par>`
+  const group = (head: string, body: string) => `<p:par><p:cTn><p:stCondLst>${head}</p:stCondLst><p:childTnLst>${body}</p:childTnLst></p:cTn></p:par>`
+  const entry = group('<p:cond delay="indefinite"/><p:cond evt="onBegin" delay="0"><p:tn val="2"/></p:cond>', effect(21, 'withEffect'))
+  const click1 = group('<p:cond delay="indefinite"/>', effect(22, 'clickEffect') + effect(23, 'withEffect'))
+  const click2 = group('<p:cond delay="indefinite"/>', effect(24, 'clickEffect'))
+  const timing = `<p:timing><p:tnLst><p:seq><p:cTn id="2" nodeType="mainSeq"><p:childTnLst>${entry}${click1}${click2}</p:childTnLst></p:cTn></p:seq></p:tnLst></p:timing>`
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': slideXml([21, 22, 23, 24].map(shape).join('')).replace('</p:sld>', timing + '</p:sld>'),
+      'ppt/slides/_rels/slide1.xml.rels': slideRels(null).replace('</Relationships>',
+        [21, 22, 23, 24].map(id => `<Relationship Id="rId${id}" Type="${REL}/audio" Target="../media/cue${id}.m4a"/>`).join('') + '</Relationships>'),
+      ...Object.fromEntries([21, 22, 23, 24].map(id => [`ppt/media/cue${id}.m4a`, Buffer.from([id])])),
+    })
+    const prepared = await preparePptxMedia(deck, 'sound-click-order')
+    expect(prepared.slideMedia[0].audio?.map(cue => [cue.file, cue.trigger, 'step' in cue ? cue.step : undefined])).toEqual([
+      ['cue21.m4a', 'enter', undefined],
+      ['cue22.m4a', 'advance', 1],
+      ['cue23.m4a', 'advance', 1],
+      ['cue24.m4a', 'advance', 2],
+    ])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+it('imports transition-only sound without an audio picture', async () => {
+  const dir = join(tmpdir(), 'cuedeck-pptx-transition-only')
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': slideXml().replace('</p:sld>', '<p:transition><p:fade/><p:sndAc><p:stSnd><p:snd r:embed="rIdSound"/></p:stSnd></p:sndAc></p:transition></p:sld>'),
+      'ppt/slides/_rels/slide1.xml.rels': slideRels(null).replace('</Relationships>', `<Relationship Id="rIdSound" Type="${REL}/audio" Target="../media/transition.wav"/></Relationships>`),
+      'ppt/media/transition.wav': Buffer.from([1, 2, 3]),
+    })
+    for (const renderer of ['libreoffice', 'powerpoint'] as const) {
+      const sha = `transition-only-${renderer}`
+      const prepared = await preparePptxMedia(deck, sha, undefined, renderer)
+      expect(prepared.slideMedia[0].audio).toEqual([{ file: 'transition.wav', volume: 1, loop: false, trigger: 'enter', delayMs: 0 }])
+      expect(await readFile(join(mediaDirFor(sha), 'transition.wav'))).toEqual(Buffer.from([1, 2, 3]))
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+it('does not advance sound ahead of an unsupported visual click group', async () => {
+  const dir = join(tmpdir(), 'cuedeck-pptx-sound-visual-click')
+  const sound = '<p:pic><p:nvPicPr><p:cNvPr id="21"/><p:nvPr><a:audioFile r:link="rIdSound"/></p:nvPr></p:nvPicPr></p:pic>'
+  const group = (effect: string) => `<p:par><p:cTn><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst><p:childTnLst><p:par><p:cTn presetClass="${effect}" nodeType="clickEffect"><p:childTnLst>${effect === 'mediacall'
+    ? '<p:cmd cmd="playFrom(0.0)"><p:cBhvr><p:tgtEl><p:spTgt spid="21"/></p:tgtEl></p:cBhvr></p:cmd>'
+    : '<p:set><p:cBhvr><p:tgtEl><p:spTgt spid="5"/></p:tgtEl></p:cBhvr></p:set>'}</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>`
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': slideXml(sound).replace('</p:sld>', `<p:timing><p:tnLst><p:seq><p:cTn nodeType="mainSeq"><p:childTnLst>${group('exit')}${group('mediacall')}</p:childTnLst></p:cTn></p:seq></p:tnLst></p:timing></p:sld>`),
+      'ppt/slides/_rels/slide1.xml.rels': slideRels(null).replace('</Relationships>', `<Relationship Id="rIdSound" Type="${REL}/audio" Target="../media/cue.m4a"/></Relationships>`),
+      'ppt/media/cue.m4a': Buffer.from([1, 2, 3]),
+    })
+    for (const renderer of ['libreoffice', 'powerpoint'] as const) {
+      const prepared = await preparePptxMedia(deck, `sound-visual-click-${renderer}`, undefined, renderer)
+      expect(prepared.slideMedia.flatMap(media => media.audio ?? [])).toEqual([])
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+it.each(['libreoffice', 'powerpoint'] as const)('maps authored Lotto transitions to destination pages with %s', async renderer => {
+  const dir = join(tmpdir(), `cuedeck-pptx-lotto-transitions-${renderer}`)
+  const withTransition = (xml: string, transition: string) => xml.replace('</p:sld>', transition + '</p:sld>')
+  const doors = '<mc:AlternateContent><mc:Choice Requires="p14"><p:transition spd="slow" p14:dur="1400"><p14:doors dir="vert"/></p:transition></mc:Choice><mc:Fallback><p:transition spd="slow"><p:fade/></p:transition></mc:Fallback></mc:AlternateContent>'
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': withTransition(slideXml(), '<p:transition spd="slow"><p:comb/></p:transition>'),
+      'ppt/slides/slide4.xml': withTransition(slideXml(), doors),
+      'ppt/slides/slide5.xml': withTransition(slideXml(), '<p:transition spd="slow" p14:dur="800"><p:circle/></p:transition>'),
+    })
+    const prepared = await preparePptxMedia(deck, `lotto-transitions-${renderer}`, undefined, renderer)
+    expect(prepared.slideTransitions).toMatchObject({
+      1: { kind: 'comb', direction: 'horz', durationMs: 1000 },
+      5: { kind: 'doors', direction: 'vert', durationMs: 1400 },
+      6: { kind: 'circle', durationMs: 800 },
+    })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+it.each(['libreoffice', 'powerpoint'] as const)('imports one linked self-hide backdrop with %s', async (renderer) => {
+  const dir = join(tmpdir(), `cuedeck-pptx-self-hide-${renderer}`)
+  const link = (id: number, x: number) => `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Number ${id}"><a:hlinkClick r:id="rIdJump" action="ppaction://hlinksldjump"/></p:cNvPr></p:nvPicPr><p:spPr><a:xfrm><a:off x="${x}" y="0"/><a:ext cx="1000000" cy="1000000"/></a:xfrm></p:spPr></p:pic>`
+  const soundPoster = '<p:pic><p:nvPicPr><p:cNvPr id="20" name="Sound poster"/><p:nvPr><a:audioFile r:link="rIdAudio"/><p:extLst><p:ext><p14:media xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" r:embed="rIdMedia"/></p:ext></p:extLst></p:nvPr></p:nvPicPr><p:blipFill><a:blip r:embed="rIdPoster"/></p:blipFill></p:pic>'
+  const hide = (id: number) => `<p:seq><p:cTn nodeType="interactiveSeq"><p:stCondLst><p:cond evt="onClick" delay="0"><p:tgtEl><p:spTgt spid="${id}"/></p:tgtEl></p:cond></p:stCondLst><p:childTnLst><p:par><p:cTn presetClass="exit" nodeType="clickEffect"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst><p:set><p:cBhvr><p:cTn dur="1"/><p:tgtEl><p:spTgt spid="${id}"/></p:tgtEl><p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="hidden"/></p:to></p:set></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:seq>`
+  try {
+    const deck = await buildDeck(dir, {
+      ...NOTES_DECK,
+      'ppt/slides/slide1.xml': slideXml(link(7, 0) + link(8, 2000000) + link(9, 4000000) + soundPoster)
+        .replace('</p:sld>', `<p:transition><p:fade/><p:sndAc><p:stSnd><p:snd r:embed="rIdAudio"/></p:stSnd></p:sndAc></p:transition><p:timing><p:tnLst>${hide(8)}${hide(9)}</p:tnLst></p:timing></p:sld>`),
+      'ppt/slides/_rels/slide1.xml.rels': slideRels(null).replace('</Relationships>',
+        `<Relationship Id="rIdJump" Type="${REL}/slide" Target="slide4.xml"/>` +
+        `<Relationship Id="rIdAudio" Type="${REL}/audio" Target="../media/transition.wav"/>` +
+        `<Relationship Id="rIdMedia" Type="${REL}/media" Target="../media/transition.wav"/>` +
+        `<Relationship Id="rIdPoster" Type="${REL}/image" Target="../media/poster.png"/></Relationships>`),
+      'ppt/media/transition.wav': Buffer.from([1, 2, 3]),
+      'ppt/media/poster.png': Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==', 'base64'),
+    })
+    const result = await preparePptxMedia(deck, `self-hide-${renderer}`, undefined, renderer)
+    const links = result.slideLinks?.[1] ?? []
+    expect(links).toHaveLength(3)
+    expect(links[0].hideAfterVisit).toBeUndefined()
+    expect(links[1].hideAfterVisit).toEqual({ shape: '8', page: 1 })
+    expect(links[2].hideAfterVisit).toEqual({ shape: '9', page: 1 })
+    const source = result.nativeFrameSources?.find(source => source.file === 'link-backdrops.pdf')?.sourcePath
+    expect(source).toBeTruthy()
+    const frame = execFileSync('unzip', ['-p', source!, 'ppt/slides/_cuedeck_frame_0.xml'], { encoding: 'utf8' })
+    expect(frame).toContain('id="7"')
+    expect(frame).not.toContain('id="8"')
+    expect(frame).not.toContain('id="9"')
+    expect(frame).not.toContain('<p:timing>')
+    expect(frame).not.toContain('<p:sndAc>')
+    expect(frame).not.toContain('<a:hlinkClick')
+    expect(frame).not.toContain('<a:audioFile')
+    expect(frame).not.toContain('<p14:media')
+    expect(frame).toContain('r:embed="rIdPoster"')
+    const rels = execFileSync('unzip', ['-p', source!, 'ppt/slides/_rels/_cuedeck_frame_0.xml.rels'], { encoding: 'utf8' })
+    expect(rels).not.toContain('/audio')
+    expect(rels).not.toContain('Id="rIdMedia"')
+    expect(rels).not.toContain('/slide"')
+    expect(rels).toContain('Id="rIdPoster"')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

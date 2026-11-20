@@ -1,4 +1,5 @@
 import { validSlideAudioCue } from '../shared/slide-video.js'
+import { linkBackdropPageCount, LINK_BACKDROPS_PDF } from '../shared/slide-link-backdrop.js'
 import type { SlideBuildAnimation } from '../shared/types.js'
 import { createHash } from 'node:crypto'
 import { open } from 'node:fs/promises'
@@ -178,22 +179,36 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
         throw new PreparationFailure('invalid_cache', 'Missing slide audio', 'validate')
     }
     if (media.interactive) {
-      const { file, firstPage, layers, triggers } = media.interactive
+      const { file, firstPage, layers, triggers, autoEffects } = media.interactive
       const rectOk = (rect: SlideMedia['rect']): boolean => Boolean(rect &&
         [rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) && rect.x >= 0 && rect.y >= 0 &&
         rect.w > 0 && rect.h > 0 && rect.x + rect.w <= 1 && rect.y + rect.h <= 1)
       const shapeIds = new Set(layers?.map(layer => layer.shape).filter(Boolean))
+      const validFrames = (frames: Array<{ timeMs: number; value: number }> | undefined): boolean =>
+        frames === undefined || Array.isArray(frames) && frames.length >= 2 && frames.length <= 16 &&
+        frames.every((point, index) => Number.isFinite(point.timeMs) && point.timeMs >= 0 &&
+          Number.isFinite(point.value) && (index === 0 || point.timeMs >= frames[index - 1].timeMs))
+      const validEffect = (effect: import('../shared/types.js').SlideForegroundStep & { shape: string }): boolean =>
+        shapeIds.has(effect.shape) &&
+        [effect.startMs, effect.durationMs, effect.from?.x, effect.from?.y, effect.from?.opacity,
+          effect.to?.x, effect.to?.y, effect.to?.opacity].every(Number.isFinite) &&
+        effect.startMs >= 0 && effect.durationMs > 0 && effect.durationMs <= 60_000 &&
+        validFrames(effect.opacityFrames) && validFrames(effect.scaleFrames) &&
+        (effect.rotations === undefined || Array.isArray(effect.rotations) && effect.rotations.length >= 2 &&
+          effect.rotations.length <= 32 && effect.rotations.every(point => Number.isFinite(point.timeMs) && Number.isFinite(point.degrees)))
       if (file !== 'video-foreground.pdf' || !Number.isInteger(firstPage) || firstPage < 1 ||
           !Array.isArray(layers) || !layers.length || layers.length > 25 ||
           !layers.every(layer => Number.isInteger(layer.page) && layer.page > firstPage && rectOk(layer.rect) &&
-            (layer.shape === undefined || /^\d+$/.test(layer.shape))) ||
-          !Array.isArray(triggers) || !triggers.length || triggers.length > 32 ||
+            (layer.shape === undefined || /^\d+$/.test(layer.shape)) &&
+            (layer.pivot === undefined || [layer.pivot.x, layer.pivot.y].every(Number.isFinite))) ||
+          !Array.isArray(triggers) || triggers.length > 32 ||
+          (autoEffects !== undefined && (!Array.isArray(autoEffects) || !autoEffects.length || autoEffects.length > 16 ||
+            !autoEffects.every(validEffect))) ||
+          !triggers.length && !autoEffects?.length ||
           !triggers.every(trigger => /^\d+$/.test(trigger.id) && /^\d+$/.test(trigger.shape) && rectOk(trigger.rect) &&
             typeof trigger.label === 'string' && ['always', 'whenNotActive', 'never'].includes(trigger.restart) &&
             Number.isFinite(trigger.durationMs) && trigger.durationMs > 0 && trigger.durationMs <= 70_000 &&
-            Array.isArray(trigger.effects) && trigger.effects.every(effect => shapeIds.has(effect.shape) &&
-              [effect.startMs, effect.durationMs, effect.from?.x, effect.from?.y, effect.from?.opacity,
-                effect.to?.x, effect.to?.y, effect.to?.opacity].every(Number.isFinite) && effect.startMs >= 0 && effect.durationMs > 0))) {
+            Array.isArray(trigger.effects) && trigger.effects.every(validEffect))) {
         throw new PreparationFailure('invalid_cache', 'Invalid interactive PPTX scene', 'validate')
       }
       foregroundCounts.set(file, Math.max(foregroundCounts.get(file) ?? 0, ...layers.map(layer => layer.page + 1)))
@@ -235,9 +250,11 @@ export async function validateArtifacts(artifactsDir: string, sha1: string): Pro
       foregroundCounts.set(file, Math.max(foregroundCounts.get(file) ?? 0, maxPage))
     }
   }
+  const backdropPages = linkBackdropPageCount(manifest.slideLinks)
+  if (backdropPages) foregroundCounts.set(LINK_BACKDROPS_PDF, backdropPages)
   for (const [file, count] of foregroundCounts) {
     if (countPdfPages(await readFile(join(mediaDir, file))) !== count)
-      throw new PreparationFailure('invalid_cache', 'Slide video foreground page count mismatch', 'validate')
+      throw new PreparationFailure('invalid_cache', `Unexpected page count in ${file}`, 'validate')
   }
   for (const build of Object.values(manifest.slideBuilds ?? {})) {
     if (!build.framesFile) continue
@@ -361,22 +378,30 @@ export async function prepareStagedArtifacts(options: PrepareArtifactsOptions): 
   const prepared = await preparePptxMedia(stagedPath, sha1, rootsFor(artifactsDir))
   if (signal?.aborted) throw new PreparationFailure('cancelled', 'Preparation cancelled', 'parse') // i18n-ok: worker/main error
 
+  const convertPdf = (sourcePath: string, outputDir: string) => convert({
+    sofficePath, sourcePath, outputDir, profileDir, timeoutMs, signal,
+    log: (level, message, error) => log(`soffice[${level}]: ${message}${error ? ` ${String(error)}` : ''}`),
+  })
   let generated: string
   try {
-    generated = await convert({
-      sofficePath,
-      sourcePath: prepared.convertSource,
-      outputDir: artifactsDir,
-      profileDir,
-      timeoutMs,
-      signal,
-      log: (level, message, error) => log(`soffice[${level}]: ${message}${error ? ` ${String(error)}` : ''}`),
-    })
+    generated = await convertPdf(prepared.convertSource, artifactsDir)
   } finally {
     if (prepared.temporary) await rm(prepared.convertSource, { force: true }).catch(() => undefined)
   }
   const pdfPath = join(artifactsDir, `${sha1}.pdf`)
   if (generated !== pdfPath) await rename(generated, pdfPath)
+
+  for (const asset of prepared.nativeFrameSources ?? []) {
+    const mediaDir = join(artifactsDir, `${sha1}.media`)
+    await mkdir(mediaDir, { recursive: true })
+    try {
+      const exported = await convertPdf(asset.sourcePath, mediaDir)
+      const target = join(mediaDir, asset.file)
+      if (exported !== target) await rename(exported, target)
+    } finally {
+      await rm(asset.sourcePath, { force: true }).catch(() => undefined)
+    }
+  }
 
   const pdf = await readFile(pdfPath)
   const totalSlides = countPdfPages(pdf)

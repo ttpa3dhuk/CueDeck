@@ -8,6 +8,7 @@ import type { SlideAudioCue, SlideForegroundActor, SlideForegroundMotion, SlideI
 import { requestedFonts } from './pptx-fonts.js'
 import { isAnimatedGif } from '../shared/gif.js'
 import { pptxSlideTransition } from '../shared/pptx-transition.js'
+import { LINK_BACKDROPS_PDF } from '../shared/slide-link-backdrop.js'
 
 /**
  * PPTX-препроцессор перед конвертацией в PDF. Закрывает две фичи:
@@ -37,6 +38,7 @@ import { pptxSlideTransition } from '../shared/pptx-transition.js'
 
 /** Расширения, которые Chromium играет нативно — только их несём в manifest. */
 const PLAYABLE_EXTS = new Set(['mp4', 'm4v', 'mov', 'webm'])
+const AUDIO_EXTS = new Set(['mp3', 'm4a', 'wav'])
 /** Всё видеообразное стрипаем из копии для LibreOffice (вес PDF). */
 const STRIP_EXTS = new Set([...PLAYABLE_EXTS, 'avi', 'wmv', 'mpg', 'mpeg', 'mkv', '3gp', 'asf'])
 
@@ -634,17 +636,59 @@ function interactiveSequences(slideXml: string): Array<{ shape: string; sequence
 }
 
 function playCommands(sequence: string, entry = false): Array<{ shape: string; delayMs: number }> {
-  return timedEffects(sequence, entry).flatMap(({ xml, startMs }) => topLevelBlocks(xml, 'p:cmd').flatMap(command => {
-    const { cmd } = attrsOf(command.match(/^<p:cmd\b[^>]*>/)?.[0] ?? '')
-    const shape = attrsOf(command.match(/<p:spTgt\b[^>]*>/)?.[0] ?? '').spid
-    const delay = Number(attrsOf(command.match(/<p:stCondLst>\s*<p:cond\b[^>]*>/)?.[0] ?? '').delay ?? 0)
-    return /^playFrom\(0(?:\.0+)?\)$/.test(cmd) && shape && Number.isFinite(delay) && delay >= 0 && startMs + delay <= 60_000
-      ? [{ shape, delayMs: startMs + delay }] : []
-  }))
+  return timedEffects(sequence, entry).flatMap(({ xml, startMs }) => {
+    return topLevelBlocks(xml, 'p:cmd').flatMap(command => {
+      const { cmd } = attrsOf(command.match(/^<p:cmd\b[^>]*>/)?.[0] ?? '')
+      const shape = attrsOf(command.match(/<p:spTgt\b[^>]*>/)?.[0] ?? '').spid
+      const delay = Number(attrsOf(command.match(/<p:stCondLst>\s*<p:cond\b[^>]*>/)?.[0] ?? '').delay ?? 0)
+      return /^playFrom\(0(?:\.0+)?\)$/.test(cmd) && shape && Number.isFinite(delay) && delay >= 0 && startMs + delay <= 60_000
+        ? [{ shape, delayMs: startMs + delay }] : []
+    })
+  })
+}
+
+/** Main-sequence click groups include sound-only steps omitted by parseClickSteps. */
+function advanceAudioCommands(slideXml: string): Array<{ shape: string; delayMs: number; step: number }> {
+  // Visual click groups become separate CueDeck pages. Their next events need
+  // page-aware cue mapping; support sound-only sequences without that ambiguity.
+  if (parseClickSteps(slideXml).length) return []
+  const sequence = mainSequence(slideXml)
+  const list = findBalanced(sequence, 'p:childTnLst')
+  if (!list) return []
+  const commands: Array<{ shape: string; delayMs: number; step: number }> = []
+  let step = 0
+  for (const group of topLevelBlocks(sequence.slice(list.start, list.end), 'p:par')) {
+    const effects = [...group.matchAll(/<p:cTn\b[^>]*presetClass="[^"]+"[^>]*>/g)]
+    const click = effects.some(tag => attrsOf(tag[0]).nodeType === 'clickEffect')
+    // A group without a click anchor is automatic, unless it waits indefinitely
+    // without an onBegin condition; the latter cannot be mapped to a Next step.
+    if (!click) {
+      const head = group.slice(0, group.indexOf('<p:childTnLst>'))
+      if (/delay="indefinite"/.test(head) && !/evt="onBegin"/.test(head)) return []
+      continue
+    }
+    // Visual effects require page-aware state. Do not emit audio early.
+    if (effects.some(tag => attrsOf(tag[0]).presetClass !== 'mediacall')) return []
+    step++
+    for (const tag of effects) {
+      const { nodeType } = attrsOf(tag[0])
+      if (!['clickEffect', 'withEffect', 'afterEffect'].includes(nodeType)) continue
+      const effect = findBalanced(group, 'p:cTn', tag.index)
+      if (!effect) continue
+      const xml = group.slice(effect.start, effect.end)
+      const delay = Number(attrsOf(xml.match(/<p:stCondLst>\s*<p:cond\b[^>]*>/)?.[0] ?? '').delay ?? 0)
+      if (!Number.isFinite(delay) || delay < 0 || delay > 60_000) continue
+      for (const command of playCommands(xml)) {
+        if (delay + command.delayMs <= 60_000) commands.push({ ...command, delayMs: delay + command.delayMs, step })
+      }
+    }
+  }
+  return commands
 }
 
 function inlineAudioCues(slideXml: string, shapes: Map<string, string>, rels: Map<string, string>, menuTrigger?: string) {
   const enter = playCommands(mainSequence(slideXml), true)
+  const advances = advanceAudioCommands(slideXml)
   const clicks = interactiveSequences(slideXml).map(({ shape, sequence }) => ({ shape, commands: playCommands(sequence) }))
   const cues: Array<{ mediaEntry: string; cue: SlideAudioCue }> = []
   for (const [shapeId, shape] of shapes) {
@@ -652,11 +696,14 @@ function inlineAudioCues(slideXml: string, shapes: Map<string, string>, rels: Ma
     const target = sound && rels.get(attrsOf(sound)['r:link'])
     if (!target) continue
     const mediaEntry = normalizeSlideTarget(target)
-    if (extOf(mediaEntry) !== 'mp3') continue
+    if (!AUDIO_EXTS.has(extOf(mediaEntry))) continue
     const settings = mediaTiming(slideXml, 'p:audio', shapeId) ?? { volume: 1, loop: false }
     const file = mediaFileName(mediaEntry)
     for (const command of enter) if (command.shape === shapeId) {
       cues.push({ mediaEntry, cue: { ...settings, file, trigger: 'enter', delayMs: command.delayMs } })
+    }
+    for (const command of advances) if (command.shape === shapeId) {
+      cues.push({ mediaEntry, cue: { ...settings, file, trigger: 'advance', step: command.step, delayMs: command.delayMs } })
     }
     for (const click of clicks) for (const command of click.commands) if (command.shape === shapeId) {
       const trigger = click.shape === menuTrigger ? { trigger: 'menu' as const } : { trigger: 'click' as const, shape: click.shape }
@@ -670,6 +717,19 @@ function slideAudioShapes(contents: string): Map<string, string> {
   const ungrouped = topLevelBlocks(contents, 'p:grpSp').reduce((out, group) => out.replace(group, ''), contents)
   return new Map(SHAPE_TAGS.flatMap(tag => topLevelBlocks(ungrouped, tag)).map(shape =>
     [attrsOf(shape.match(/<p:cNvPr\b[^>]*>/)?.[0] ?? '').id, shape]))
+}
+
+/** A transition can appear in both mc:Choice and mc:Fallback. Play it once. */
+function transitionAudioCue(slideXml: string, rels: Map<string, string>, hasEntry: (entry: string) => boolean) {
+  for (const transition of topLevelBlocks(slideXml, 'p:transition')) {
+    const sound = transition.match(/<p:sndAc\b[\s\S]*?<p:snd\b[^>]*>/)?.[0]
+    const target = sound && rels.get(attrsOf(sound.match(/<p:snd\b[^>]*>/)?.[0] ?? '')['r:embed'])
+    if (!target) continue
+    const mediaEntry = normalizeSlideTarget(target)
+    if (!AUDIO_EXTS.has(extOf(mediaEntry)) || !hasEntry(mediaEntry)) continue
+    return { mediaEntry, cue: { file: mediaFileName(mediaEntry), volume: 1, loop: false, trigger: 'enter' as const, delayMs: 0 } }
+  }
+  return undefined
 }
 
 interface FoundVideo {
@@ -975,6 +1035,38 @@ function shapeSlideLinks(shapes: Iterable<string>, rels: Map<string, string>, pa
   })
 }
 
+/** A linked picture whose only authored click effect hides that same picture in 1 ms. */
+function linkedSelfHideShapes(xml: string, shapes: Map<string, string>, links: ReturnType<typeof shapeSlideLinks>): Map<string, SlideMedia['rect']> {
+  const linked = new Map(links.map(link => [link.shape, link]))
+  const candidates = new Map<string, SlideMedia['rect']>()
+  for (const { shape, sequence } of interactiveSequences(xml)) {
+    const picture = shapes.get(shape)
+    const link = linked.get(shape)
+    if (!picture?.startsWith('<p:pic') || !link || candidates.has(shape)) continue
+    const transform = picture.match(/<a:xfrm\b([^>]*)>/)?.[0]
+    if (!transform || Number(attrsOf(transform).rot ?? 0) !== 0) continue
+    const effects = [...sequence.matchAll(/<p:cTn\b[^>]*presetClass="[^"]+"[^>]*>/g)]
+    const sets = topLevelBlocks(sequence, 'p:set')
+    if (effects.length !== 1 || !/presetClass="exit"/.test(effects[0][0]) || sets.length !== 1 || /<p:(?:cmd|anim|animEffect)\b/.test(sequence)) continue
+    const effect = findBalanced(sequence, 'p:cTn', effects[0].index)
+    if (!effect || attrsOf(effects[0][0]).nodeType !== 'clickEffect') continue
+    const body = sequence.slice(effect.start, effect.end)
+    const set = sets[0]
+    if (!body.includes(set) || !/<p:attrName>style\.visibility<\/p:attrName>/.test(set) || !/<p:strVal\b[^>]*val="hidden"/.test(set)) continue
+    if (attrsOf(set.match(/<p:spTgt\b[^>]*>/)?.[0] ?? '').spid !== shape) continue
+    const duration = Number(attrsOf(set.match(/<p:cTn\b[^>]*>/)?.[0] ?? '').dur)
+    if (!Number.isFinite(duration) || duration < 0 || duration > 1) continue
+    if ([...sequence.matchAll(/<p:cond\b[^>]*>/g)].some(cond => attrsOf(cond[0]).delay !== '0')) continue
+    candidates.set(shape, link.rect)
+  }
+  const rects = [...candidates.values()]
+  for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {
+    const a = rects[i], b = rects[j]
+    if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) return new Map()
+  }
+  return candidates
+}
+
 /** Read the PowerPoint coordinate expressions used by directional builds. */
 function motionCoordinate(value: string, rect: SlideMedia['rect']): number | null {
   const expression = value.replace(/[#\s]/g, '')
@@ -1039,6 +1131,8 @@ function parseForegroundActors(sequence: string, shapes: Map<string, string>, wi
     if (!id || !rect) continue
     const from = { x: 0, y: 0, opacity: 1 }, to = { ...from }
     let durationMs = 0
+    let opacityFrames: SlideForegroundActor['opacityFrames']
+    let scaleFrames: SlideForegroundActor['scaleFrames']
     const duration = (command: string): number => {
       const ms = Number(attrsOf(command.match(/<p:cTn\b[^>]*>/)?.[0] ?? '').dur)
       return Number.isFinite(ms) && ms > 0 && ms <= 10_000 ? ms : 0
@@ -1058,7 +1152,29 @@ function parseForegroundActors(sequence: string, shapes: Map<string, string>, wi
       if (fade.filter !== 'fade') continue
       from.opacity = fade.transition === 'in' ? 0 : 1
       to.opacity = fade.transition === 'out' ? 0 : 1
-      durationMs = Math.max(durationMs, duration(command))
+      const ms = duration(command)
+      const filter = attrsOf(command.match(/<p:cTn\b[^>]*>/)?.[0] ?? '').tmFilter
+      if (ms && filter) {
+        const points = filter.split(';').map(pair => pair.trim().split(',').map(Number))
+        if (points.length >= 2 && points.every(pair => pair.length === 2 && pair.every(Number.isFinite) && pair[0] >= 0 && pair[0] <= 1 && pair[1] >= 0 && pair[1] <= 1)) {
+          opacityFrames = points.map(([time, value]) => ({ timeMs: Math.round(time * ms), value: fade.transition === 'out' ? 1 - value : value }))
+          from.opacity = opacityFrames[0].value
+          to.opacity = opacityFrames.at(-1)!.value
+        }
+      }
+      durationMs = Math.max(durationMs, ms)
+    }
+    for (const command of topLevelBlocks(effect, 'p:animScale')) {
+      const tag = attrsOf(command.match(/<p:animScale\b[^>]*>/)?.[0] ?? '')
+      const timing = attrsOf(command.match(/<p:cTn\b[^>]*>/)?.[0] ?? '')
+      const by = attrsOf(command.match(/<p:by\b[^>]*>/)?.[0] ?? '')
+      const sx = Number(by.x) / 100_000, sy = Number(by.y) / 100_000
+      const ms = duration(command)
+      if (!ms || !Number.isFinite(sx) || sx <= 0 || sx !== sy || sx > 4) continue
+      scaleFrames = timing.autoRev === '1'
+        ? [{ timeMs: 0, value: 1 }, { timeMs: ms, value: sx }, { timeMs: ms * 2, value: 1 }]
+        : [{ timeMs: 0, value: 1 }, { timeMs: ms, value: sx }]
+      durationMs = Math.max(durationMs, scaleFrames.at(-1)!.timeMs)
     }
     const rotations: NonNullable<SlideForegroundActor['rotations']> = [{ timeMs: 0, degrees: 0 }]
     if (attrs.repeatCount === 'indefinite') for (const command of topLevelBlocks(effect, 'p:animRot')) {
@@ -1080,7 +1196,8 @@ function parseForegroundActors(sequence: string, shapes: Map<string, string>, wi
     }
     if (!durationMs) continue
     if (attrs.presetClass === 'exit' && to.opacity === 1 && !to.x && !to.y) to.opacity = 0
-    const motion = { startMs, durationMs, from, to, ...(rotations.length > 1 ? { rotations } : {}) }
+    const motion = { startMs, durationMs, from, to, ...(rotations.length > 1 ? { rotations } : {}),
+      ...(opacityFrames ? { opacityFrames } : {}), ...(scaleFrames ? { scaleFrames } : {}) }
     const existing = actors.find(actor => actor.id === id)
     if (existing) {
       const previous = existing.following?.at(-1) ?? existing
@@ -1236,6 +1353,7 @@ interface NativeFrameRequest { slidePath: string; shapeId: string; targetY: numb
 interface TransformResult {
   nativeFrames?: Record<string, NativeFrameRequest>
   foregroundPages?: Array<{ path: string; xml: string }>
+  linkBackdropPages?: Array<{ path: string; xml: string }>
   audioEntries?: Set<string>
   /** null — пересборка не нужна (нет ни видео, ни клик-анимаций). */
   zip: Buffer | null
@@ -1335,6 +1453,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
   }))
   const slideBuilds: Record<number, SlideBuildAnimation> = {}
   const slideLinks: Record<number, SlideVideoLink[]> = {}
+  const linkBackdropPages: NonNullable<TransformResult['linkBackdropPages']> = []
   const slideKiosk = /<p:kiosk\b/.test(text('ppt/presProps.xml') ?? '')
   const pageByPath = new Map(pres.slidePaths.map((path, index) => [path, firstPage[index]]))
   pres.slidePaths.forEach((path, index) => {
@@ -1350,12 +1469,24 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
       .sort((left, right) => ungrouped.indexOf(left) - ungrouped.indexOf(right))
     const rels = parseRels(text(relsPathOf(path)) ?? '', SLIDE_REL_TYPE)
     const steps = stepsBySlide.get(index) ?? []
+    const shapeById = new Map(shapes.map(shape => [attrsOf(shape.match(/<p:cNvPr\b[^>]*>/)?.[0] ?? '').id, shape]))
+    const linked = shapeSlideLinks(shapes, rels, path, pres.slideW, pres.slideH)
+    const selfHide = !steps.length && !videoSlides.has(index)
+      ? linkedSelfHideShapes(xml, shapeById, linked) : new Map<string, SlideMedia['rect']>()
+    const backdropPage = selfHide.size ? linkBackdropPages.length + 1 : 0
+    if (backdropPage) {
+      const timing = findBalanced(xml, 'p:timing')
+      let backdrop = timing ? xml.slice(0, timing.start) + xml.slice(timing.end) : xml
+      for (const shape of selfHide.keys()) backdrop = removeShape(backdrop, shape)
+      linkBackdropPages.push({ path, xml: backdrop })
+    }
     for (let step = 0; step <= steps.length; step++) {
       const hidden = new Set(steps.slice(step).flat().filter(target => target.whole).map(target => target.spid))
       const shown = shapes.filter(shape => !hidden.has(shape.match(/<p:cNvPr id="(\d+)"/)?.[1] ?? ''))
       const links = shapeSlideLinks(shown, rels, path, pres.slideW, pres.slideH).flatMap(jump => {
         const slide = pageByPath.get(jump.path)
-        return slide && jump.path !== path ? [{ slide, rect: jump.rect, label: jump.label }] : []
+        return slide && jump.path !== path ? [{ slide, rect: jump.rect, label: jump.label,
+          ...(backdropPage && selfHide.has(jump.shape) ? { hideAfterVisit: { shape: jump.shape, page: backdropPage } } : {}) }] : []
       })
       if (links.length) slideLinks[page + step] = links
     }
@@ -1490,6 +1621,22 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
       }
     }
   }
+  const appendForeground = (path: string, state: string, video = ''): void => {
+    let foreground = video ? removeShape(state, video) : state
+    const timing = findBalanced(foreground, 'p:timing')
+    if (timing) foreground = foreground.slice(0, timing.start) + foreground.slice(timing.end)
+    for (const picture of topLevelBlocks(foreground, 'p:pic'))
+      if (/<a:audioFile\b/.test(picture)) foreground = foreground.replace(picture, '')
+    foreground = foreground.replace(/<a:hlink(?:Click|Hover)\b[^>]*(?:\/>|>[\s\S]*?<\/a:hlink(?:Click|Hover)>)/g, '')
+    for (const color of ['000000', 'FFFFFF']) {
+      const background = `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`
+      const frame = foreground.replace(/<p:sld(?=[\s>])([^>]*)>/, (_tag, attrs: string) =>
+        `<p:sld${attrs.replace(/\s+showMasterSp="[^"]*"/, '')} showMasterSp="0">`)
+        .replace(/<p:cSld\b[^>]*>(?:\s*<p:bg\b[^>]*>[\s\S]*?<\/p:bg>)?/, start =>
+          start.replace(/<p:bg\b[\s\S]*/, '') + background)
+      foregroundPages.push({ path, xml: frame })
+    }
+  }
   if (renderer === 'powerpoint') {
     const scenes = new Map(videos.flatMap((video, index) => {
       if (!video.shapeId || video.kind === 'gif' ||
@@ -1501,23 +1648,6 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
       const rels = parseRels(text(relsPathOf(path)) ?? '', SLIDE_REL_TYPE)
       return [[path, { index, xml, shapes, rels, video, shapeId: video.shapeId }] as const]
     }))
-    const appendForeground = (path: string, state: string, video: string): void => {
-      let foreground = removeShape(state, video)
-      const timing = findBalanced(foreground, 'p:timing')
-      if (timing) foreground = foreground.slice(0, timing.start) + foreground.slice(timing.end)
-      for (const picture of topLevelBlocks(foreground, 'p:pic')) {
-        if (/<a:audioFile\b/.test(picture)) foreground = foreground.replace(picture, '')
-      }
-      foreground = foreground.replace(/<a:hlink(?:Click|Hover)\b[^>]*(?:\/>|>[\s\S]*?<\/a:hlink(?:Click|Hover)>)/g, '')
-      for (const color of ['000000', 'FFFFFF']) {
-        const background = `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`
-        const xml = foreground.replace(/<p:sld(?=[\s>])([^>]*)>/, (_tag, attrs: string) =>
-          `<p:sld${attrs.replace(/\s+showMasterSp="[^"]*"/, '')} showMasterSp="0">`)
-          .replace(/<p:cSld\b[^>]*>(?:\s*<p:bg\b[^>]*>[\s\S]*?<\/p:bg>)?/, start =>
-            start.replace(/<p:bg\b[\s\S]*/, '') + background)
-        foregroundPages.push({ path, xml })
-      }
-    }
     const appendMotion = (path: string, original: string, state: string, video: string, shapes: Map<string, string>, sequence: string): SlideForegroundMotion | undefined => {
       const actors = parseForegroundActors(sequence, shapes, pres.slideW, pres.slideH)
         .filter(actor => actor.id !== video).slice(0, 16)
@@ -1549,7 +1679,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
       const { audio, clickActions, linked } = collectAudio(path, xml, shapes, rels, video?.shapeId)
       const ordered = [...shapes].sort((a, b) => contents.indexOf(a[1]) - contents.indexOf(b[1]))
         .filter(([, shape]) => !/<a:audioFile\b/.test(shape))
-      const targets = new Map<string, { rect: SlideMedia['rect']; initiallyHidden: boolean }>()
+      const targets = new Map<string, { rect: SlideMedia['rect']; pivot: { x: number; y: number }; initiallyHidden: boolean }>()
       const sequences = !videos.some(item => item.slideIdx === index) && !stepsBySlide.has(index) && !/<p:grpSp\b|<mc:AlternateContent\b/.test(contents)
         ? interactiveSequences(xml) : []
       const triggers: SlideTrigger[] = sequences.flatMap(({ shape, sequence, restart }, i) => {
@@ -1558,9 +1688,9 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
         if (!rect || linked.some(link => link.shape === shape)) return []
         const actors = parseForegroundActors(sequence, shapes, pres.slideW, pres.slideH, true)
         if (!actors.length || actors.some(actor => !ordered.some(([id]) => id === actor.id))) return []
-        const effects = actors.flatMap(({ id, rect, pivot: _pivot, following, ...step }) => {
+        const effects = actors.flatMap(({ id, rect, pivot, following, ...step }) => {
           if (!targets.has(id) || step.from.opacity === 0)
-            targets.set(id, { rect, initiallyHidden: step.from.opacity === 0 || step.to.opacity === 1 && Boolean(step.from.x || step.from.y) })
+            targets.set(id, { rect, pivot, initiallyHidden: step.from.opacity === 0 || step.to.opacity === 1 && Boolean(step.from.x || step.from.y) })
           return [step, ...(following ?? [])].map(item => ({ ...item, shape: id }))
         })
         const label = decodeXml(attrsOf(button.match(/<p:cNvPr\b[^>]*>/)?.[0] ?? '').name || shape)
@@ -1675,8 +1805,110 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
     }
   }
 
+  // Only verified object patterns can use this layer path without slide video:
+  // a fade/scale click beside linked self-hide cells, or automatic indefinite
+  // rotation chains. Other visual effects retain the static PDF fallback.
+  for (const [index, path] of pres.slidePaths.entries()) {
+    const page = firstPage[index]
+    const xml = text(path) ?? ''
+    if (!page || foregroundPages.length >= 500 || videos.some(item => item.slideIdx === index) || stepsBySlide.has(index) ||
+        !/<p:timing>/.test(xml) || /<p:grpSp\b/.test(xml)) continue
+    if (slideMedia.some(item => item.slide === page && item.interactive)) continue
+    const tree = findBalanced(xml, 'p:spTree')
+    if (!tree) continue
+    const contents = xml.slice(tree.start, tree.end)
+    if (/<mc:AlternateContent\b/.test(contents)) continue
+    const shapes = slideAudioShapes(contents)
+    const ordered = [...shapes].sort((a, b) => contents.indexOf(a[1]) - contents.indexOf(b[1]))
+      .filter(([, shape]) => !/<a:audioFile\b/.test(shape))
+    const main = mainSequence(xml)
+    const mainEffects = main ? timedEffects(main, true) : []
+    const visual = mainEffects.filter(({ xml: effect }) => /<p:(?:animRot|animEffect|animScale|animMotion|anim)\b/.test(effect))
+    const repeated = visual.filter(({ xml: effect }) => {
+      const attrs = attrsOf(effect.match(/^<p:cTn\b[^>]*>/)?.[0] ?? '')
+      return attrs.presetClass === 'emph' && ['withEffect', 'afterEffect'].includes(attrs.nodeType) &&
+        attrs.repeatCount === 'indefinite' && /<p:animRot\b/.test(effect) &&
+        !/<p:(?:animEffect|animScale|animMotion|anim)\b/.test(effect)
+    })
+    const automatic = repeated.length && repeated.length === visual.length
+      ? parseForegroundActors(main, shapes, pres.slideW, pres.slideH)
+        .filter(actor => actor.rotations && actor.rotations.length >= 2 && actor.durationMs > 0 && actor.durationMs <= 60_000 && !actor.following?.length)
+      : []
+    const autoScene = automatic.length >= 1 && automatic.length <= 4 &&
+      automatic.length === repeated.length && interactiveSequences(xml).length === 0 &&
+      new Set(automatic.map(actor => actor.id)).size === automatic.length &&
+      automatic.every(actor => ordered.some(([id]) => id === actor.id))
+    const sequences = interactiveSequences(xml)
+    const click = sequences.filter(item =>
+      /<p:animEffect\b[^>]*filter="fade"/.test(item.sequence) && /<p:animScale\b/.test(item.sequence))
+    const linkedHidden = new Set((slideLinks[page] ?? []).flatMap(link => link.hideAfterVisit ? [link.hideAfterVisit.shape] : []))
+    const clicked = !autoScene && click.length === 1
+      ? parseForegroundActors(click[0].sequence, shapes, pres.slideW, pres.slideH, true)
+        .filter(actor => actor.id === click[0].shape && actor.opacityFrames?.length && actor.scaleFrames?.length)
+      : []
+    const clickScene = Boolean(clicked.length === 1 &&
+      sequences.every(item => item === click[0] || linkedHidden.has(item.shape)) &&
+      !(slideLinks[page] ?? []).some(link => link.triggerShape === click[0].shape))
+    if (!autoScene && !clickScene) continue
+    const actors = autoScene ? automatic : clicked!
+    const targets = new Map(actors.map(actor => [actor.id, actor]))
+    const timing = findBalanced(xml, 'p:timing')!
+    const still = xml.slice(0, timing.start) + xml.slice(timing.end)
+    const select = (keep: Set<string>, source: string): string =>
+      [...shapes.keys()].reduce((out, id) => keep.has(id) ? out : removeShape(out, id), source)
+    const first = foregroundPages.length + 1
+    const firstActor = ordered.findIndex(([id]) => targets.has(id))
+    if (firstActor < 0) continue
+    foregroundPages.push({ path, xml: select(new Set(ordered.slice(0, firstActor).map(([id]) => id)), still) })
+    const layers: SlideInteractiveLayer[] = []
+    let staticShapes = new Set<string>()
+    const flush = (): void => {
+      if (!staticShapes.size) return
+      layers.push({ page: foregroundPages.length + 1, rect: { x: 0, y: 0, w: 1, h: 1 } })
+      appendForeground(path, select(staticShapes, still))
+      staticShapes = new Set()
+    }
+    for (const [id] of ordered.slice(firstActor)) {
+      const actor = targets.get(id)
+      if (!actor) { staticShapes.add(id); continue }
+      flush()
+      layers.push({ page: foregroundPages.length + 1, shape: id, rect: actor.rect,
+        pivot: actor.pivot, initiallyHidden: actor.from.opacity === 0 })
+      appendForeground(path, select(new Set([id]), still))
+    }
+    flush()
+    const effects = actors.flatMap(({ id, rect: _rect, pivot: _pivot, following, ...step }) =>
+      [step, ...(following ?? [])].map(item => ({ ...item, shape: id })))
+    const triggers: SlideTrigger[] = clickScene ? [{ id: '0', shape: click[0].shape,
+      rect: hotspotRect(shapes.get(click[0].shape)!, pres.slideW, pres.slideH)!,
+      label: decodeXml(attrsOf(shapes.get(click[0].shape)!.match(/<p:cNvPr\b[^>]*>/)?.[0] ?? '').name || click[0].shape),
+      restart: click[0].restart, durationMs: Math.max(...effects.map(effect => effect.startMs + effect.durationMs)), effects }] : []
+    const interactive = { file: 'video-foreground.pdf', firstPage: first, layers, triggers,
+      ...(autoScene ? { autoEffects: effects } : {}) }
+    compatibleSlides.set(path, Buffer.from(actors.reduce((source, actor) => removeShape(source, actor.id), still)))
+    const media = slideMedia.find(item => item.slide === page && item.kind !== 'gif')
+    if (media) { media.interactive = interactive; media.kind = 'interactive' }
+    else slideMedia.push({ kind: 'interactive', slide: page, file: interactive.file,
+      rect: { x: 0, y: 0, w: 1, h: 1 }, interactive })
+  }
+
+  for (const [index, path] of pres.slidePaths.entries()) {
+    const page = firstPage[index]
+    if (!page) continue
+    const xml = text(path) ?? ''
+    if (!xml.includes('<p:sndAc')) continue
+    const rels = parseRels(text(relsPathOf(path)) ?? '')
+    const sound = transitionAudioCue(xml, rels, entry => byName.has(entry))
+    if (!sound) continue
+    audioEntries.add(sound.mediaEntry)
+    const media = slideMedia.find(item => item.slide === page && item.kind !== 'gif')
+    if (media) media.audio = [...(media.audio ?? []), sound.cue]
+    else slideMedia.push({ kind: 'audio', slide: page, file: sound.cue.file,
+      rect: { x: 0, y: 0, w: 1, h: 1 }, audio: [sound.cue] })
+  }
+
   const requiresFreshPdf = compatibleSlides.size > 0 || gifs.length > 0
-  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0 && compatibleSlides.size === 0) return { zip: null, slideMedia, slideTransitions, slideNumbering, slideBuilds, slideLinks, slideKiosk, nativeFrames, foregroundPages, audioEntries, videos, pageNotes, fonts, requiresFreshPdf }
+  if (strip.size === 0 && stepsBySlide.size === 0 && gifs.length === 0 && compatibleSlides.size === 0) return { zip: null, slideMedia, slideTransitions, slideNumbering, slideBuilds, slideLinks, slideKiosk, nativeFrames, foregroundPages, linkBackdropPages, audioEntries, videos, pageNotes, fonts, requiresFreshPdf }
 
   const replace = new Map(compatibleSlides)
   const add: { name: string; data: Buffer }[] = []
@@ -1755,7 +1987,7 @@ function transformPptx(data: Buffer, entries: ZipEntry[], renderer: 'libreoffice
       }
     }
   }
-  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, slideTransitions, slideNumbering, slideBuilds, slideLinks, slideKiosk, nativeFrames, foregroundPages, audioEntries, videos, pageNotes, fonts, requiresFreshPdf }
+  return { zip: rebuildZip(data, entries, { strip, replace, add }), slideMedia, slideTransitions, slideNumbering, slideBuilds, slideLinks, slideKiosk, nativeFrames, foregroundPages, linkBackdropPages, audioEntries, videos, pageNotes, fonts, requiresFreshPdf }
 }
 
 /** A short frame deck preserves PowerPoint z-order, including static text above a moving picture. */
@@ -1798,7 +2030,7 @@ function nativeFrameDeck(data: Buffer, request: NativeFrameRequest): Buffer {
   return frameDeck(data, pages)
 }
 
-function frameDeck(data: Buffer, pages: Array<{ path: string; xml: string }>, foreground = false): Buffer {
+function frameDeck(data: Buffer, pages: Array<{ path: string; xml: string }>, foreground = false, backdrop = false): Buffer {
   const entries = parseZip(data)
   const byName = new Map(entries.map(entry => [entry.name, entry]))
   const read = (name: string): string => {
@@ -1818,11 +2050,28 @@ function frameDeck(data: Buffer, pages: Array<{ path: string; xml: string }>, fo
     const path = `ppt/slides/${name}`
     const rid = `rIdCuedeckFrame${index}`
     if (byName.has(path)) throw new Error('Native frame name collision')
-    add.push({ name: path, data: Buffer.from(page.xml) })
+    // Foreground pages are silent. Their audio relationships are omitted below,
+    // so transition sound actions must go too or PowerPoint repairs the deck.
+    let xml = foreground
+      ? page.xml.replace(/<p:sndAc\b[^>]*(?:\/>|>[\s\S]*?<\/p:sndAc>)/g, '')
+      : page.xml
+    if (backdrop) xml = xml
+      .replace(/<a:hlink(?:Click|Hover)\b[^>]*(?:\/>|>[\s\S]*?<\/a:hlink(?:Click|Hover)>)/g, '')
+      .replace(/<a:(?:audioFile|videoFile)\b[^>]*(?:\/>|>[\s\S]*?<\/a:(?:audioFile|videoFile)>)/g, '')
+      .replace(/<p14:media\b[^>]*(?:\/>|>[\s\S]*?<\/p14:media>)/g, '')
+    add.push({ name: path, data: Buffer.from(xml) })
     const pageRels = read(relsPathOf(page.path))
-    add.push({ name: relsPathOf(path), data: Buffer.from(foreground
+    let keptRels = foreground
       ? omitRelationships(pageRels, ['slide', 'notesSlide', 'audio', 'video', 'media', 'hyperlink'])
-      : pageRels) })
+      : pageRels
+    if (backdrop) {
+      const used = new Set([...xml.matchAll(/\br:[\w-]+="([^"]+)"/g)].map(match => match[1]))
+      keptRels = keptRels.replace(/<Relationship\b[^>]*\/>/g, tag => {
+        const rel = attrsOf(tag)
+        return used.has(rel.Id) || rel.Type?.endsWith('/slideLayout') ? tag : ''
+      })
+    }
+    add.push({ name: relsPathOf(path), data: Buffer.from(keptRels) })
     slides.push(`<p:sldId id="${10000 + index}" r:id="${rid}"/>`)
     relationships = relationships.replace('</Relationships>', `<Relationship Id="${rid}" Type="${SLIDE_REL_TYPE}" Target="slides/${name}"/></Relationships>`)
     types = types.replace('</Types>', `<Override PartName="/${path}" ContentType="${SLIDE_CONTENT_TYPE}"/></Types>`)
@@ -1999,6 +2248,12 @@ export async function preparePptxMedia(
       const file = 'video-foreground.pdf'
       const sourcePath = join(roots.writeDir, `${sha1}.${file}.pptx`)
       await writeFile(sourcePath, frameDeck(data, t.foregroundPages, true))
+      nativeFrameSources.push({ file, sourcePath })
+    }
+    if (t.linkBackdropPages?.length) {
+      const file = LINK_BACKDROPS_PDF
+      const sourcePath = join(roots.writeDir, `${sha1}.${file}.pptx`)
+      await writeFile(sourcePath, frameDeck(data, t.linkBackdropPages, true, true))
       nativeFrameSources.push({ file, sourcePath })
     }
     const parsed = { ...original, ...(nativeFrameSources.length ? {nativeFrameSources} : {}), slideMedia: t.slideMedia, slideTransitions: t.slideTransitions, slideNumbering: t.slideNumbering, slideBuilds: t.slideBuilds ?? {}, slideLinks: t.slideLinks ?? {}, slideKiosk: t.slideKiosk === true, pageNotes: t.pageNotes, fonts: t.fonts }

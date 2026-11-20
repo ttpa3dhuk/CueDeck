@@ -6,6 +6,7 @@ import { cachedPdfPathFor } from './pptx-converter'
 import { SharedPdfRegistry, type PdfDeckSource } from './shared-pdf-registry'
 import type { DeckFileData } from '../shared/pdf-source'
 import type { PdfOwnerRequest, PdfOwnerReply, SharedPdfInfo } from '../shared/pdf-frames'
+import { activeLinkBackdrop } from '../shared/slide-link-backdrop.js'
 import { masterPdfRaster } from '../shared/pdf-frame-geometry'
 
 const roles: WindowKey[] = ['operator', 'audience', 'speaker', 'gpu-prompter']
@@ -112,7 +113,10 @@ async function synchronize(): Promise<void> {
       const sources = await registry.reconcile(decks(), (source, error) => log.warn('[shared-pdf] unavailable revision', source.sha1, String(error)))
       if (wanted !== signature()) continue
       if (!sources.length && !owner) { synchronized = wanted; return }
-      await command({ type: 'sync', sources, animationSha: store.get().fileKind === 'pptx' ? store.get().pdfSha1 : null })
+      const state = store.get()
+      const animationSha = state.fileKind === 'pptx' ? state.pdfSha1 : null
+      await command({ type: 'sync', sources, animationSha,
+        animationRevision: animationSha ? cachedPdfPathFor(animationSha) : null })
       activeIds = new Set(sources.map(source => source.id))
       if (wanted !== signature()) continue
       synchronized = wanted
@@ -184,7 +188,8 @@ export function registerSharedPdfFrames(): void {
   ipcMain.handle('pdf-frames:compose', async (event, asset: import('../shared/pdf-frames').AnimationAsset, scene: import('../shared/pdf-frames').AnimationComposition) => {
     assertConsumer(event)
     const state=store.get()
-    if (!asset || state.pdfSha1!==asset.sha || !state.slideMedia.some(m=>m.slide===state.currentSlide && (m.foreground?.file===asset.file || m.interactive?.file===asset.file))) throw new Error('Inactive animation')
+    if (!asset || state.pdfSha1!==asset.sha || !(activeLinkBackdrop(asset.file, state.slideLinks?.[state.currentSlide]) ||
+      state.slideMedia.some(m=>m.slide===state.currentSlide && (m.foreground?.file===asset.file || m.interactive?.file===asset.file)))) throw new Error('Inactive animation')
     if (!scene || !Number.isInteger(scene.width) || !Number.isInteger(scene.height) || scene.width<1 || scene.height<1 || scene.width*scene.height>4*1024*1024 ||
         !Array.isArray(scene.sprites) || scene.sprites.length>1024 || !scene.sprites.every(s=>validRegion(s.region) &&
           Array.isArray(s.transform) && s.transform.length===6 && s.transform.every(Number.isFinite) &&
@@ -195,7 +200,8 @@ export function registerSharedPdfFrames(): void {
     assertConsumer(event)
     const state = store.get()
     if (asset?.sha !== state.pdfSha1 || typeof asset.file !== 'string' ||
-        !(state.slideMedia.some(m => m.foreground?.file === asset.file || m.interactive?.file === asset.file) ||
+        !(activeLinkBackdrop(asset.file, state.slideLinks?.[state.currentSlide]) ||
+          state.slideMedia.some(m => m.foreground?.file === asset.file || m.interactive?.file === asset.file) ||
           Object.values(state.slideBuilds ?? {}).some(b => b.framesFile === asset.file))) throw new Error('Inactive animation asset')
     if (region && !validRegion(region)) throw new Error('Invalid animation region')
     return command({ type: 'animation', asset, region })

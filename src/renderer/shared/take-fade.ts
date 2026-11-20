@@ -240,7 +240,8 @@ export class TakeFade {
       source instanceof HTMLCanvasElement && getComputedStyle(source).display !== 'none' && source.clientWidth > 0)
     const slide = reference ? canvasContentBox(reference) : host
     const area = { x: slide.left - host.left, y: slide.top - host.top, width: slide.width, height: slide.height }
-    const offset = 'direction' in effect ? pushOffset(effect.direction, area.width, area.height) : { x: 0, y: 0 }
+    const directional = effect.kind === 'push' || effect.kind === 'wipe' || effect.kind === 'cover' || effect.kind === 'pull'
+    const offset = directional ? pushOffset(effect.direction, area.width, area.height) : { x: 0, y: 0 }
     const canvas = document.createElement('canvas')
     canvas.className = 'take-fade-frame'
     canvas.dataset.transition = effect.kind
@@ -250,6 +251,19 @@ export class TakeFade {
     this.pushCanvas = canvas
     const ctx = canvas.getContext('2d')!
     ctx.scale(canvas.width / host.width, canvas.height / host.height)
+    const drawIncoming = (target = ctx): void => {
+      target.fillRect(area.x, area.y, area.width, area.height)
+      for (const source of sources) {
+        const style = getComputedStyle(source)
+        if (style.display === 'none' || style.visibility === 'hidden') continue
+        const bounds = source instanceof HTMLCanvasElement ? canvasContentBox(source) : source.getBoundingClientRect()
+        this.draw(target, source, bounds, host, style.objectFit)
+      }
+    }
+    const combFrame = effect.kind === 'comb' ? document.createElement('canvas') : null
+    if (combFrame) { combFrame.width = canvas.width; combFrame.height = canvas.height }
+    const combCtx = combFrame?.getContext('2d') ?? null
+    if (combCtx) { combCtx.scale(canvas.width / host.width, canvas.height / host.height); combCtx.fillStyle = '#000' }
     const started = performance.now()
     do {
       const fraction = Math.min(1, (performance.now() - started) / duration)
@@ -259,7 +273,88 @@ export class TakeFade {
       ctx.beginPath()
       ctx.rect(area.x, area.y, area.width, area.height)
       ctx.clip()
-      if (effect.kind === 'fade-black' && fraction < 0.5) {
+      if (effect.kind === 'doors') {
+        // Office's doors expose a smaller incoming slide on black while the
+        // outgoing halves fold away. Canvas 2D approximates their perspective
+        // with a slight squeeze, vertical shrink and opacity falloff.
+        const vertical = effect.direction === 'vert'
+        const span = (vertical ? area.width : area.height) / 2
+        const centerX = area.x + area.width / 2, centerY = area.y + area.height / 2
+        ctx.save()
+        ctx.translate(centerX, centerY)
+        const zoom = 0.55 + 0.45 * fraction
+        ctx.scale(zoom, zoom)
+        ctx.translate(-centerX, -centerY)
+        ctx.globalAlpha = 0.45 + 0.55 * fraction
+        drawIncoming()
+        ctx.restore()
+        for (const side of [-1, 1]) {
+          ctx.save()
+          const hingeX = centerX + side * span / 2, hingeY = centerY + side * span / 2
+          if (vertical) ctx.translate(side * span * fraction, 0)
+          else ctx.translate(0, side * span * fraction)
+          ctx.translate(vertical ? hingeX : centerX, vertical ? centerY : hingeY)
+          if (vertical) ctx.scale(1 - 0.25 * fraction, 1 - 0.08 * fraction)
+          else ctx.scale(1 - 0.08 * fraction, 1 - 0.25 * fraction)
+          ctx.translate(vertical ? -hingeX : -centerX, vertical ? -centerY : -hingeY)
+          ctx.beginPath()
+          if (vertical) ctx.rect(area.x + (side < 0 ? 0 : span), area.y, span, area.height)
+          else ctx.rect(area.x, area.y + (side < 0 ? 0 : span), area.width, span)
+          ctx.clip()
+          ctx.globalAlpha = 1 - fraction
+          ctx.drawImage(outgoing, 0, 0, host.width, host.height)
+          ctx.restore()
+        }
+      } else if (effect.kind === 'comb') {
+        // PowerPoint moves the old and new pictures in opposite directions
+        // within each tooth. Lower teeth start slightly before upper ones.
+        // Composite the live picture once per frame; redrawing a video seven
+        // times per frame is too expensive during a long slide transition.
+        combCtx!.fillRect(0, 0, host.width, host.height)
+        drawIncoming(combCtx!)
+        // Both buffers include the host's black letterbox. Sliding a whole
+        // buffer would move that black into the active slide between teeth.
+        // Crop the active picture before translating either buffer.
+        const sourceX = area.x * canvas.width / host.width
+        const sourceY = area.y * canvas.height / host.height
+        const sourceW = area.width * canvas.width / host.width
+        const sourceH = area.height * canvas.height / host.height
+        const bands = 7
+        for (let i = 0; i < bands; i++) {
+          const start = (bands - 1 - i) * 0.035
+          const progress = Math.max(0, Math.min(1, (fraction - start) / (1 - start)))
+          const x = area.x + (effect.direction === 'vert' ? area.width * i / bands : 0)
+          const y = area.y + (effect.direction === 'horz' ? area.height * i / bands : 0)
+          const width = effect.direction === 'vert' ? area.width / bands : area.width
+          const height = effect.direction === 'horz' ? area.height / bands : area.height
+          const travel = effect.direction === 'horz' ? area.width : area.height
+          const sign = i % 2 ? -1 : 1
+          ctx.save()
+          ctx.beginPath()
+          ctx.rect(x, y, width, height)
+          ctx.clip()
+          ctx.save()
+          if (effect.direction === 'horz') ctx.translate(sign * travel * progress, 0)
+          else ctx.translate(0, sign * travel * progress)
+          ctx.drawImage(outgoing, sourceX, sourceY, sourceW, sourceH,
+            area.x, area.y, area.width, area.height)
+          ctx.restore()
+          ctx.save()
+          if (effect.direction === 'horz') ctx.translate(-sign * travel * (1 - progress), 0)
+          else ctx.translate(0, -sign * travel * (1 - progress))
+          ctx.drawImage(combFrame!, sourceX, sourceY, sourceW, sourceH,
+            area.x, area.y, area.width, area.height)
+          ctx.restore()
+          ctx.restore()
+        }
+      } else if (effect.kind === 'circle') {
+        ctx.drawImage(outgoing, 0, 0, host.width, host.height)
+        ctx.beginPath()
+        const radius = Math.hypot(area.width, area.height) * fraction / 2
+        ctx.arc(area.x + area.width / 2, area.y + area.height / 2, radius, 0, Math.PI * 2)
+        ctx.clip()
+        drawIncoming()
+      } else if (effect.kind === 'fade-black' && fraction < 0.5) {
         ctx.globalAlpha = 1 - fraction * 2
         ctx.drawImage(outgoing, 0, 0, host.width, host.height)
       } else {
@@ -282,13 +377,7 @@ export class TakeFade {
         } else if (effect.kind === 'fade-black') {
           ctx.globalAlpha = fraction * 2 - 1
         }
-        ctx.fillRect(area.x, area.y, area.width, area.height)
-        for (const source of sources) {
-          const style = getComputedStyle(source)
-          if (style.display === 'none' || style.visibility === 'hidden') continue
-          const bounds = source instanceof HTMLCanvasElement ? canvasContentBox(source) : source.getBoundingClientRect()
-          this.draw(ctx, source, bounds, host, style.objectFit)
-        }
+        drawIncoming()
         if (effect.kind === 'pull') {
           ctx.beginPath()
           ctx.rect(area.x + offset.x * fraction, area.y + offset.y * fraction, area.width, area.height)
@@ -301,6 +390,7 @@ export class TakeFade {
       if (fraction === 1) break
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
     } while (!signal.aborted && this.frame === outgoing)
+    if (combFrame) combFrame.width = combFrame.height = 0
     if (this.frame === outgoing) this.cancel()
   }
 

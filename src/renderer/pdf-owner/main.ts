@@ -29,7 +29,7 @@ async function handle(command: PdfOwnerCommand): Promise<unknown> {
     case 'compose': return composeFrame(command.asset,command.scene)
     case 'animation': return animationFrame(command.asset, command.region)
     case 'sync': {
-      clearAnimations(command.animationSha)
+      clearAnimations(command.animationSha, command.animationRevision)
       const active = new Set(command.sources.map(source => source.id))
       server.updateDocuments(documents.filter(doc => active.has(doc.id)))
       documents = await owner.sync(command.sources)

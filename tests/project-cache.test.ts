@@ -132,6 +132,23 @@ describe('project on a flash drive', () => {
     expect(runtime.spawn).not.toHaveBeenCalled()
   })
 
+  it('carries the board backdrop to a portable project and rejects an incomplete copy', async () => {
+    const local = localPptxCacheDir()
+    const file = 'link-backdrops.pdf'
+    const link = { slide: 3, rect: { x: 0, y: 0, w: .1, h: .1 }, hideAfterVisit: { shape: '12', page: 1 } }
+    await writeFile(join(local, `${sha}.media.json`), JSON.stringify({ ...manifest, slideLinks: { 2: [link] } }))
+    await writeFile(join(local, `${sha}.media`, file), 'authored board backdrop')
+    await exportProjectCache(sha, source, projectDir)
+    const exported = join(projectDir, 'pptx-cache', `${sha}.media`, file)
+    expect(await readFile(exported, 'utf8')).toBe('authored board backdrop')
+    runtime.userData = join(dir, 'backup-user')
+    const project = join(projectDir, 'show.pdpres')
+    expect(await useProjectCache(sha, source, project)).toBe(true)
+    forgetProjectCache(sha)
+    await rm(exported)
+    expect(await useProjectCache(sha, source, project)).toBe(false)
+  })
+
   it('replaces an old readable name when exporting the same content again', async () => {
     const local = localPptxCacheDir()
     await mkdir(join(local, 'deck'))

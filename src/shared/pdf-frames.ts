@@ -7,7 +7,7 @@ export interface AnimationInfo { pages: number; width: number; height: number }
 export type PdfOwnerRequest =
   | { type: 'compose'; asset: AnimationAsset; scene: AnimationComposition }
   | { type: 'animation'; asset: AnimationAsset; region?: AnimationRegion }
-  | { type: 'sync'; sources: SharedPdfSource[]; animationSha?: string | null }
+  | { type: 'sync'; sources: SharedPdfSource[]; animationSha?: string | null; animationRevision?: string | null }
   | { type: 'describe'; id: string; page?: number }
   | { type: 'detach'; id: string }
   | { type: 'stats' }
